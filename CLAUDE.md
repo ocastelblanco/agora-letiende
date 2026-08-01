@@ -27,7 +27,7 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 - **Tipo de aplicación:** aplicación web responsive (Mobile-First para compra y validación en puerta; escritorio para administración y panel de control) — sin empaquetado nativo (Capacitor/Cordova) en el alcance actual
 - **Runtime backend:** Node.js 24.x
 - **Despliegue/Infraestructura:** AWS Lambda + API Gateway (HTTP API), gestionados con **Serverless Framework 4** (IaC) — mismo patrón que Babel
-- **Base de datos:** AWS DynamoDB (on-demand, dentro de la capa gratuita)
+- **Base de datos:** AWS DynamoDB, **`BillingMode: PAY_PER_REQUEST` siempre, en todas las tablas y todos los stages — nunca `PROVISIONED`.** No es una preferencia de estilo: es la regla de mayor prioridad de este documento. Ver §5-bis (Costos de infraestructura) y `docs/advertencia-urgente-costos-aws.md` (incidente real de Babel: US$90,34 en un mes por 18 unidades de capacidad `PROVISIONED 25/25` olvidadas, sobre un objetivo de costo $0)
 - **Almacenamiento de archivos:** AWS S3 (comprobantes de pago privados, imágenes de evento y QR generados)
 - **Autenticación:** Google Firebase Authentication (Google Sign-In) — **proyecto Firebase compartido con Comandante y Babel** (misma identidad de Google para las tres apps). Los roles de Ágora (`administrador`/`productor`/`portero`) son independientes por app y viven en `agora-usuarios` (DynamoDB) — ver `docs/tech-specs.md` §8.1
 - **Correo transaccional:** AWS SES, remitente `taquilla@letiende.co` sobre el dominio `letiende.co` ya verificado en la cuenta AWS de Le Tiende
@@ -35,7 +35,7 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 - **Pasarela de pagos:** Bold (Botón de pagos / API link de pagos) — **fase 2**
 - **Generación de QR:** librería web del lado servidor para emisión (SVG + PNG) y `@zxing/browser` para el escaneo en puerta
 - **Generación de reportes:** `xlsx` (mismo paquete que Babel y Comandante) para XLSX; PDF por definir
-- **Objetivo de costo de infraestructura:** $0 (o lo más cercano posible dentro de la capa gratuita de AWS)
+- **Objetivo de costo de infraestructura:** **< US$1/mes**, objetivo explícito y medido — no una aspiración vaga de "$0". No incluye el piso fijo compartido de la cuenta (Route 53, ~US$3,58/mes entre ~7 zonas para todo el ecosistema Le Tiende), que no es atribuible a Ágora. Ver §5-bis (Costos de infraestructura, disciplina de verificación de precios) y `docs/advertencia-urgente-costos-aws.md`.
 
 ---
 
@@ -168,6 +168,37 @@ Esta categoría no aparece en la mayoría de proyectos, pero es **el riesgo cent
 | Guardar el rol del usuario en `localStorage` para validar permisos | Los datos del cliente son manipulables con herramientas de desarrollador |
 | Usar `eval()` o `new Function()` | Vector de ejecución de código arbitrario |
 | `npm install` sin `package-lock.json` en CI/CD | Rompe la integridad reproducible del build |
+| Declarar una tabla DynamoDB con `BillingMode: PROVISIONED` o cualquier bloque `ProvisionedThroughput` (tabla o GSI), en cualquier stage | Se cobra 24/7 por hora exista o no tráfico — el incidente de Babel costó US$90,34 en un mes por esto. Ver sección de Costos abajo |
+| Afirmar en código o documentación que algo "es gratis", "está en la capa gratuita" o "nunca se borra" sin haberlo verificado ese mismo día | El conocimiento de un modelo de IA sobre precios de AWS está desactualizado por construcción; una suposición escrita como hecho es indistinguible de un hecho verificado hasta que llega la factura |
+
+---
+
+## 5-bis. Costos de infraestructura (obligatorio)
+
+**Lee `docs/advertencia-urgente-costos-aws.md` completo antes de escribir la primera línea de `serverless.yml` o de ejecutar el primer `deploy`.** No es teoría: documenta un incidente real de Babel (proyecto hermano, misma cuenta AWS) que facturó **US$94,44 en julio de 2026 con un objetivo de costo $0** — el 96% (US$90,34) fue DynamoDB `PROVISIONED` mal configurado, cobrando 24/7 por capacidad que nunca se usó, mientras las tablas de producción estaban vacías.
+
+**El objetivo de costo de Ágora es < US$1/mes.** Es un número concreto y verificable, no una aspiración.
+
+### Reglas obligatorias
+
+1. **DynamoDB siempre `BillingMode: PAY_PER_REQUEST`, en toda tabla y todo stage, sin excepción.** Nunca `PROVISIONED`, ni "temporalmente", ni "solo para pruebas". Con `PAY_PER_REQUEST` no puede existir ningún bloque `ProvisionedThroughput` — ni en la tabla ni en sus GSIs; CloudFormation falla el despliegue si aparece uno. Los GSIs heredan el modo de la tabla automáticamente.
+2. **Ningún NAT Gateway; ninguna Lambda dentro de una VPC sin justificación escrita explícita.** DynamoDB, S3 y las APIs de AWS no requieren VPC. Un NAT Gateway cuesta ~US$32/mes **exista o no tráfico** — es, con diferencia, el mayor destructor de presupuestos serverless.
+3. **`Lambda Provisioned Concurrency` prohibido salvo justificación explícita y verificada el mismo día.** Cuesta ~US$10-15/mes por unidad, 24/7. Ver el gotcha de cold starts en §7 — se acepta la latencia en frío por defecto.
+4. **`logRetentionInDays` explícito en toda función Lambda — nunca el default infinito.** Los grupos de log de CloudWatch se guardan para siempre si no se configura, y la ingesta cuesta ~US$0,50/GB.
+5. **Cada función empaqueta solo lo que usa (`package.patterns`), no `node_modules` completo por defecto.** No es principalmente un tema de costo (S3 fue el 0,5% de la factura de Babel) sino de cold start: un paquete de 30 MB tarda notoriamente más en arrancar en frío que uno de 2 MB.
+6. **Etiqueta todos los recursos de Ágora** (`stackTags`/`tags` en `serverless.yml`, p. ej. `Proyecto: agora`) para poder atribuir costo por proyecto en una cuenta AWS compartida con Babel y Comandante — sin esto, Cost Explorer no puede separar el gasto de Ágora del de las otras dos apps.
+7. **Antes de eliminar cualquier stack de CloudFormation "sin uso": verifica qué apunta hacia él desde AFUERA** (dominios personalizados de API Gateway, registros DNS externos, `Fn::ImportValue` de otro stack) — `list-stack-resources` solo muestra lo que vive *dentro* del stack. Un stack de Babel con un dominio personalizado externo causó una caída real de 15 minutos al eliminarse sin esta verificación.
+
+### Disciplina de verificación de precios
+
+**Nunca escribas una cifra de precio, un "esto es gratis" o un "esto nunca se borra" que no hayas verificado ese día.** El modelo de capa gratuita de AWS cambió en 2025; el conocimiento de un LLM sobre precios está desactualizado por definición. Verifica en <https://calculator.aws/>, <https://aws.amazon.com/free/>, o la página de precios del servicio específico. Si no lo verificaste, escríbelo así: `<!-- SIN VERIFICAR: confirmar en calculator.aws antes de desplegar -->`.
+
+### Antes del primer `deploy` de infraestructura
+
+1. Confirma que existe una alarma de presupuesto que cubra a Ágora — **ya existe una a nivel de cuenta** (`Costo diario` US$4/día, `Costos promedio` US$10/mes, ambas con notificación por email verificada, ver `docs/MEMORY.md` §5), pero cubre las tres apps del ecosistema combinadas, no solo Ágora. Antes de que Ágora tenga tráfico real, crear un presupuesto adicional filtrado por la etiqueta `Proyecto: agora` con umbral ~US$1, para que un error de Ágora no se diluya en el presupuesto compartido.
+2. Audita el `serverless.yml` antes de desplegar: `grep -nE "PROVISIONED|ProvisionedThroughput|CapacityUnits|ProvisionedConcurrency|NatGateway|AWS::RDS|AWS::ElastiCache|AWS::OpenSearch" serverless.yml` — cualquier coincidencia debe justificarse explícitamente o eliminarse.
+3. Después del primer despliegue, **verifica la cuenta real, no el IaC**: confirma por CLI que cada tabla quedó en `PAY_PER_REQUEST` (`aws dynamodb describe-table ... --query "Table.BillingModeSummary.BillingMode"`), que no hay NAT Gateways vivos, que no hay IPs elásticas sin asociar.
+4. **Agenda una revisión de costo a las 48 horas.** Un costo diario plano e idéntico día tras día es la firma de capacidad aprovisionada olvidada — investigar de inmediato. Un costo que sube y baja con el uso es correcto.
 
 ---
 

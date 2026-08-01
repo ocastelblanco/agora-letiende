@@ -73,7 +73,7 @@ Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cua
 2. **El aforo se modifica solo con escritura condicional.** Nunca leer-y-luego-escribir. Ver §5.4 y `CLAUDE.md` §5 (A04).
 3. **Una Lambda por dominio, con su propio rol IAM de mínimo privilegio y su propio paquete** (`package: individually`), igual que Babel. Reduce el arranque en frío y limita el radio de daño de una falla.
 4. **Todo lo público es hostil.** Los endpoints sin autenticación se diseñan asumiendo abuso: límite de tasa, validación de tamaño, cálculo de precios exclusivamente en servidor.
-5. **Costo objetivo $0.** DynamoDB on-demand, Lambda bajo capa gratuita, sin NAT Gateway, sin `provisioned concurrency` salvo justificación explícita.
+5. **Costo objetivo < US$1/mes, verificado, no supuesto.** DynamoDB `PAY_PER_REQUEST` sin excepción, sin NAT Gateway, sin `provisioned concurrency` salvo justificación explícita, `logRetentionInDays` siempre definido. Ver `CLAUDE.md` (sección "Costos de infraestructura") y `docs/advertencia-urgente-costos-aws.md` — incidente real de Babel, misma cuenta AWS: US$90,34 en un mes por DynamoDB `PROVISIONED` mal configurado.
 
 ---
 
@@ -396,7 +396,17 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 
 ### 5.2 Tablas de DynamoDB
 
-Nombradas `agora-{recurso}-{stage}`, siguiendo la convención de Babel. Todas on-demand.
+Nombradas `agora-{recurso}-{stage}`, siguiendo la convención de Babel. **Todas `BillingMode: PAY_PER_REQUEST`, sin excepción, sin `ProvisionedThroughput` en ninguna tabla ni GSI** — regla de mayor prioridad de `CLAUDE.md` (sección "Costos de infraestructura"), derivada de un incidente real de Babel (`docs/advertencia-urgente-costos-aws.md`): US$90,34 en un mes por capacidad `PROVISIONED` olvidada, con las tablas de producción vacías.
+
+```yaml
+AgoraUsuarios:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: agora-usuarios-${sls:stage}
+    BillingMode: PAY_PER_REQUEST     # única línea de capacidad — nunca ProvisionedThroughput
+    AttributeDefinitions: [...]
+    KeySchema: [...]
+```
 
 | Tabla | Clave primaria | Índices secundarios | Notas |
 |---|---|---|---|
@@ -581,6 +591,37 @@ Push a main (merge del PR)
    ├── build de producción + build de Lambdas
    └── serverless deploy --stage production
 ```
+
+### 7.3 Costos y presupuestos
+
+**Objetivo: < US$1/mes.** Regla obligatoria en `CLAUDE.md` (sección "Costos de infraestructura"), motivada por un incidente real de Babel (`docs/advertencia-urgente-costos-aws.md`): US$90,34 en un mes por DynamoDB `PROVISIONED` mal configurado, sobre un objetivo de costo $0.
+
+**Etiquetado obligatorio.** La cuenta AWS es compartida con Babel y Comandante; sin etiquetas, Cost Explorer no puede separar el gasto de cada app. Todo `serverless.yml` de Ágora declara:
+
+```yaml
+provider:
+  stackTags:
+    Proyecto: agora
+    Stage: ${sls:stage}
+  tags:
+    Proyecto: agora
+    Stage: ${sls:stage}
+```
+
+**Presupuestos.** Ya existen dos alarmas a nivel de cuenta (verificadas el 01/08/2026, ver `docs/MEMORY.md` §5): `Costo diario` (US$4, umbrales 80%/100%) y `Costos promedio` (US$10/mes, umbrales 85%/100%/FORECASTED), ambas con notificación por email confirmada. Cubren el ecosistema completo, no solo Ágora — un desvío pequeño de Ágora podría no cruzar esos umbrales. Antes de que Ágora tenga tráfico real, crear un presupuesto adicional filtrado por la etiqueta `Proyecto: agora` (`aws budgets create-budget` con `CostFilters: {TagKeyValue: ["user:Proyecto$agora"]}`), con umbral ~US$1.
+
+**Verificación post-despliegue obligatoria** (no confiar en que el IaC hizo lo que dice):
+
+```bash
+# Cada tabla debe decir PAY_PER_REQUEST
+aws dynamodb list-tables --region us-east-1 --query 'TableNames[?starts_with(@,`agora-`)]' --output text | tr '\t' '\n' | \
+while read t; do
+  aws dynamodb describe-table --table-name "$t" --region us-east-1 \
+    --query "Table.[TableName,BillingModeSummary.BillingMode]" --output text
+done
+```
+
+Repetir esta verificación **48 horas** después del primer despliegue, revisando el costo diario real por servicio (`aws ce get-cost-and-usage`). Un costo plano e idéntico día tras día es la firma de capacidad aprovisionada olvidada.
 
 ---
 

@@ -198,6 +198,20 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ---
 
+### ADR-011 — DynamoDB siempre `PAY_PER_REQUEST`; disciplina de verificación de precios
+
+**Fecha:** 01/08/2026 · **Estado:** Aceptada — regla de mayor prioridad de todo `CLAUDE.md`
+
+**Decisión:** todas las tablas DynamoDB de Ágora, en todos los stages, usan `BillingMode: PAY_PER_REQUEST`, sin excepción. Nunca `PROVISIONED`, ni "temporalmente". Ningún bloque `ProvisionedThroughput` puede existir en el `serverless.yml`, ni en tablas ni en GSIs. Además: sin NAT Gateway ni Lambdas en VPC sin justificación escrita, `logRetentionInDays` siempre explícito, cada función empaqueta solo lo que usa, y todo recurso se etiqueta `Proyecto: agora` para poder atribuirle costo en la cuenta compartida. El objetivo de costo de Ágora pasa de "$0 o lo más cercano posible" a **< US$1/mes, medido, no supuesto**.
+
+**Contexto:** el usuario interrumpió la Tarea 1 (andamiaje de Angular) el 01/08/2026 para reportar un incidente real y ya resuelto en **Babel** (proyecto hermano, misma cuenta AWS): julio de 2026 facturó **US$94,44** con un objetivo declarado de **US$0**. El 96% (US$90,34) fue DynamoDB `PROVISIONED 25/25` en 18 unidades de capacidad (8 tablas × 2 stages + 2 GSIs) que nunca se usaron — las tablas de producción estaban completamente vacías cuando se detectó. El cobro fue plano e idéntico durante 7 días seguidos: la firma inconfundible de una tarifa por tiempo, no por uso. El error de fondo no fue técnico: fue un comentario en el código de Babel (`# Capacidad aprovisionada 25/25 en todas... nunca on-demand`) que consagró como hecho verificado una suposición sobre precios que nadie comprobó ese día. Detalle completo en `docs/advertencia-urgente-costos-aws.md`, que ahora vive también en Ágora como lectura obligatoria antes de tocar cualquier IaC.
+
+**Razón:** para las escalas de Le Tiende (miles de registros, decenas de usuarios internos, tráfico público bajo), on-demand cuesta centavos al mes — Babel lo verificó en menos de US$0,10/mes de DynamoDB real, contra los ~US$8,42/día que pagó por la capacidad aprovisionada olvidada. La intuición de que "aprovisionado = modo gratis/seguro" está exactamente invertida a esta escala: on-demand es casi gratis y aprovisionado es el pasivo permanente. El riesgo es agravado para un agente IA específicamente porque el conocimiento de un LLM sobre precios de nube está desactualizado por construcción — AWS reestructuró su modelo de capa gratuita en 2025, y la confianza con la que un modelo puede afirmar "esto es gratis" no tiene relación con que siga siendo cierto hoy.
+
+**Consecuencias:** todo `serverless.yml` de Ágora debe declarar `BillingMode: PAY_PER_REQUEST` explícito por tabla (ver `tech-specs.md` §5.2 para el snippet exacto) y pasar la auditoría `grep -nE "PROVISIONED|ProvisionedThroughput|...` antes de cada despliegue (`CLAUDE.md`, sección "Costos de infraestructura"). La Tarea 2 de `TODO.md` (infraestructura base, próxima en la cola) se reescribió con estos guardarraíles explícitos en su "Qué hacer" y su Definition of Done, incluyendo verificación por CLI post-despliegue, no solo lectura del YAML. Se confirmó por CLI que la cuenta ya tiene dos alarmas de presupuesto a nivel de cuenta (`Costo diario` US$4, `Costos promedio` US$10, ver §5) que cubren el ecosistema completo, pero no son lo bastante finas para el objetivo de <US$1/mes de Ágora específicamente — antes de tráfico real, crear un presupuesto adicional filtrado por la etiqueta `Proyecto: agora`. Ninguna cifra de precio se escribe en la documentación de Ágora sin haberla verificado ese día o sin citar su fuente verificada (`docs/advertencia-urgente-costos-aws.md`, `calculator.aws`).
+
+---
+
 ## 4. Dependencias instaladas
 
 Ninguna todavía — no existe `package.json`. Estas son las versiones **previstas**, heredadas de Babel donde aplica. Al crear el proyecto, reemplazar esta tabla por las versiones exactas resueltas en `package-lock.json`.
@@ -254,6 +268,10 @@ Esta tabla se completa a medida que se crean los recursos — es el lugar donde 
 | Secretos de GitHub Actions | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY`, `FIREBASE_SERVICE_ACCOUNT_AGORA` | ✅ Cargados 01/08/2026 — faltan los de negocio (`tech-specs.md` §9), cuando el código los requiera |
 | Cuenta Bold de Le Tiende | Existe (uso manual actual) | ⬜ Sin integrar (v2) |
 | WABA de WhatsApp | No existe | ⬜ Trámite no iniciado (v2) |
+| Presupuesto AWS "Costo diario" | US$4/día, alertas 80%/100% ACTUAL, notificación por email verificada | ✅ Ya existe, a nivel de **cuenta completa** (Babel/Comandante/Ágora) — verificado por CLI el 01/08/2026 |
+| Presupuesto AWS "Costos promedio" | US$10/mes, alertas 85%/100% ACTUAL + 100% FORECASTED, notificación por email | ✅ Ya existe, a nivel de cuenta completa — verificado por CLI el 01/08/2026 |
+| Presupuesto específico de Ágora (filtrado por etiqueta `Proyecto: agora`) | Umbral sugerido ~US$1 | ⬜ Por crear antes del primer tráfico real — los presupuestos de cuenta no distinguen el gasto de Ágora del de Babel/Comandante (ADR-011) |
+| Hosted zones Route 53 en la cuenta | 7 zonas × US$0,50/mes ≈ US$3,58/mes, piso fijo compartido, no atribuible a Ágora | ✅ Verificado por CLI el 01/08/2026 |
 
 ---
 
@@ -296,6 +314,7 @@ Heredados de Babel salvo indicación contraria. Los marcados como **verificado e
 
 | Situación | Solución |
 |---|---|
+| 🔴 **Verificado — el más caro de todos:** una tabla DynamoDB `PROVISIONED` (o cualquier `ProvisionedThroughput` en tabla/GSI) se cobra 24/7 por hora, exista o no tráfico | Costó a Babel US$90,34 en un mes (18 unidades de 25/25 olvidadas). **`BillingMode: PAY_PER_REQUEST` siempre, sin excepción** — ver ADR-011 y `docs/advertencia-urgente-costos-aws.md` |
 | **Verificado:** el deploy falla porque la `description` de una función Lambda supera 256 caracteres | CloudFormation impone ese límite. Descripciones cortas en `serverless.yml`; explicar en la documentación, no en el YAML |
 | **Verificado:** dos merges seguidos a `main` chocan con `Stack ... is in UPDATE_IN_PROGRESS state and can not be updated` | `concurrency` en GitHub Actions: grupo `desplegar-produccion` con `cancel-in-progress: false`, grupo `desplegar-staging` con `true` |
 | **Verificado:** el dominio personalizado devuelve error de `Host` no autorizado | Configurar `NG_ALLOWED_HOSTS` con el dominio propio **junto con** el montaje del dominio, no después de que producción falle |
@@ -322,6 +341,7 @@ Heredados de Babel salvo indicación contraria. Los marcados como **verificado e
 | `docs/instrucciones-tracking.md` | Reglas del registro de tiempos | IA y humanos |
 | `docs/tracking.csv` | Registro de todas las tareas con tiempos | IA y humanos |
 | `docs/DESIGN.md` | Sistema de diseño — ⬜ se crea al implementar la UI | Desarrolladores + IA |
+| `docs/advertencia-urgente-costos-aws.md` | **Lectura obligatoria antes de tocar cualquier IaC.** Incidente real de Babel (DynamoDB `PROVISIONED`, US$90,34/mes), catálogo de trampas de costo por servicio, checklist pre-deploy (ADR-011) | IA y desarrolladores, antes de `serverless.yml` |
 
 **Referencias externas del ecosistema:**
 
@@ -370,3 +390,16 @@ Preguntó si hacía falta registrar una app web nueva en Firebase para Ágora, n
 `docs/tareas-a-realizar.md` se reescribió sección por sección para reflejar lo ya hecho: quedan abiertos solo el dominio de staging en Authorized domains (llega con la Tarea 2), dos verificaciones opcionales de 30 segundos (cabeceras SPF/DKIM/DMARC del correo de prueba, y restricción de referrer de la API key de Firebase en GCP), y las secciones 6-10 que dependen de trabajo posterior.
 
 **Próxima tarea sugerida (actualizada):** Tarea 1 y Tarea 2 de `docs/TODO.md` ya pueden ejecutarse sin bloqueos externos.
+
+**Sesión del 01/08/2026 (continuación) — Interrupción urgente: incidente de costos de Babel (ADR-011)**
+
+A mitad de la Tarea 1 (andamiaje de Angular, ya con `npm install` corrido pero sin commitear), el usuario interrumpió para reportar un incidente real en Babel: DynamoDB quedó en `PROVISIONED` en vez de on-demand, facturando US$90,34 en julio de 2026 (96% de una factura total de US$94,44) sobre un objetivo de costo $0, con las tablas de producción vacías. Se leyó `docs/advertencia-urgente-costos-aws.md` completo y se aplicaron los ajustes correspondientes en Ágora antes de retomar Tarea 1:
+
+- **`CLAUDE.md`:** nueva sección "Costos de infraestructura" (entre §5 y §6) con las reglas obligatorias (`PAY_PER_REQUEST` siempre, sin NAT Gateway, `logRetentionInDays` explícito, etiquetado, disciplina de verificación de precios), y dos filas nuevas en la tabla de prohibiciones absolutas. Objetivo de costo actualizado de "$0 o lo más cercano" a **< US$1/mes**, medido.
+- **`docs/tech-specs.md`:** §5.2 (tablas DynamoDB) con `BillingMode: PAY_PER_REQUEST` explícito y snippet YAML; principio de arquitectura §1.1 actualizado; nueva §7.3 "Costos y presupuestos" con estrategia de etiquetado (`stackTags`), los presupuestos de cuenta ya existentes, y el comando de verificación post-despliegue.
+- **`docs/TODO.md` — Tarea 2:** es la tarea que más importaba corregir, porque es exactamente donde se repetiría el error de Babel. Se agregó un paso 0 (leer la advertencia antes de empezar), se marcó el paso de declarar las tablas como "la regla de mayor prioridad de toda la tarea", se agregó verificación explícita de que la plantilla de Babel que se copia ya está corregida (se confirmó por CLI: commit `2ce744a`, `BillingMode: PAY_PER_REQUEST` en las 9 tablas), y se amplió la Definition of Done con verificación post-despliegue por CLI (no solo lectura del YAML), etiquetado, `logRetentionInDays`, ausencia de NAT Gateway, estimación de costo en el PR y recordatorio de revisión a 48 horas.
+- **`docs/MEMORY.md`:** este ADR-011, fila nueva de gotcha (§7, marcada 🔴 como la más cara), y en §5 se documentaron los dos presupuestos de cuenta ya existentes y verificados por CLI (`Costo diario` US$4, `Costos promedio` US$10, ambos con email confirmado) más un pendiente: crear un presupuesto filtrado por etiqueta específico de Ágora antes del primer tráfico real.
+
+**Nota operativa:** al ejecutar `git checkout main` tras abrir el PR de ADR-009/010 y antes de que el usuario lo fusionara, la rama de Tarea 1 (`feature/andamiaje-angular-primeng-tailwind`) se cortó de un `main` que todavía no tenía esos ADRs. El PR se fusionó mientras se trabajaba en esta interrupción; se detectó a tiempo (antes de commitear) y se resolvió con `git stash` + `rebase` sobre el `main` actualizado + `stash pop`, con un conflicto menor en `docs/TODO.md` (el paso 6 de Tarea 2) resuelto combinando ambas versiones. Lección para el futuro: verificar si hay un PR de documentación pendiente de fusionar antes de ramificar para una tarea de código nueva.
+
+**Próxima tarea sugerida:** retomar la Tarea 1 (andamiaje de Angular) donde quedó — `npm install` ya corrido, falta configurar el tema PrimeNG/Tailwind, el pipe de precio, la página de inicio y verificar el build.

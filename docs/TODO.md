@@ -52,6 +52,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 **Qué hacer:**
 
+0. **Antes de todo lo demás: leer `docs/advertencia-urgente-costos-aws.md` completo.** Documenta un incidente real de Babel (misma cuenta AWS): US$90,34 en un mes por DynamoDB `PROVISIONED` mal configurado. La regla que se deriva es la de mayor prioridad de esta tarea — ver punto 2.
 1. Tomar como plantilla el `serverless.yml` de Babel (`~/Documents/LeTiende/letiende.co/babel/serverless.yml`) y adaptarlo:
    - `service: agora-letiende`, `frameworkVersion: '4'`, `runtime: nodejs24.x`, `region: us-east-1`
    - `package: individually`
@@ -59,21 +60,31 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
    - Función `salud` (`GET /api/salud`) y función `ssr` (proxy de todo lo demás) con `@codegenie/serverless-express`
    - Un rol IAM por función, de mínimo privilegio (`CLAUDE.md` §5, A05)
    - **Descripciones de función por debajo de 256 caracteres** — gotcha verificado en producción (`MEMORY.md` §7)
-2. Declarar en `resources` las 5 tablas DynamoDB on-demand, con TTL en `expiraEn` y Streams activados en `agora-compras` (`tech-specs.md` §5.2).
-3. Declarar los dos buckets S3: `agora-comprobantes-{stage}` con **Block Public Access y cifrado SSE-S3**, y `agora-activos-{stage}`.
+   - `provider.stackTags` y `provider.tags` con `Proyecto: agora` y `Stage: ${sls:stage}` (`tech-specs.md` §7.3) — sin esto no se puede atribuir costo a Ágora en la cuenta compartida
+   - `provider.logRetentionInDays: 14` (o el valor que se decida) — nunca dejar el default infinito
+   - **Verificar, no asumir, que la plantilla de Babel que se copia ya está en `PAY_PER_REQUEST`:** `grep -n "BillingMode\|ProvisionedThroughput" ~/Documents/LeTiende/letiende.co/babel/serverless.yml` antes de copiar nada de ahí. Confirmado en `PAY_PER_REQUEST` el 01/08/2026 (commit `2ce744a` de Babel, tras el incidente) — pero **reverifica el día que ejecutes esta tarea**, no confíes en esta nota.
+2. Declarar en `resources` las 5 tablas DynamoDB **con `BillingMode: PAY_PER_REQUEST` explícito en cada una, sin ningún bloque `ProvisionedThroughput`** (ni en la tabla ni en sus GSIs — CloudFormation falla el despliegue si aparece uno), con TTL en `expiraEn` y Streams activados en `agora-compras` (`tech-specs.md` §5.2, con el snippet YAML exacto). **Esta es la regla de mayor prioridad de toda la tarea** — es la que causó el incidente de Babel.
+3. Declarar los dos buckets S3: `agora-comprobantes-{stage}` con **Block Public Access y cifrado SSE-S3**, y `agora-activos-{stage}`. Configurar `maxPreviousDeploymentArtifacts: 5` en `provider.deploymentBucket`.
 4. Implementar `server/api/handlers/salud.ts` devolviendo `{ estado: 'ok', stage, version }`.
 5. Crear `.github/workflows/deploy.yml` a partir del de Babel, con el flujo de `tech-specs.md` §7.2: build + test en PR, deploy a staging desde PR con smoke test contra `/api/salud`, deploy a producción desde push a `main`. **Incluir los grupos de `concurrency`** (`desplegar-staging` con `cancel-in-progress: true`, `desplegar-produccion` con `false`) — gotcha verificado en producción.
 6. Configurar en GitHub los secretos mínimos para desplegar: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY` (`tech-specs.md` §9). **No se genera un usuario IAM nuevo** — se reutiliza el mismo usuario AWS compartido que ya usan Babel y Comandante (ADR-009 en `MEMORY.md`); las credenciales se copian de ahí, según `docs/tareas-a-realizar.md` §2-3. Los secretos de negocio (Firebase, HMAC, SES) se agregan en su propia tarea; `serverless.yml` debe tolerar su ausencia con valor por defecto `''`.
+7. Antes de desplegar, ejecutar la auditoría de `CLAUDE.md` (sección "Costos de infraestructura"): `grep -nE "PROVISIONED|ProvisionedThroughput|CapacityUnits|ProvisionedConcurrency|NatGateway|AWS::RDS|AWS::ElastiCache|AWS::OpenSearch" serverless.yml` — cualquier coincidencia se justifica explícitamente o se elimina antes de continuar.
 
 **Definition of done:**
 - [ ] `npx serverless package --stage staging` termina sin errores
 - [ ] `npx serverless deploy --stage staging` crea el stack y devuelve un endpoint
 - [ ] `curl https://{endpoint}/api/salud` devuelve HTTP 200 con `stage: "staging"`
 - [ ] Las 5 tablas existen en DynamoDB con el sufijo `-staging`, y `agora-compras` tiene TTL en `expiraEn` y Streams activados (verificado en la consola o con `aws dynamodb describe-table`)
+- [ ] **Verificado por CLI, no por lectura del YAML, que las 5 tablas quedaron en `PAY_PER_REQUEST`** tras el despliegue real: `aws dynamodb describe-table --table-name <tabla> --query "Table.BillingModeSummary.BillingMode"` para cada una — debe decir `PAY_PER_REQUEST`, no vacío ni `PROVISIONED`
 - [ ] `agora-comprobantes-staging` tiene Block Public Access activado (verificado con `aws s3api get-public-access-block`)
 - [ ] El workflow corre en el PR y comenta la URL de staging
 - [ ] Cada función tiene su propio **rol de ejecución** IAM, sin `AdministratorAccess` ni comodines sobre `dynamodb:*` en `Resource: "*"` — esto es independiente de que el *usuario* con el que se despliega sí tenga `AdministratorAccess` (ADR-009); lo que este ítem verifica es el rol que la Lambda asume en tiempo de ejecución, no quién la desplegó
 - [ ] Ninguna descripción de función supera 256 caracteres
+- [ ] `logRetentionInDays` definido, no el default infinito
+- [ ] Recursos etiquetados con `Proyecto: agora` (verificable con `aws resourcegroupstaggingapi get-resources`)
+- [ ] Ningún NAT Gateway creado; ninguna Lambda en VPC sin justificación escrita
+- [ ] Estimación de costo mensual escrita en la descripción del PR, con la fuente de cada precio citado
+- [ ] Recordatorio agendado (o anotado en `docs/MEMORY.md` §9) para revisar el costo diario real 48 horas después del despliegue a staging
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
