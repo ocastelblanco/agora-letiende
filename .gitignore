@@ -29,6 +29,11 @@ yarn-error.log*
 
 # IA
 .claude
+.omc
+
+# Documento de trabajo personal — puede contener secretos y credenciales.
+# Se elimina una vez completadas las tareas que describe.
+/docs/tareas-a-realizar.md
 
 # macOS
 .DS_Store
