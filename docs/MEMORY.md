@@ -10,8 +10,8 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 | Atributo | Valor |
 |---|---|
-| **Versión** | 0.0.0 — sin código |
-| **Fase** | Definición de especificaciones (`Specs definition`) |
+| **Versión** | 0.1.0 — andamiaje de Angular en curso |
+| **Fase** | Scaffold (`Scaffold`) |
 | **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada |
 | **URL de staging** | ⬜ no aprovisionada (será el endpoint de API Gateway) |
 | **Rama principal** | `main` |
@@ -34,12 +34,12 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 - [x] `docs/tech-specs.md` — arquitectura de referencia (31/07/2026)
 - [x] `docs/MEMORY.md` — este documento (31/07/2026)
 - [x] `docs/TODO.md` — motor JIT con 2 tareas atómicas (31/07/2026)
+- [x] Andamiaje del proyecto Angular 22 + PrimeNG 22 + Tailwind 4 (01/08/2026, ver §3 ADR-006 y §7 gotchas)
 
 ### Pendiente (v1 — MVP)
 
-- [ ] Andamiaje del proyecto Angular 22 + PrimeNG 22 + Tailwind 4
 - [ ] `serverless.yml` y flujo de CI/CD a staging
-- [ ] Tema visual Le Tiende (preset PrimeNG + tokens Tailwind)
+- [ ] Tema visual Le Tiende completo y `docs/DESIGN.md` — el preset básico de PrimeNG (color primario) ya existe desde la Tarea 1; falta el resto del sistema de diseño (tarjetas, inputs, botones secundarios, patrones de página) documentado como en el `DESIGN.md` de Babel
 - [ ] Autenticación con Google y resolución de roles
 - [ ] Gestión de usuarios
 - [ ] CRUD de eventos
@@ -214,31 +214,31 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ## 4. Dependencias instaladas
 
-Ninguna todavía — no existe `package.json`. Estas son las versiones **previstas**, heredadas de Babel donde aplica. Al crear el proyecto, reemplazar esta tabla por las versiones exactas resueltas en `package-lock.json`.
+Instaladas por la Tarea 1 (01/08/2026); versiones exactas de `package.json` en la rama `feature/andamiaje-angular-primeng-tailwind`. Las marcadas "prevista" aún no existen — se agregan en tareas posteriores (backend, AWS SDK, WhatsApp/QR).
 
-| Paquete | Versión prevista | Uso |
-|---|---|---|
-| `@angular/core`, `common`, `router`, `forms` | ^22.0.0 | Framework |
-| `@angular/ssr` | ^22.0.7 | Renderizado en servidor |
-| `@angular/platform-server` | ^22.0.0 | SSR |
-| `primeng` | ^22.0.0 | Componentes UI |
-| `@primeuix/themes` | latest | Preset de tema propio |
-| `tailwindcss` | ^4.3.3 | Utilidades CSS |
-| `tailwindcss-primeui` | latest | Puente PrimeNG–Tailwind |
-| `express` | ^5.1.0 | Servidor SSR |
-| `@codegenie/serverless-express` | ^5.0.0 | Adaptador Lambda |
-| `@aws-sdk/client-dynamodb`, `lib-dynamodb` | ^3.x | Acceso a datos |
-| `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.x | Comprobantes y activos |
-| `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional |
-| `firebase` | ^12.16.0 | SDK cliente de autenticación |
-| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas |
-| `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta |
-| `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) |
-| `xlsx` | ^0.18.5 | Exportación de reportes (v2) |
-| `serverless` | 4.x | IaC |
-| `typescript` | ~6.0.2 | Lenguaje |
-| `vitest` | ^4.0.8 | Pruebas del backend |
-| `prettier` | ^3.8.1 | Formato |
+| Paquete | Versión | Uso | Estado |
+|---|---|---|---|
+| `@angular/core`, `common`, `router`, `forms`, `animations` | ^22.1.0 | Framework (`animations` requerido por `provideAnimationsAsync`, usado por PrimeNG) | ✅ Instalada |
+| `@angular/ssr` | ^22.1.2 | Renderizado en servidor | ✅ Instalada |
+| `@angular/platform-server` | ^22.1.0 | SSR | ✅ Instalada |
+| `primeng` | ^22.0.0 | Componentes UI | ✅ Instalada |
+| `@primeuix/themes` | ^3.0.0 | Preset de tema propio (`definePreset`, `palette`) | ✅ Instalada |
+| `tailwindcss` + `@tailwindcss/postcss` | ^4.3.3 | Utilidades CSS, vía `.postcssrc.json` | ✅ Instalada |
+| `tailwindcss-primeui` | ^0.6.1 | Puente PrimeNG–Tailwind | ✅ Instalada |
+| `express` | ^5.1.0 | Servidor SSR | ✅ Instalada |
+| `vitest` | ^4.0.8 | Pruebas (frontend, vía `@angular/build:unit-test`) | ✅ Instalada |
+| `prettier` | ^3.8.1 | Formato | ✅ Instalada |
+| `typescript` | ~6.0.2 | Lenguaje | ✅ Instalada |
+| `@codegenie/serverless-express` | ^5.0.0 | Adaptador Lambda (SSR en API Gateway) | ⬜ Prevista — Tarea 2 |
+| `@aws-sdk/client-dynamodb`, `lib-dynamodb` | ^3.x | Acceso a datos | ⬜ Prevista |
+| `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.x | Comprobantes y activos | ⬜ Prevista |
+| `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional | ⬜ Prevista |
+| `firebase` | ^12.16.0 | SDK cliente de autenticación | ⬜ Prevista |
+| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas | ⬜ Prevista |
+| `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta | ⬜ Prevista |
+| `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) | ⬜ Prevista |
+| `xlsx` | ^0.18.5 | Exportación de reportes (v2) | ⬜ Prevista |
+| `serverless` | 4.x | IaC | ⬜ Prevista — Tarea 2 |
 
 ---
 
@@ -318,6 +318,7 @@ Heredados de Babel salvo indicación contraria. Los marcados como **verificado e
 | **Verificado:** el deploy falla porque la `description` de una función Lambda supera 256 caracteres | CloudFormation impone ese límite. Descripciones cortas en `serverless.yml`; explicar en la documentación, no en el YAML |
 | **Verificado:** dos merges seguidos a `main` chocan con `Stack ... is in UPDATE_IN_PROGRESS state and can not be updated` | `concurrency` en GitHub Actions: grupo `desplegar-produccion` con `cancel-in-progress: false`, grupo `desplegar-staging` con `true` |
 | **Verificado:** el dominio personalizado devuelve error de `Host` no autorizado | Configurar `NG_ALLOWED_HOSTS` con el dominio propio **junto con** el montaje del dominio, no después de que producción falle |
+| **Verificado en Ágora (01/08/2026):** hasta `curl http://localhost:4000/` tras `npm run serve:ssr` devuelve `Header "host"... is not allowed` | `angular.json` → `architect.build.options.security.allowedHosts` **NO controla el chequeo de Host en tiempo de ejecución** del servidor Express de SSR (solo protege el prerenderizado contra SSRF) — el `src/server.ts` generado instancia `new AngularNodeAppEngine()` sin config, que lee la lista permitida de la variable de entorno `NG_ALLOWED_HOSTS` (coma-separada) en cada arranque. Para probar SSR en local: `NG_ALLOWED_HOSTS=localhost npm run serve:ssr`. En producción, esta variable va en el entorno de la Lambda (`serverless.yml`), con `agora.letiende.co` |
 | **Verificado:** las fotos de perfil de Google devuelven 429 | `referrerpolicy="no-referrer"` en todo `<img>` que cargue `lh3.googleusercontent.com` |
 | Primer escaneo del día en la puerta es lento | Cold start de la Lambda tras horas de inactividad, justo cuando se forma la fila. Considerar calentamiento manual al abrir la pantalla de ingreso; `provisioned concurrency` rompe el objetivo de costo $0 |
 | La cámara no abre en iOS Safari | `getUserMedia` exige HTTPS y un gesto explícito del usuario. Disparar siempre desde un manejador de click/tap, nunca al cargar la página |
@@ -400,6 +401,21 @@ A mitad de la Tarea 1 (andamiaje de Angular, ya con `npm install` corrido pero s
 - **`docs/TODO.md` — Tarea 2:** es la tarea que más importaba corregir, porque es exactamente donde se repetiría el error de Babel. Se agregó un paso 0 (leer la advertencia antes de empezar), se marcó el paso de declarar las tablas como "la regla de mayor prioridad de toda la tarea", se agregó verificación explícita de que la plantilla de Babel que se copia ya está corregida (se confirmó por CLI: commit `2ce744a`, `BillingMode: PAY_PER_REQUEST` en las 9 tablas), y se amplió la Definition of Done con verificación post-despliegue por CLI (no solo lectura del YAML), etiquetado, `logRetentionInDays`, ausencia de NAT Gateway, estimación de costo en el PR y recordatorio de revisión a 48 horas.
 - **`docs/MEMORY.md`:** este ADR-011, fila nueva de gotcha (§7, marcada 🔴 como la más cara), y en §5 se documentaron los dos presupuestos de cuenta ya existentes y verificados por CLI (`Costo diario` US$4, `Costos promedio` US$10, ambos con email confirmado) más un pendiente: crear un presupuesto filtrado por etiqueta específico de Ágora antes del primer tráfico real.
 
-**Nota operativa:** al ejecutar `git checkout main` tras abrir el PR de ADR-009/010 y antes de que el usuario lo fusionara, la rama de Tarea 1 (`feature/andamiaje-angular-primeng-tailwind`) se cortó de un `main` que todavía no tenía esos ADRs. El PR se fusionó mientras se trabajaba en esta interrupción; se detectó a tiempo (antes de commitear) y se resolvió con `git stash` + `rebase` sobre el `main` actualizado + `stash pop`, con un conflicto menor en `docs/TODO.md` (el paso 6 de Tarea 2) resuelto combinando ambas versiones. Lección para el futuro: verificar si hay un PR de documentación pendiente de fusionar antes de ramificar para una tarea de código nueva.
+**Nota operativa:** al ejecutar `git checkout main` tras abrir el PR de ADR-009/010 y antes de que el usuario lo fusionara, la rama de Tarea 1 (`feature/andamiaje-angular-primeng-tailwind`) se cortó de un `main` que todavía no tenía esos ADRs. El PR se fusionó mientras se trabajaba en esta interrupción; se detectó a tiempo (antes de commitear) y se resolvió con `git stash` + `rebase` sobre el `main` actualizado + `stash pop`, con un conflicto menor en `docs/TODO.md` (el paso 6 de Tarea 2) resuelto combinando ambas versiones. Lección para el futuro: verificar si hay un PR de documentación pendiente de fusionar antes de ramificar para una tarea de código nueva. **Esta misma lección se repitió, sin aprenderla, en la sesión siguiente** — ver nota más abajo.
 
 **Próxima tarea sugerida:** retomar la Tarea 1 (andamiaje de Angular) donde quedó — `npm install` ya corrido, falta configurar el tema PrimeNG/Tailwind, el pipe de precio, la página de inicio y verificar el build.
+
+**Sesión del 01/08/2026 (continuación) — Tarea 1 completa: andamiaje de Angular 22 + PrimeNG + Tailwind**
+
+Se ejecutó la Tarea 1 completa, con una interrupción en el medio para una corrección urgente de costos de AWS (ver rama y PR separados: `fix/costos-dynamodb-pay-per-request`, no incluida en esta rama por diseño — las dos concernientes se mantuvieron en PRs distintos).
+
+Lo hecho:
+- `ng new` no se pudo correr directo por conflicto con `README.md`/`.gitignore` ya existentes (la CLI aborta sin escribir nada ante un conflicto — comportamiento transaccional). Se resolvió apartando ambos archivos temporalmente, generando el proyecto, y fusionando el contenido a mano después: `README.md` reescrito siguiendo el patrón SLIM de Babel; `.gitignore` fusionado (categorías de Angular + nuestras entradas: `.claude`, `.omc`, `docs/tareas-a-realizar.md`, `dist-server`, `.env`).
+- PrimeNG 22 + `@primeuix/themes` + Tailwind 4 instalados. Preset propio (`src/app/core/tema/le-tiende-preset.ts`) con `definePreset(Aura, ...)` y el helper `palette()` de `@primeuix/themes` para generar la escala completa 50-950 a partir del hex de marca — mapea `colorScheme.light.primary.color` a `#230c00` y `.contrastColor` a `#ffe7b3` explícitamente (no solo `primary` genérico), para que los botones salgan `bg-primary`/`text-neutral` sin depender de la heurística por defecto de Aura.
+- `@angular/animations` fue una dependencia oculta necesaria: `provideAnimationsAsync()` (que requiere PrimeNG) falla el build con "Could not resolve @angular/animations/browser" si no está instalada — no aparece en ningún tutorial de PrimeNG 22 como prerequisito explícito.
+- Verificación del DoD hecha por **inspección del HTML servido por SSR real** (`curl` tras `NG_ALLOWED_HOSTS=localhost npm run serve:ssr`), no solo visual: se confirmó `--p-primary-color:#230c00` y `--p-primary-contrast-color:#ffe7b3` en el `<style>` embebido, y `$45.000` en el texto renderizado del pipe `precio`. Ver el gotcha nuevo en §7 sobre `NG_ALLOWED_HOSTS`.
+- `angular.json`: presupuesto de bundle inicial subido de 500kB a 700kB (PrimeNG + Tailwind + animations empujan el bundle de forma esperada y ya conocida al elegir esta suite de UI, no es una regresión a corregir).
+- `app.spec.ts` reescrito: la prueba generada por defecto ("Hello, {{title}}") ya no aplica al reemplazar la plantilla; se agregó además una prueba que verifica el pipe de precio end-to-end.
+- Build de producción, SSR y `npm run test` (3/3) verificados en verde antes de cerrar la tarea.
+
+**Próxima tarea sugerida:** con Tarea 1 cerrada, el motor JIT promueve el siguiente ítem del backlog (`Tema visual Le Tiende completo y docs/DESIGN.md`) al segundo slot activo de `docs/TODO.md`, junto a la Tarea 2 (infraestructura) que sigue activa.

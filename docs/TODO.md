@@ -2,41 +2,29 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (31/07/2026):** el proyecto no tiene código. No hay gaps de seguridad activos en producción (no hay producción), así que la prioridad 1 del motor JIT no aplica todavía. Se toman los dos primeros ítems de **Alta** prioridad del roadmap v1 (`PRD.md` §6), que además son los dos primeros del roadmap técnico (`tech-specs.md` §11). Son independientes entre sí —una toca el frontend, la otra la infraestructura— y por eso pueden ir en paralelo sin bloquearse.
+**Prioridad de selección aplicada (01/08/2026):** la Tarea 1 original (andamiaje de Angular) se completó — ver `MEMORY.md` §2 y §9. Se promueve el primer ítem del backlog (tema visual completo) al slot que deja libre, junto a la Tarea 2 (infraestructura) que sigue activa e independiente.
 
 ---
 
-## Tarea 1 — [FEATURE]: Andamiaje del proyecto Angular 22 + PrimeNG 22 + Tailwind 4
+## Tarea 1 — [FEATURE]: Tema visual Le Tiende completo y `docs/DESIGN.md`
 
-**Origen:** `PRD.md` §6 (v1, "Bases del proyecto") · `tech-specs.md` §11 ítem 1 · ADR-006
+**Origen:** Backlog #1 (`tech-specs.md` §11 ítem 3) · ADR-006
 
 **Archivos a crear:**
-- `package.json`, `angular.json`, `tsconfig.json`, `tsconfig.app.json`
-- `src/` completo con `main.ts`, `main.server.ts`, `server.ts`, `styles.css`, `app/app.config.ts`, `app/app.routes.ts`
-- `.gitignore` (ampliar el existente con `node_modules/`, `dist/`, `dist-server/`, `.angular/`, `.env`)
+- `docs/DESIGN.md`
+- `src/app/core/tema/le-tiende-preset.ts` (ampliar — hoy solo mapea `primary`)
 
 **Qué hacer:**
 
-1. Crear el proyecto con la CLI de Angular 22, con SSR habilitado y sin *zone.js* si la versión lo permite:
-   ```bash
-   npx @angular/cli@22 new agora-letiende --directory . --ssr --style=css --routing --skip-git
-   ```
-   El directorio ya tiene contenido (`docs/`, `LICENSE`, `README.md`, `CLAUDE.md`): verificar que la CLI no los sobreescriba y **no perder `CLAUDE.md` ni `docs/`**.
-2. Instalar PrimeNG 22, `@primeuix/themes`, Tailwind 4 (`tailwindcss`, `@tailwindcss/postcss`, `postcss`) y `tailwindcss-primeui`.
-3. Configurar `src/styles.css` con el bloque `@theme` de Tailwind y los tokens de Le Tiende exactos de `CLAUDE.md` §4: `primary #230C00`, `secondary #E8630A`, `tertiary #00B7A3`, `neutral #FFE7B3`, `surface #FFF8F1`, `danger #C0392B`. Fuente de interfaz Poppins.
-4. Configurar el preset de tema de PrimeNG en `app.config.ts` mapeando sus tokens semánticos a esa paleta (ADR-006). **No usar un tema por defecto de PrimeNG sin adaptar.**
-5. Crear `src/app/shared/pipes/precio.pipe.ts` con `Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 })` — sin `CurrencyPipe`/`DecimalPipe` (gotcha de `MEMORY.md` §7).
-6. Crear una página de inicio mínima que renderice el nombre del proyecto, un botón primario de PrimeNG con el tema aplicado y un precio de ejemplo con el pipe, para verificar visualmente que el tema funciona.
-7. Ajustar los scripts de `package.json` a los nombres que documenta `CLAUDE.md` §3.
+1. Ampliar `le-tiende-preset.ts`: mapear `secondary` (`#E8630A`), `tertiary` como semantic `success` de PrimeNG (`#00B7A3` — así se usa hoy: "mensajes de éxito, veredicto de boleta válida", `tech-specs.md` §4.4) y `danger` como semantic `danger`/`error` (`#C0392B`), con sus respectivas escalas vía `palette()`. Verificar cada una con el mismo método que la Tarea 1 usó para `primary`: inspeccionar el HTML servido por SSR, no solo mirar el navegador.
+2. Escribir `docs/DESIGN.md`. **A diferencia del `DESIGN.md` de Babel (que documenta retrospectivamente componentes ya construidos), el de Ágora es prescriptivo por ahora:** todavía no existen páginas de feature más allá de la de verificación de la Tarea 1, así que este documento establece las clases exactas de Tailwind que las páginas futuras deben usar — copiadas/adaptadas de los patrones ya probados en producción de Babel (`tech-specs.md` §4.4 ya cita los valores exactos: contenedor `min-h-screen bg-surface px-4 py-8`, tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`, botón primario `h-12 rounded-2xl bg-primary text-neutral uppercase`, inputs `rounded-xl border border-primary/20`). Cubrir también anchos `max-w-*` por tipo de pantalla, variantes de botón (secundario/outline, peligro, grande/pequeño) y tokens de color/tipografía. Cuando se construyan páginas reales (backlog #2 en adelante), `DESIGN.md` se actualiza para documentar desvíos reales, igual que ya hace el de Babel.
+3. Documentar explícitamente el **patrón de la pantalla de puerta** (`tech-specs.md` §4.4): alto contraste, veredicto a pantalla completa (`tertiary` = pasa, `danger` = no pasa), tipografía grande, un solo objetivo táctil — es la única pantalla que se aparta del patrón general y merece su propia sección en `DESIGN.md` para que no se pierda ese contexto más adelante.
 
 **Definition of done:**
-- [ ] `npm run build -- --configuration=production` termina sin errores
-- [ ] `npm run serve:ssr` sirve la página y el HTML llega renderizado desde el servidor (verificable con `curl` buscando el texto en la respuesta, no solo en el navegador)
-- [ ] El botón de PrimeNG se ve con `bg-primary #230C00` y texto `neutral #FFE7B3` — no con el tema por defecto de PrimeNG
-- [ ] El pipe `precio` renderiza `45000` como `$45.000`
-- [ ] `npm run test` pasa
-- [ ] `CLAUDE.md` y `docs/` siguen intactos tras correr la CLI
-- [ ] `.gitignore` cubre `node_modules/`, `dist/`, `dist-server/`, `.angular/` y `.env`
+- [ ] `le-tiende-preset.ts` mapea las 4 escalas semánticas (`primary`, `secondary`, `success`/`tertiary`, `danger`), verificadas por inspección del HTML de SSR (no solo visual)
+- [ ] `npm run build -- --configuration=production` sigue sin errores tras el cambio
+- [ ] `docs/DESIGN.md` existe y cubre: colores, tipografía, contenedor de página, tarjetas, botones (todas las variantes), inputs, y el patrón especial de la pantalla de puerta
+- [ ] Las clases documentadas coinciden exactamente con las ya citadas en `tech-specs.md` §4.4 (no se inventan valores nuevos sin verificar contra Babel)
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (`CLAUDE.md` §6)
 
 ---
@@ -93,21 +81,20 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Orden previsto una vez cerradas las dos tareas activas (de `tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
 
-1. Tema visual Le Tiende completo y `docs/DESIGN.md`
-2. Autenticación con Google y resolución de roles (`agora-usuarios`)
-3. Gestión de usuarios
-4. CRUD de eventos
-5. Cartelera pública y página de evento (SEO/Open Graph/JSON-LD)
-6. Motor de aforo (reserva condicional, TTL, liberación por Streams)
-7. Compra y reserva de sillas
-8. Carga de comprobante por enlace mágico
-9. Aprobación del productor
-10. Emisión de boletas con QR firmado
-11. Validación en puerta
-12. Venta en efectivo
-13. QR del evento para afiches
-14. Panel de control básico
-15. Dominio personalizado `agora.letiende.co`
+1. Autenticación con Google y resolución de roles (`agora-usuarios`)
+2. Gestión de usuarios
+3. CRUD de eventos
+4. Cartelera pública y página de evento (SEO/Open Graph/JSON-LD)
+5. Motor de aforo (reserva condicional, TTL, liberación por Streams)
+6. Compra y reserva de sillas
+7. Carga de comprobante por enlace mágico
+8. Aprobación del productor
+9. Emisión de boletas con QR firmado
+10. Validación en puerta
+11. Venta en efectivo
+12. QR del evento para afiches
+13. Panel de control básico
+14. Dominio personalizado `agora.letiende.co`
 
 ---
 
