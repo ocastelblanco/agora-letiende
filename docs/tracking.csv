@@ -1,3 +1,5 @@
 stage,start,finish,time,role,model,milestone,tool,device,effort
 Specs definition,31/07/2026 21:33,31/07/2026 21:59,0:26:00,AI,Opus 5,Documentación inicial completa: CLAUDE.md PRD tech-specs MEMORY y TODO con motor JIT,Claude Code,cli,high
 Specs definition,31/07/2026 22:00,31/07/2026 22:18,0:18:00,AI,Opus 5,Instructivo de tareas manuales (WABA Firebase SES secretos) y PR de documentación inicial,Claude Code,cli,medium
+Specs definition,01/08/2026 12:00,01/08/2026 12:12,0:12:00,AI,Sonnet 5,Ajuste de credenciales AWS a usuario compartido (ADR-009) en tareas-a-realizar MEMORY TODO y tech-specs,Claude Code,cli,low
+Specs definition,01/08/2026 12:40,01/08/2026 12:56,0:16:00,AI,Sonnet 5,Verificacion de app web Firebase (ADR-010) y actualizacion de tareas completadas en tareas-a-realizar MEMORY y TODO,Claude Code,cli,low
