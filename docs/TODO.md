@@ -63,7 +63,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 3. Declarar los dos buckets S3: `agora-comprobantes-{stage}` con **Block Public Access y cifrado SSE-S3**, y `agora-activos-{stage}`.
 4. Implementar `server/api/handlers/salud.ts` devolviendo `{ estado: 'ok', stage, version }`.
 5. Crear `.github/workflows/deploy.yml` a partir del de Babel, con el flujo de `tech-specs.md` §7.2: build + test en PR, deploy a staging desde PR con smoke test contra `/api/salud`, deploy a producción desde push a `main`. **Incluir los grupos de `concurrency`** (`desplegar-staging` con `cancel-in-progress: true`, `desplegar-produccion` con `false`) — gotcha verificado en producción.
-6. Configurar en GitHub los secretos mínimos para desplegar: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY` (`tech-specs.md` §9). Los secretos de negocio (Firebase, HMAC, SES) se agregan en su propia tarea; `serverless.yml` debe tolerar su ausencia con valor por defecto `''`.
+6. Configurar en GitHub los secretos mínimos para desplegar: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY` (`tech-specs.md` §9). **No se genera un usuario IAM nuevo** — se reutiliza el mismo usuario AWS compartido que ya usan Babel y Comandante (ADR-009 en `MEMORY.md`); las credenciales se copian de ahí, según `docs/tareas-a-realizar.md` §2-3. Los secretos de negocio (Firebase, HMAC, SES) se agregan en su propia tarea; `serverless.yml` debe tolerar su ausencia con valor por defecto `''`.
 
 **Definition of done:**
 - [ ] `npx serverless package --stage staging` termina sin errores
@@ -72,7 +72,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - [ ] Las 5 tablas existen en DynamoDB con el sufijo `-staging`, y `agora-compras` tiene TTL en `expiraEn` y Streams activados (verificado en la consola o con `aws dynamodb describe-table`)
 - [ ] `agora-comprobantes-staging` tiene Block Public Access activado (verificado con `aws s3api get-public-access-block`)
 - [ ] El workflow corre en el PR y comenta la URL de staging
-- [ ] Cada función tiene su propio rol IAM, sin `AdministratorAccess` ni comodines sobre `dynamodb:*` en `Resource: "*"`
+- [ ] Cada función tiene su propio **rol de ejecución** IAM, sin `AdministratorAccess` ni comodines sobre `dynamodb:*` en `Resource: "*"` — esto es independiente de que el *usuario* con el que se despliega sí tenga `AdministratorAccess` (ADR-009); lo que este ítem verifica es el rol que la Lambda asume en tiempo de ejecución, no quién la desplegó
 - [ ] Ninguna descripción de función supera 256 caracteres
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
@@ -104,14 +104,12 @@ Orden previsto una vez cerradas las dos tareas activas (de `tech-specs.md` §11)
 
 No ocupan slots del motor JIT porque no dependen del desarrollo. **El paso a paso completo está en `docs/tareas-a-realizar.md`** (documento de trabajo personal de OCM, fuera de control de versiones porque puede contener secretos).
 
-Lo que bloquea las tareas activas de arriba:
-
-- 🔴 **Secciones 1 a 3** de ese documento — proteger la rama `main`, crear el usuario IAM de despliegue y cargar los 3 secretos mínimos en GitHub Actions. Sin esto, la **Tarea 2 no puede desplegar**. ≈35 minutos.
+**✅ Lo que bloqueaba las tareas activas de arriba ya está resuelto (01/08/2026):** rama `main` protegida, usuario AWS compartido confirmado (ADR-009), y los secretos `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY` y `FIREBASE_SERVICE_ACCOUNT_AGORA` cargados en GitHub Actions. La Tarea 2 puede desplegar sin bloqueos externos.
 
 Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 
-- 🟡 Verificar el remitente `taquilla@letiende.co` y revisar SPF/DKIM/DMARC (sección 5). ✅ Ya confirmado que la cuenta **no** está en el sandbox de SES.
-- 🟡 Registrar la app web de Ágora en el proyecto Firebase compartido y crear su cuenta de servicio propia (sección 4, ADR-002).
+- ✅ Remitente `taquilla@letiende.co` en SES probado — llegó a bandeja de entrada en Gmail (sección 5). Queda una verificación opcional de cabeceras SPF/DKIM/DMARC, no bloqueante.
+- ✅ Cuenta de servicio de Firebase creada y cargada (sección 4.3, ADR-002). **No se registra app web propia** — Ágora reutiliza el `firebaseConfig` de Comandante, igual que Babel (ADR-010). El dominio `agora.letiende.co` ya está en Authorized domains; falta el de staging, que se agrega en cuanto la Tarea 2 genere el endpoint.
 - 🟡 Secretos de negocio y dominio `agora.letiende.co` (secciones 6 y 7).
 
 Fase 2, conviene arrancarlo pronto porque la Verificación de Negocio de Meta es lenta:

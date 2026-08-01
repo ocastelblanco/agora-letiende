@@ -170,6 +170,34 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ---
 
+### ADR-009 — Credenciales de despliegue: usuario AWS compartido, no uno dedicado a Ágora
+
+**Fecha:** 01/08/2026 · **Estado:** Aceptada
+
+**Decisión:** Ágora no crea un usuario IAM propio para desplegar. Reutiliza el mismo usuario que ya opera Babel y Comandante: `@ocastelblanco`, cuenta AWS `696912647258`, miembro del grupo `Administrador` (`AdministratorAccess`). Es el perfil `default` ya configurado en `~/.aws/credentials` para trabajo desde CLI, y el mismo par de credenciales (Access Key ID `AKIA2EQZ3CRNMVGRO5X4`) que Babel ya tiene cargado como secreto de GitHub Actions para su propio despliegue.
+
+**Contexto:** `docs/tareas-a-realizar.md` había propuesto originalmente crear un usuario `agora-despliegue` dedicado, con una política en línea acotada a roles `agora-letiende-*`, para que un secreto filtrado de un proyecto no comprometiera a los otros. El usuario decidió explícitamente no hacerlo y usar el que ya existe.
+
+**Razón:** simplicidad operativa sobre aislamiento de credenciales. Un solo usuario que administrar, rotar y recordar en los tres proyectos del ecosistema, en vez de tres. Es además el modelo que Babel ya tiene en producción sin incidentes.
+
+**Consecuencias:** el radio de impacto de un secreto de CI comprometido en **cualquiera** de los tres repositorios (Ágora, Babel, Comandante) es la cuenta AWS completa, no solo los recursos de esa app — no hay aislamiento entre proyectos a nivel de credenciales de despliegue. Es un riesgo ya aceptado de facto para Babel; Ágora lo hereda por decisión explícita en vez de quedar aislado. **Esto es independiente del principio de mínimo privilegio de las Lambdas en tiempo de ejecución** (`CLAUDE.md` §5, A05): cada función sigue con su propio rol IAM acotado, creado por `serverless.yml` — lo que cambia aquí es solo quién tiene permiso para *crear* esos roles y el resto de la infraestructura, no lo que las Lambdas pueden hacer una vez desplegadas. Si en el futuro se decide aislar credenciales por proyecto, revisar primero si Babel también migra, para no dejar una asimetría sin razón entre apps del mismo ecosistema.
+
+---
+
+### ADR-010 — Sin app web propia en Firebase; se reutiliza la configuración pública de Comandante
+
+**Fecha:** 01/08/2026 · **Estado:** Aceptada
+
+**Decisión:** Ágora no registra su propia "Web app" en la consola de Firebase del proyecto compartido. El frontend usa el mismo objeto `firebaseConfig` que ya usan Comandante y Babel (proyecto `comandante-letiende`, `appId: 1:458748050433:web:441a0ec326f149ab08d400`), copiado directamente en `src/environments/`.
+
+**Contexto:** el usuario preguntó si hacía falta registrar una app web nueva para Ágora, notando que Babel tampoco aparece como app separada en la consola de Firebase. Se verificó en el código real de Babel (`src/environments/environment.ts`), no solo en su documentación: Babel efectivamente reutiliza el `firebaseConfig` de Comandante tal cual, sin registro propio.
+
+**Razón:** el `apiKey`/`appId` de una app web de Firebase identifican el proyecto para inicializar el SDK cliente; no son el mecanismo de autorización. Lo que determina qué dominios pueden autenticarse es la lista de *Authorized domains* en Authentication → Settings (donde `agora.letiende.co` ya se agregó), no el registro de una app. Registrar una app nueva solo aportaría valor si Ágora usara Analytics o Performance Monitoring separados por app, que no están en el alcance.
+
+**Consecuencias:** un solo `firebaseConfig` para las tres apps del ecosistema — nada que rotar o mantener por separado en ese frente. **Punto a verificar (no bloqueante):** si la API key de ese `firebaseConfig` tiene restricción de *HTTP referrer* en GCP Console (Credentials), hay que agregar `https://agora.letiende.co/*` a la lista permitida; si no tiene restricción, no aplica. La autenticación en sí (`verifyIdToken` del lado del backend) no depende de esto — usa la cuenta de servicio propia de Ágora (ADR-002), que es un mecanismo completamente distinto.
+
+---
+
 ## 4. Dependencias instaladas
 
 Ninguna todavía — no existe `package.json`. Estas son las versiones **previstas**, heredadas de Babel donde aplica. Al crear el proyecto, reemplazar esta tabla por las versiones exactas resueltas en `package-lock.json`.
@@ -202,24 +230,28 @@ Ninguna todavía — no existe `package.json`. Estas son las versiones **previst
 
 ## 5. Configuraciones vigentes
 
-Nada aprovisionado todavía. Esta tabla se completa a medida que se crean los recursos — es el lugar donde buscar un ARN, un ID o una URL sin tener que entrar a la consola.
+Esta tabla se completa a medida que se crean los recursos — es el lugar donde buscar un ARN, un ID o una URL sin tener que entrar a la consola.
 
 | Recurso | Valor | Estado |
 |---|---|---|
 | Región AWS | `us-east-1` | ✅ Definida (misma que Babel) |
-| Cuenta AWS | Compartida con Babel y Comandante | ✅ Existe |
-| Nombre del servicio Serverless | `agora-letiende` | ⬜ Por crear |
-| Tablas DynamoDB | `agora-{usuarios,eventos,compras,boletas,auditoria}-{stage}` | ⬜ Por crear |
-| Bucket de comprobantes | `agora-comprobantes-{stage}` (privado, SSE-S3, Block Public Access) | ⬜ Por crear |
-| Bucket de activos | `agora-activos-{stage}` (imágenes de evento, QR) | ⬜ Por crear |
-| Endpoint de API Gateway (staging) | — | ⬜ Por crear |
+| Cuenta AWS | Compartida con Babel y Comandante — `696912647258` | ✅ Existe |
+| Usuario IAM de despliegue | Compartido, `@ocastelblanco` (grupo `Administrador`, `AdministratorAccess`) — mismo usuario que Babel y Comandante, **no dedicado a Ágora** (ADR-009) | ✅ Existe — perfil `default` en `~/.aws/credentials` |
+| Access Key ID de despliegue | `AKIA2EQZ3CRNMVGRO5X4` (no sensible; el secreto sí lo es y no se documenta aquí) | ✅ Ya usada por Babel en sus GitHub Secrets desde el 17/07/2026 |
+| Nombre del servicio Serverless | `agora-letiende` | ⬜ Por crear (Tarea 2 de `TODO.md`) |
+| Tablas DynamoDB | `agora-{usuarios,eventos,compras,boletas,auditoria}-{stage}` | ⬜ Por crear (Tarea 2) |
+| Bucket de comprobantes | `agora-comprobantes-{stage}` (privado, SSE-S3, Block Public Access) | ⬜ Por crear (Tarea 2) |
+| Bucket de activos | `agora-activos-{stage}` (imágenes de evento, QR) | ⬜ Por crear (Tarea 2) |
+| Endpoint de API Gateway (staging) | — | ⬜ Por crear (Tarea 2) |
 | Dominio de producción | `agora.letiende.co` | ⬜ Por configurar (DNS + certificado ACM) |
-| Proyecto Firebase | El compartido de Le Tiende | ✅ Existe — falta registrar la app web de Ágora |
-| Cuenta de servicio Firebase de Ágora | `FIREBASE_SERVICE_ACCOUNT_AGORA` | ⬜ Por generar |
-| Remitente SES | `taquilla@letiende.co` | ⬜ Por verificar |
+| Proyecto Firebase | `comandante-letiende` (compartido con Comandante y Babel) | ✅ Existe |
+| App web de Firebase | **No hay una propia — se reutiliza `firebaseConfig` de Comandante** (ADR-010) | ✅ Resuelto, no aplica crear una |
+| `agora.letiende.co` en Authorized domains (Firebase Auth) | Dominio de producción agregado | ✅ Hecho 01/08/2026 — falta agregar el de staging cuando exista |
+| Cuenta de servicio Firebase de Ágora | `FIREBASE_SERVICE_ACCOUNT_AGORA` | ✅ Creada en GCP y cargada como secreto de GitHub (01/08/2026) |
+| Remitente SES | `taquilla@letiende.co` | ✅ Probado 01/08/2026 — correo de prueba llegó a bandeja de entrada en Gmail |
 | **Estado del sandbox de SES** | **Fuera del sandbox** | ✅ Confirmado 31/07/2026 — se puede enviar a cualquier destinatario |
-| Repositorio GitHub | ⬜ Por confirmar | Cuenta `ocastelblanco` |
-| Secretos de GitHub Actions | Ver `tech-specs.md` §9 | ⬜ Por configurar |
+| Repositorio GitHub | `ocastelblanco/agora-letiende`, rama `main` protegida | ✅ Confirmado y protegido 01/08/2026 |
+| Secretos de GitHub Actions | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY`, `FIREBASE_SERVICE_ACCOUNT_AGORA` | ✅ Cargados 01/08/2026 — faltan los de negocio (`tech-specs.md` §9), cuando el código los requiera |
 | Cuenta Bold de Le Tiende | Existe (uso manual actual) | ⬜ Sin integrar (v2) |
 | WABA de WhatsApp | No existe | ⬜ Trámite no iniciado (v2) |
 
@@ -324,3 +356,17 @@ Dos correcciones respecto de lo que se creía al cerrar el bootstrap:
 - ✅ **El trámite de la WABA es más rápido de lo estimado.** Se verificó contra la documentación de AWS: el alta es un formulario embebido (~20 min) y cada plantilla se revisa en hasta 24 horas. La parte lenta es la Verificación de Negocio de Meta, necesaria solo para enviar a escala. La decisión de diferir WhatsApp a v2 (ADR-003) sigue siendo correcta, pero por alcance, no por riesgo de cronograma. **Hallazgo con consecuencia operativa:** el número que se registre no puede estar en uso en la app de WhatsApp — usar el número actual de Le Tiende implicaría borrar esa cuenta y su historial. Probablemente convenga una línea nueva para la taquilla.
 
 **Próxima tarea sugerida:** Tarea 1 de `docs/TODO.md` — andamiaje del proyecto Angular 22 con PrimeNG y Tailwind. En paralelo, OCM ejecuta las secciones 1 a 3 de `docs/tareas-a-realizar.md`, que desbloquean la Tarea 2.
+
+**Sesión del 01/08/2026 — Credenciales de despliegue compartidas (ADR-009)**
+
+El usuario decidió no crear el usuario IAM dedicado `agora-despliegue` que proponía `docs/tareas-a-realizar.md` §2. En su lugar, Ágora reutiliza el usuario AWS ya compartido por Babel y Comandante (`@ocastelblanco`, `AdministratorAccess`), tanto para trabajo desde CLI (perfil `default`) como para las credenciales de CI/CD. Se verificó por CLI, sin exponer el secreto, que ese usuario ya tiene una única Access Key activa y que es la misma que Babel ya usa en sus GitHub Secrets — no hace falta generar nada nuevo, solo copiar el par de credenciales a los secretos del repositorio de Ágora. Detalle completo en ADR-009 (§3) y en `docs/tareas-a-realizar.md` §2-3, que se reescribieron para reflejar esto.
+
+**Sesión del 01/08/2026 (continuación) — Bloque 🔴 completado; sin app web propia en Firebase (ADR-010)**
+
+El usuario reportó completo todo el bloque que bloqueaba el desarrollo: protección de `main`, confirmación del usuario AWS compartido, y los secretos de GitHub Actions (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SERVERLESS_LICENSE_KEY`, y además `FIREBASE_SERVICE_ACCOUNT_AGORA`). También creó la cuenta de servicio en GCP, agregó `agora.letiende.co` a los dominios autorizados de Firebase Auth del proyecto `comandante-letiende`, y probó el envío desde SES con `taquilla@letiende.co` — llegó sin problema a un Gmail.
+
+Preguntó si hacía falta registrar una app web nueva en Firebase para Ágora, notando que Babel tampoco aparece como app separada en la consola. Se verificó en el código real de Babel (`babel/src/environments/environment.ts`), no en su documentación: Babel reutiliza literalmente el `firebaseConfig` de Comandante. Ágora hace lo mismo — no hay que registrar nada (ADR-010). Los valores de `firebaseConfig` (no sensibles) quedaron documentados en `docs/tareas-a-realizar.md` §4.1 y en §5 de este documento.
+
+`docs/tareas-a-realizar.md` se reescribió sección por sección para reflejar lo ya hecho: quedan abiertos solo el dominio de staging en Authorized domains (llega con la Tarea 2), dos verificaciones opcionales de 30 segundos (cabeceras SPF/DKIM/DMARC del correo de prueba, y restricción de referrer de la API key de Firebase en GCP), y las secciones 6-10 que dependen de trabajo posterior.
+
+**Próxima tarea sugerida (actualizada):** Tarea 1 y Tarea 2 de `docs/TODO.md` ya pueden ejecutarse sin bloqueos externos.

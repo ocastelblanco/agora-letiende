@@ -632,7 +632,7 @@ Ningún secreto vive en el repositorio. Todos se inyectan como variables de ento
 
 | Variable | Propósito | Contexto |
 |---|---|---|
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credenciales de despliegue | GitHub Actions |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credenciales de despliegue — usuario AWS **compartido** con Babel y Comandante, no dedicado a Ágora (ADR-009 en `MEMORY.md`) | GitHub Actions |
 | `SERVERLESS_LICENSE_KEY` | Licencia de Serverless Framework 4 en CI sin login interactivo | GitHub Actions |
 | `FIREBASE_SERVICE_ACCOUNT_AGORA` | Cuenta de servicio para `verifyIdToken` en las Lambdas | Lambdas |
 | `SECRETO_FIRMA_BOLETAS` | Llave HMAC del código de boleta | Lambdas |
