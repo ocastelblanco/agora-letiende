@@ -1,2 +1,3 @@
 stage,start,finish,time,role,model,milestone,tool,device,effort
-
+Specs definition,31/07/2026 21:33,31/07/2026 21:59,0:26:00,AI,Opus 5,Documentación inicial completa: CLAUDE.md PRD tech-specs MEMORY y TODO con motor JIT,Claude Code,cli,high
+Specs definition,31/07/2026 22:00,31/07/2026 22:18,0:18:00,AI,Opus 5,Instructivo de tareas manuales (WABA Firebase SES secretos) y PR de documentación inicial,Claude Code,cli,medium
