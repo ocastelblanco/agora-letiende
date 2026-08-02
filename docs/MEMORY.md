@@ -11,15 +11,15 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | Atributo | Valor |
 |---|---|
 | **Versión** | 0.1.0 — infraestructura base desplegada a staging |
-| **Fase** | Backend inicial (`Auth`) |
+| **Fase** | Backend de autenticación completado; falta la mitad de frontend (`Auth`) |
 | **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada (roadmap #17) |
-| **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` (verificado 02/08/2026) |
+| **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` (verificado 02/08/2026) — `GET /api/usuarios/me` implementada en esta sesión, **aún no desplegada** (ver §7, bloqueo de red de esta sesión) |
 | **Rama principal** | `main` |
-| **Último commit** | `a0bfe9a` (merge del PR de infraestructura, Tarea 2) |
+| **Último commit** | `a0bfe9a` (merge del PR de infraestructura, Tarea 2) — el de esta sesión (backend de autenticación) queda en un PR abierto, sin fusionar |
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 02/08/2026 — `docs/DESIGN.md`, infraestructura base y CI/CD a staging, primer despliegue real verificado |
+| **Última sesión** | 02/08/2026 (tarde) — backend de autenticación: `verificar-token.ts`, `resolver-permisos.ts`, `GET /api/usuarios/me`, rol IAM de mínimo privilegio, pruebas en verde |
 
 ---
 
@@ -38,10 +38,11 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 - [x] Tema visual Le Tiende completo: `src/styles.css` (tokens Tailwind), `src/material-theme.scss` (tema Material 3), `shared/pipes/precio.pipe.ts` — hecho como parte del andamiaje/migración de ADR-012
 - [x] `docs/DESIGN.md` — sistema de diseño prescriptivo completo (colores, tipografía, contenedor, tarjetas, variantes de botón, inputs, matriz Material vs. HTML propio, patrón de la pantalla de puerta) (02/08/2026, PR #5)
 - [x] `serverless.yml` y flujo de CI/CD a staging (02/08/2026, PR #6) — 5 tablas DynamoDB `PAY_PER_REQUEST`, 2 buckets S3 privados, funciones `salud`/`ssr`, primer despliegue real a staging verificado por CLI
+- [x] Backend de autenticación (02/08/2026, PR pendiente de abrir): `server/api/services/dynamodb.ts` (`DocumentClient` único), `server/api/lib/verificar-token.ts` (`firebase-admin`, `verifyIdToken`, cuenta de servicio propia de Ágora), `server/api/lib/resolver-permisos.ts` (única fuente de la jerarquía `administrador > productor > portero`, `GetItem` sobre `agora-usuarios`), `server/api/handlers/usuarios-me.ts` (`GET /api/usuarios/me`, 401/403/200/500 sin detalles internos), función `usuariosMe` en `serverless.yml` con rol IAM propio (`dynamodb:GetItem` exclusivo sobre `agora-usuarios`). `npm run test:api` en verde (6 pruebas). **No desplegado a staging todavía** — ver gotcha nuevo en §7 sobre el bloqueo de red a `install.serverless.com` en esta sesión
 
 ### Pendiente (v1 — MVP)
 
-- [ ] Autenticación con Google y resolución de roles
+- [ ] Frontend de autenticación (login con Google, guardias de ruta) — el backend (arriba) ya expone `GET /api/usuarios/me`
 - [ ] Gestión de usuarios
 - [ ] CRUD de eventos
 - [ ] Cartelera pública y página de evento (con SEO/Open Graph)
@@ -252,11 +253,11 @@ Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` e
 | `prettier` | ^3.8.1 | Formato | ✅ Instalada |
 | `typescript` | ~6.0.2 | Lenguaje | ✅ Instalada |
 | `@codegenie/serverless-express` | ^5.0.0 | Adaptador Lambda (SSR en API Gateway) | ⬜ Prevista — Tarea 2 |
-| `@aws-sdk/client-dynamodb`, `lib-dynamodb` | ^3.x | Acceso a datos | ⬜ Prevista |
+| `@aws-sdk/client-dynamodb`, `lib-dynamodb` | ^3.1101.0 | Acceso a datos (`server/api/services/dynamodb.ts`) | ✅ Instalada (02/08/2026) |
 | `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.x | Comprobantes y activos | ⬜ Prevista |
 | `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional | ⬜ Prevista |
 | `firebase` | ^12.16.0 | SDK cliente de autenticación | ⬜ Prevista |
-| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas | ⬜ Prevista |
+| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas (`server/api/lib/verificar-token.ts`) | ✅ Instalada (02/08/2026) |
 | `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta | ⬜ Prevista |
 | `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) | ⬜ Prevista |
 | `xlsx` | ^0.18.5 | Exportación de reportes (v2) | ⬜ Prevista |
@@ -350,6 +351,7 @@ Heredados de Babel salvo indicación contraria. Los marcados como **verificado e
 | Un locale `es-CO` mal registrado rompe el build SSR | Usar `Intl.NumberFormat` directamente en un pipe propio, no `CurrencyPipe`/`DecimalPipe` |
 | **Verificado en Ágora (02/08/2026):** el botón sale de un color naranja/marrón medio en vez del `#230C00` casi negro de marca, aunque el hex de marca sí se usó como fuente de la paleta | El esquema claro de Material 3 mapea `primary` al **tono 40** de la rampa tonal (un tono medio, pensado para contraste sobre fondo claro), no al hex exacto que se pasó como semilla. Hay que sobrescribir `--mat-sys-primary`/`--mat-sys-on-primary` (y el resto de tokens de marca) explícitamente después de `mat.theme()` — igual que hubo que hacer con el preset de PrimeNG. Ver ADR-012 y `src/material-theme.scss` |
 | `@material/material-color-utilities` falla con `ERR_MODULE_NOT_FOUND` al ejecutarlo directo con `node` | El paquete es ESM puro y uno de sus archivos internos (`dynamiccolor/color_spec_2025.js`) importa una ruta relativa sin extensión `.js`, lo que Node en modo ESM estricto rechaza (los bundlers como esbuild/webpack lo toleran, Node plano no). Workaround: empaquetar el script con `esbuild --bundle --platform=node --format=esm` **ejecutado desde el directorio del proyecto** (para que resuelva `node_modules` correctamente) y correr el bundle resultante, no el archivo fuente |
+| **Verificado (02/08/2026, sesión de sandbox restringido de red):** el paquete npm `serverless` (v4) no trae el CLI — su `postinstall` (`binary.js`) descarga un binario nativo desde `https://install.serverless.com/installer-builds/...` en el primer uso; en un entorno con salida de red restringida a una lista blanca (como algunas sesiones de Claude Code on the web) ese host devuelve 403 y **tanto `npm install` como cualquier `npx serverless ...`** fallan con `Error fetching release: fetch failed` | `npm install` funciona con `--ignore-scripts` (evita que el postinstall intente la descarga), pero entonces `npx serverless package/deploy` sigue fallando en ese mismo entorno porque el binario nunca se descarga — **no es un bug del código de Ágora**, es una restricción de red del entorno. Verificar `serverless.yml` (sintaxis, roles IAM, `package.patterns`) por revisión manual y con `tsc --noEmit` cuando esto ocurra, y dejar la verificación real de `serverless package/deploy` para CI (que sí tiene salida a `install.serverless.com`) o para una sesión sin esa restricción. No es una alerta de costo — no reintentar ni intentar rodear la política de red |
 
 ---
 
@@ -474,5 +476,23 @@ Se copiaron el favicon, íconos PWA y logotipos SVG desde Babel (`~/Documents/Le
 **Lección para el futuro:** en `serverless.yml`, evitar `!Sub`/`${...}` en cualquier construcción de URL/ARN que combine referencias a recursos con pseudo-parámetros de AWS — el resolvedor de variables de Serverless Framework y el de CloudFormation compiten por el mismo símbolo `${}` y el resultado no siempre es obvio ni falla de forma temprana (el primer intento de `Fn::Join` habría desplegado con una URL rota sin que ningún paso de validación lo detectara, si no se hubiera inspeccionado el JSON empaquetado a mano). Preferir `Fn::Join` con `!Ref`/`!GetAtt` explícitos, y **siempre** revisar `.serverless/cloudformation-template-update-stack.json` tras un `serverless package` antes de confiar en un `Output` o una construcción de URL nueva.
 
 **Recordatorio pendiente — revisión de costo a 48 horas:** sigue en pie, agendada para el **04/08/2026** o después (`aws ce get-cost-and-usage`, ver `docs/advertencia-urgente-costos-aws.md` §4 Paso 4) — la configuración ya se verificó hoy, pero el comportamiento del costo real en el tiempo todavía no.
+
+**Sesión del 02/08/2026 (tarde) — Backend de autenticación (Tarea 1), ejecutada desde una sesión iniciada en móvil**
+
+El usuario pidió confirmar viabilidad y, de ser posible, ejecutar la Tarea 1 (`docs/TODO.md`) desde una sesión de Claude Code on the web disparada desde el celular. Se confirmó que el entorno remoto tiene shell, git y npm completos independientemente del dispositivo de origen, y se procedió sin bloqueos de esa naturaleza.
+
+Lo hecho, siguiendo exactamente el plan de la Tarea 1 original:
+- `server/api/services/dynamodb.ts`: instancia única de `DynamoDBDocumentClient`.
+- `server/api/lib/verificar-token.ts`: inicializa `firebase-admin` una sola vez por contenedor (cachea la app entre invocaciones), usa `FIREBASE_SERVICE_ACCOUNT_AGORA` vía `cert()`, y separa a propósito la resolución de la app (errores de configuración → 500) de la verificación del token en sí (`verifyIdToken` → 401), para no confundir "credencial del servidor mal puesta" con "token del cliente inválido".
+- `server/api/lib/resolver-permisos.ts`: única fuente de la jerarquía `administrador > productor > portero` (`cumpleRolMinimo`), `GetItem` sobre `agora-usuarios` con un type guard manual (sin `any`, `CLAUDE.md` §4) en vez de castear el `Item` de DynamoDB directamente.
+- `server/api/handlers/usuarios-me.ts` + `usuarios-me.spec.ts`: `GET /api/usuarios/me` con 401 (sin token / token inválido) → 403 (correo ausente o `activo: false`) → 500 (fallo de configuración o de DynamoDB, sin filtrar detalles) → 200. 6 pruebas en verde con `firebase-admin` y el `DocumentClient` mockeados vía `vi.mock`.
+- `serverless.yml`: función `usuariosMe` nueva con `UsuariosMeLambdaRole` (`dynamodb:GetItem` exclusivo sobre el ARN de `AgoraUsuarios`, sin comodines), variables `TABLA_USUARIOS`/`FIREBASE_SERVICE_ACCOUNT_AGORA` (esta última con default `''`), y `package.patterns` que incluye `node_modules/**` completo (a diferencia de `salud`) con exclusiones explícitas de paquetes solo-frontend/build (Angular, Tailwind, Vitest, TypeScript, Serverless, `rxjs`, `express`) — **primera versión, sin verificar el tamaño real del `.zip`** porque no fue posible correr `serverless package` en esta sesión (ver más abajo); queda marcado en el propio `serverless.yml` como `<!-- SIN VERIFICAR -->` según exige `CLAUDE.md`.
+- Dependencias nuevas: `firebase-admin@^14.2.0`, `@aws-sdk/client-dynamodb@^3.1101.0`, `@aws-sdk/lib-dynamodb@^3.1101.0` (versiones exactas resueltas contra el registro de npm el mismo día, coinciden con lo "previsto" en §4).
+
+**Bloqueo de entorno encontrado y cómo se manejó (no es una alerta de costo ni un bug del código):** esta sesión corre en un sandbox con salida de red restringida a una lista blanca. `npm install` sin más falló porque el `postinstall` de `serverless` intenta descargar su binario nativo desde `install.serverless.com` (403 de política, no reintentado — instrucción explícita del proxy de la sesión). Se resolvió instalando con `--ignore-scripts`. Consecuencia: **no fue posible ejecutar `npx serverless package --stage staging`** en esta sesión (mismo host bloqueado), así que ese ítem del DoD original se verificó por los medios que sí eran posibles — `tsc -p server/tsconfig.json --noEmit` en verde, `npm run test:api` en verde (6/6), revisión manual línea por línea del `serverless.yml` resultante contra el patrón ya probado de `salud`/`SaludLambdaRole`, y la auditoría de costos por `grep` sin coincidencias nuevas — y queda pendiente de una verificación real de `serverless package/deploy` en CI o en una sesión sin esta restricción. Ver gotcha nuevo en §7.
+
+**Decisión de rama:** el arnés de esta sesión exige empujar a `claude/tarea-1-mobile-feasibility-044k5v` en vez de crear una rama `feature/*` nueva — se siguió esa instrucción de la plataforma en vez del nombre de rama que sugiere `CLAUDE.md` §6, porque es un requisito del entorno de ejecución, no una decisión de diseño del código; el PR sigue abierto contra `main`, sin fusionar, como exige el mismo `CLAUDE.md` §6.
+
+**Próxima tarea sugerida:** Tarea 1 de `docs/TODO.md` (ahora renumerada: frontend de autenticación — login con Google y guardias de ruta), que ya puede construirse contra el contrato real de `GET /api/usuarios/me`. El segundo slot del motor JIT queda vacío a propósito hasta que esa cierre (ver nota en `docs/TODO.md`). Una vez fusionado este PR, correr `npx serverless package --stage staging` desde un entorno sin la restricción de red (CI, por ejemplo) para verificar por fin el tamaño real del paquete de `usuariosMe` y ajustar `package.patterns` si hace falta.
 
 **Próxima tarea sugerida:** confirmar que el smoke test corregido pasa en el re-run del PR de la Tarea 2, hacer la revisión de costo a 48 horas, y luego promover la siguiente pieza del roadmap técnico (`tech-specs.md` §11 ítem 4: autenticación y roles).
