@@ -1,0 +1,193 @@
+// Tema de Angular Material 3 para Ágora, mapeado a la paleta de Le Tiende
+// (CLAUDE.md §4, heredada del sistema de diseño de Comandante).
+//
+// PrimeNG 22 dejó de ser MIT (pasó a licencia comercial "PrimeUI" con
+// verificación en tiempo de ejecución — ver docs/MEMORY.md ADR revertido).
+// Angular Material es MIT sin condiciones y mantenido por el equipo de
+// Angular; lo reemplaza como suite de componentes complejos.
+//
+// Las paletas tonales (primary/secondary/neutral/error) se generaron con
+// @material/material-color-utilities (el mismo algoritmo M3 que usa la
+// Theme Builder oficial de Angular) a partir de #230C00 y #00B7A3 — no se
+// escribieron a mano. El sistema M3 por defecto mapea `primary` (claro) al
+// tono 40 de esa rampa, no al hex exacto de marca — por eso los tokens
+// --mat-sys-* específicos se sobrescriben explícitamente más abajo.
+@use '@angular/material' as mat;
+
+// Paleta tonal completa generada desde #230C00 (primary de marca).
+$le-tiende-primary-palette: (
+  0: #000000,
+  10: #311300,
+  20: #502400,
+  25: #612d00,
+  30: #723600,
+  35: #843f00,
+  40: #954a05,
+  50: #b46120,
+  60: #d37a37,
+  70: #f3944f,
+  80: #ffb787,
+  90: #ffdcc7,
+  95: #ffede4,
+  98: #fff8f5,
+  99: #fffbff,
+  100: #ffffff,
+  secondary: (
+    0: #000000,
+    10: #2b1708,
+    20: #422b1b,
+    25: #4f3625,
+    30: #5b4130,
+    35: #684c3b,
+    40: #755846,
+    50: #90715d,
+    60: #ab8a75,
+    70: #c8a48e,
+    80: #e5bfa8,
+    90: #ffdcc7,
+    95: #ffede4,
+    98: #fff8f5,
+    99: #fffbff,
+    100: #ffffff,
+  ),
+  tertiary: (
+    0: #000000,
+    10: #1c1d00,
+    20: #31320a,
+    25: #3c3d14,
+    30: #48491f,
+    35: #545529,
+    40: #606134,
+    50: #797a4a,
+    60: #939462,
+    70: #aeae7a,
+    80: #c9ca93,
+    90: #e6e6ad,
+    95: #f4f4ba,
+    98: #fdfdc2,
+    99: #fefee1,
+    100: #ffffff,
+  ),
+  neutral: (
+    0: #000000,
+    10: #201a17,
+    20: #362f2b,
+    25: #413a36,
+    30: #4d4541,
+    35: #59514d,
+    40: #655d58,
+    50: #7e7571,
+    60: #998f8a,
+    70: #b4a9a4,
+    80: #d0c4bf,
+    90: #ece0da,
+    95: #fbeee8,
+    98: #fff8f5,
+    99: #fffbff,
+    100: #ffffff,
+  ),
+  neutral-variant: (
+    0: #000000,
+    10: #241912,
+    20: #3a2e26,
+    25: #463931,
+    30: #52443c,
+    35: #5e4f47,
+    40: #6b5b52,
+    50: #84746a,
+    60: #9f8d83,
+    70: #baa79d,
+    80: #d7c3b8,
+    90: #f4ded3,
+    95: #ffede4,
+    98: #fff8f5,
+    99: #fffbff,
+    100: #ffffff,
+  ),
+  error: (
+    0: #000000,
+    10: #410002,
+    20: #690005,
+    25: #7e0007,
+    30: #93000a,
+    35: #a80710,
+    40: #ba1a1a,
+    50: #de3730,
+    60: #ff5449,
+    70: #ff897d,
+    80: #ffb4ab,
+    90: #ffdad6,
+    95: #ffedea,
+    98: #fff8f7,
+    99: #fffbff,
+    100: #ffffff,
+  ),
+);
+
+// Rampa tonal generada desde #00B7A3 (tertiary/success de marca).
+$le-tiende-tertiary-tones: (
+  0: #000000,
+  10: #00201c,
+  20: #003730,
+  25: #00443b,
+  30: #005047,
+  35: #005d52,
+  40: #006b5e,
+  50: #008677,
+  60: #00a391,
+  70: #1fc0ab,
+  80: #4cdcc6,
+  90: #6ef9e2,
+  95: #b5fff0,
+  98: #e5fff8,
+  99: #f3fffb,
+  100: #ffffff,
+);
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        theme-type: light,
+        primary: $le-tiende-primary-palette,
+        tertiary: $le-tiende-tertiary-tones,
+      ),
+      typography: Poppins,
+      density: 0,
+    )
+  );
+
+  // Tokens exactos de marca (CLAUDE.md §4) — el tono 40 que M3 elige por
+  // defecto para "primary" en esquema claro no coincide con nuestro hex
+  // exacto (#230C00 es mucho más oscuro), así que se fija explícitamente
+  // aquí, igual que se hizo con el preset de PrimeNG que este tema reemplaza.
+  --mat-sys-primary: #230c00;
+  --mat-sys-on-primary: #ffe7b3;
+  --mat-sys-secondary: #e8630a;
+  --mat-sys-on-secondary: #ffffff;
+  --mat-sys-tertiary: #00b7a3;
+  --mat-sys-on-tertiary: #ffffff;
+  --mat-sys-error: #c0392b;
+  --mat-sys-on-error: #ffffff;
+  --mat-sys-surface: #fff8f1;
+  --mat-sys-on-surface: #230c00;
+}
+
+body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
+  color-scheme: light;
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}

@@ -1,12 +1,12 @@
 import { Component, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { Button } from 'primeng/button';
+import { MatButtonModule } from '@angular/material/button';
 
 import { PrecioPipe } from './shared/pipes/precio.pipe';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, Button, PrecioPipe],
+  imports: [RouterOutlet, MatButtonModule, PrecioPipe],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

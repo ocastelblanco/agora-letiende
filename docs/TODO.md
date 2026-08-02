@@ -6,24 +6,22 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 1 — [FEATURE]: Tema visual Le Tiende completo y `docs/DESIGN.md`
+## Tarea 1 — [FEATURE]: `docs/DESIGN.md`
 
-**Origen:** Backlog #1 (`tech-specs.md` §11 ítem 3) · ADR-006
+**Origen:** Backlog #1 (`tech-specs.md` §11 ítem 3) · ADR-012
+
+**Nota:** el mapeo completo de los 4 tokens semánticos (`primary`, `secondary`, `tertiary`, `danger`) a `src/material-theme.scss` **ya se hizo** como parte de la migración de PrimeNG a Angular Material (PrimeNG dejó de ser MIT — ver ADR-012 en `MEMORY.md`) y ya está verificado por inspección del HTML de SSR. Lo único pendiente de esta tarea es la documentación.
 
 **Archivos a crear:**
 - `docs/DESIGN.md`
-- `src/app/core/tema/le-tiende-preset.ts` (ampliar — hoy solo mapea `primary`)
 
 **Qué hacer:**
 
-1. Ampliar `le-tiende-preset.ts`: mapear `secondary` (`#E8630A`), `tertiary` como semantic `success` de PrimeNG (`#00B7A3` — así se usa hoy: "mensajes de éxito, veredicto de boleta válida", `tech-specs.md` §4.4) y `danger` como semantic `danger`/`error` (`#C0392B`), con sus respectivas escalas vía `palette()`. Verificar cada una con el mismo método que la Tarea 1 usó para `primary`: inspeccionar el HTML servido por SSR, no solo mirar el navegador.
-2. Escribir `docs/DESIGN.md`. **A diferencia del `DESIGN.md` de Babel (que documenta retrospectivamente componentes ya construidos), el de Ágora es prescriptivo por ahora:** todavía no existen páginas de feature más allá de la de verificación de la Tarea 1, así que este documento establece las clases exactas de Tailwind que las páginas futuras deben usar — copiadas/adaptadas de los patrones ya probados en producción de Babel (`tech-specs.md` §4.4 ya cita los valores exactos: contenedor `min-h-screen bg-surface px-4 py-8`, tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`, botón primario `h-12 rounded-2xl bg-primary text-neutral uppercase`, inputs `rounded-xl border border-primary/20`). Cubrir también anchos `max-w-*` por tipo de pantalla, variantes de botón (secundario/outline, peligro, grande/pequeño) y tokens de color/tipografía. Cuando se construyan páginas reales (backlog #2 en adelante), `DESIGN.md` se actualiza para documentar desvíos reales, igual que ya hace el de Babel.
-3. Documentar explícitamente el **patrón de la pantalla de puerta** (`tech-specs.md` §4.4): alto contraste, veredicto a pantalla completa (`tertiary` = pasa, `danger` = no pasa), tipografía grande, un solo objetivo táctil — es la única pantalla que se aparta del patrón general y merece su propia sección en `DESIGN.md` para que no se pierda ese contexto más adelante.
+1. Escribir `docs/DESIGN.md`. **A diferencia del `DESIGN.md` de Babel (que documenta retrospectivamente componentes ya construidos), el de Ágora es prescriptivo por ahora:** todavía no existen páginas de feature más allá de la de verificación de la Tarea 1 original, así que este documento establece las clases exactas de Tailwind que las páginas futuras deben usar — copiadas/adaptadas de los patrones ya probados en producción de Babel (`tech-specs.md` §4.4 ya cita los valores exactos: contenedor `min-h-screen bg-surface px-4 py-8`, tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`, botón primario `h-12 rounded-2xl bg-primary text-neutral uppercase`, inputs `rounded-xl border border-primary/20`). Cubrir también anchos `max-w-*` por tipo de pantalla, variantes de botón (secundario/outline, peligro, grande/pequeño) y tokens de color/tipografía. Documentar también qué se resuelve con componentes de **Angular Material** (tabla, calendario, file upload) vs. qué se resuelve con HTML propio + clases de Tailwind (la mayoría de la interfaz). Cuando se construyan páginas reales (backlog #2 en adelante), `DESIGN.md` se actualiza para documentar desvíos reales, igual que ya hace el de Babel.
+2. Documentar explícitamente el **patrón de la pantalla de puerta** (`tech-specs.md` §4.4): alto contraste, veredicto a pantalla completa (`tertiary` = pasa, `danger` = no pasa), tipografía grande, un solo objetivo táctil — es la única pantalla que se aparta del patrón general y merece su propia sección en `DESIGN.md` para que no se pierda ese contexto más adelante.
 
 **Definition of done:**
-- [ ] `le-tiende-preset.ts` mapea las 4 escalas semánticas (`primary`, `secondary`, `success`/`tertiary`, `danger`), verificadas por inspección del HTML de SSR (no solo visual)
-- [ ] `npm run build -- --configuration=production` sigue sin errores tras el cambio
-- [ ] `docs/DESIGN.md` existe y cubre: colores, tipografía, contenedor de página, tarjetas, botones (todas las variantes), inputs, y el patrón especial de la pantalla de puerta
+- [ ] `docs/DESIGN.md` existe y cubre: colores, tipografía, contenedor de página, tarjetas, botones (todas las variantes), inputs, cuándo usar Angular Material vs. HTML propio, y el patrón especial de la pantalla de puerta
 - [ ] Las clases documentadas coinciden exactamente con las ya citadas en `tech-specs.md` §4.4 (no se inventan valores nuevos sin verificar contra Babel)
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (`CLAUDE.md` §6)
 

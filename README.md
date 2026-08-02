@@ -45,7 +45,7 @@ El objetivo es reemplazar el proceso manual actual —conversaciones de WhatsApp
 | Capa | Tecnología |
 |---|---|
 | Frontend | Angular 22.x (standalone components, Signals, SSR con `@angular/ssr`) |
-| UI | PrimeNG 22.x + Tailwind CSS 4.x, tema propio con la paleta de Le Tiende |
+| UI | Angular Material 22.x + Tailwind CSS 4.x, tema Material 3 propio con la paleta de Le Tiende |
 | Backend | Node.js 24.x en AWS Lambda + API Gateway (IaC con Serverless Framework 4) |
 | Base de datos | AWS DynamoDB (`PAY_PER_REQUEST` siempre — ver `CLAUDE.md`) |
 | Autenticación | Google Firebase Authentication (proyecto compartido con Comandante y Babel, roles independientes) |

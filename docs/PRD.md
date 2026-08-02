@@ -333,7 +333,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 
 **Un evento se edita libremente, incluso ya publicado.** La operación real cambia de opinión: se corre una fecha, se ajusta un precio, se suma un productor. Bloquear la edición generaría trabajo por fuera del sistema, que es justamente lo que Ágora viene a eliminar. La contrapartida es que reducir el aforo por debajo de lo ya vendido debe impedirse explícitamente.
 
-**Ágora hereda la identidad visual y las convenciones de Le Tiende.** Misma paleta y tipografía que Comandante y Babel, mismo idioma de código (español), misma cuenta de AWS, mismo proyecto de identidad de Google. Ágora agrega la suite de componentes PrimeNG sobre esa base, para no construir a mano las tablas, calendarios y cargas de archivo del panel administrativo. Los roles de Ágora son independientes: tener acceso a Babel no da acceso a Ágora.
+**Ágora hereda la identidad visual y las convenciones de Le Tiende.** Misma paleta y tipografía que Comandante y Babel, mismo idioma de código (español), misma cuenta de AWS, mismo proyecto de identidad de Google. Ágora agrega la suite de componentes Angular Material sobre esa base, para no construir a mano las tablas, calendarios y cargas de archivo del panel administrativo. Los roles de Ágora son independientes: tener acceso a Babel no da acceso a Ágora.
 
 **Nada obliga a que la boleta sea digital para entrar.** El QR es el mecanismo, pero el portero siempre puede resolver un caso a mano (celular sin batería, cliente sin datos). La venta en efectivo en puerta existe precisamente para que el sistema nunca sea la razón por la que alguien no entra a un espectáculo.
 

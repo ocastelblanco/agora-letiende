@@ -22,8 +22,8 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 ## 2. Stack Tecnológico y Versiones
 
 - **Frontend Framework:** Angular 22.x (Standalone components, Signals, Router, SSR con `@angular/ssr`)
-- **Suite de componentes UI:** PrimeNG 22.x con preset de tema propio mapeado a la paleta Le Tiende
-- **CSS Utility:** Tailwind CSS 4.x + `tailwindcss-primeui` (mismo enfoque de layout que Babel y Comandante)
+- **Suite de componentes UI:** Angular Material 22.x (tema Material 3 propio mapeado a la paleta Le Tiende) — **no PrimeNG**: PrimeNG 22 dejó de ser MIT (verificado contra el `LICENSE.md` real del paquete y el historial de npm), pasó a una licencia comercial "PrimeUI" que exige registro, llave y renovación anual incluso para el nivel gratuito. Angular Material es MIT sin condiciones y mantenido por el equipo de Angular. Ver ADR-012 en `docs/MEMORY.md`.
+- **CSS Utility:** Tailwind CSS 4.x (mismo enfoque de layout que Babel y Comandante)
 - **Tipo de aplicación:** aplicación web responsive (Mobile-First para compra y validación en puerta; escritorio para administración y panel de control) — sin empaquetado nativo (Capacitor/Cordova) en el alcance actual
 - **Runtime backend:** Node.js 24.x
 - **Despliegue/Infraestructura:** AWS Lambda + API Gateway (HTTP API), gestionados con **Serverless Framework 4** (IaC) — mismo patrón que Babel
@@ -64,7 +64,7 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 - **Precios:** formato colombiano `$45.000` (punto como separador de miles, sin decimales para COP). Reutilizar el enfoque del pipe `pvp` de Babel (`Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 })`, sin depender de registrar el locale `es-CO`, que complica el bundle SSR).
 - **Dinero en la base de datos:** siempre en **pesos colombianos enteros** (`number`), nunca en decimales ni en strings. Nunca usar coma flotante para acumular totales de venta.
 - **Fechas y horas:** almacenar siempre en **UTC ISO 8601**; convertir a `America/Bogota` solo en la capa de presentación. Un evento mal convertido es una puerta cerrada en la cara de un cliente.
-- **Identidad visual:** hereda la paleta y filosofía de marca de Le Tiende (`primary #230C00`, `secondary #E8630A`, `tertiary #00B7A3`, `neutral #FFE7B3`, `surface #FFF8F1`, `danger #C0392B`), tipografía de interfaz **Poppins**, y Angellya reservada al logotipo SVG de marca. Los componentes de PrimeNG se estilizan con un **preset de tema propio** que mapea estos tokens; nunca se usa un tema de PrimeNG por defecto sin adaptar. Ver `docs/tech-specs.md` §4.4 y el `docs/DESIGN.md` de Babel como referencia de patrones ya probados (tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`, botones primarios `h-12 rounded-2xl bg-primary text-neutral uppercase`, inputs `rounded-xl border border-primary/20`).
+- **Identidad visual:** hereda la paleta y filosofía de marca de Le Tiende (`primary #230C00`, `secondary #E8630A`, `tertiary #00B7A3`, `neutral #FFE7B3`, `surface #FFF8F1`, `danger #C0392B`), tipografía de interfaz **Poppins**, y Angellya reservada al logotipo SVG de marca. Los componentes de Angular Material se estilizan con un **tema Material 3 propio** que sobrescribe los tokens `--mat-sys-*` a estos hex exactos; nunca se usa el tema por defecto de Material (Azure/Blue u otro prebuilt) sin adaptar. Ver `docs/tech-specs.md` §4.4 y el `docs/DESIGN.md` de Babel como referencia de patrones ya probados (tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`, botones primarios `h-12 rounded-2xl bg-primary text-neutral uppercase`, inputs `rounded-xl border border-primary/20`).
 
 ---
 
