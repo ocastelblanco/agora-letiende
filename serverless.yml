@@ -1,0 +1,316 @@
+service: agora-letiende
+
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: nodejs24.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 10
+  httpApi:
+    cors: true
+  deploymentBucket:
+    # Sin este tope, cada despliegue deja su artefacto en S3 para siempre
+    # (docs/advertencia-urgente-costos-aws.md §3). Se conservan 5, el resto
+    # se borra en cada deploy.
+    maxPreviousDeploymentArtifacts: 5
+  # Nunca el default infinito de CloudWatch Logs — regla de mayor prioridad
+  # de "Costos de infraestructura" en CLAUDE.md, derivada del incidente de
+  # Babel documentado en docs/advertencia-urgente-costos-aws.md §3.
+  logRetentionInDays: 14
+  # Etiquetado obligatorio: la cuenta AWS es compartida con Babel y
+  # Comandante; sin esto, Cost Explorer no puede separar el gasto de cada
+  # app (CLAUDE.md, sección "Costos de infraestructura"; tech-specs.md §7.3).
+  stackTags:
+    Proyecto: agora
+    Stage: ${sls:stage}
+  tags:
+    Proyecto: agora
+    Stage: ${sls:stage}
+  # Cada función define su propio rol de mínimo privilegio más abajo
+  # (ver `resources.Resources.SaludLambdaRole` / `SsrLambdaRole`) — ver
+  # CLAUDE.md §5 (A05: configuración de seguridad incorrecta).
+
+package:
+  individually: true
+
+custom:
+  nombresTablas:
+    usuarios: agora-usuarios-${sls:stage}
+    eventos: agora-eventos-${sls:stage}
+    compras: agora-compras-${sls:stage}
+    boletas: agora-boletas-${sls:stage}
+    auditoria: agora-auditoria-${sls:stage}
+  nombresBuckets:
+    comprobantes: agora-comprobantes-${sls:stage}
+    activos: agora-activos-${sls:stage}
+
+functions:
+  salud:
+    handler: dist-server/api/handlers/salud.handler
+    role: !GetAtt SaludLambdaRole.Arn
+    description: >-
+      GET /api/salud — verificación de despliegue, sin dependencias de
+      DynamoDB (tech-specs.md §5.1, TODO.md Tarea 2).
+    environment:
+      STAGE: ${sls:stage}
+      VERSION: ${file(package.json):version}
+    package:
+      patterns:
+        - '!**'
+        - 'dist-server/api/handlers/salud.js'
+    events:
+      - httpApi:
+          path: /api/salud
+          method: get
+
+  ssr:
+    handler: server/ssr/handler.handler
+    role: !GetAtt SsrLambdaRole.Arn
+    description: >-
+      Renderizado SSR de Angular (todo lo que no sea /api/*, tech-specs.md
+      §1). Sin permisos de DynamoDB: solo renderiza, no accede a datos.
+    memorySize: 512
+    environment:
+      # Protección SSRF de Angular (`AngularNodeAppEngine`) exige una lista
+      # explícita de hosts permitidos (MEMORY.md §7, gotcha verificado).
+      # Sin dominio propio todavía (roadmap #17 en tech-specs.md §11):
+      # solo el hostname crudo de API Gateway.
+      NG_ALLOWED_HOSTS: !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+    package:
+      patterns:
+        - '!**'
+        - 'dist/agora-letiende/**'
+        - 'server/ssr/handler.mjs'
+        - 'node_modules/@codegenie/serverless-express/**'
+    events:
+      - httpApi:
+          path: /
+          method: get
+      - httpApi:
+          path: /{proxy+}
+          method: '*'
+
+resources:
+  Resources:
+    # --- Roles IAM de mínimo privilegio (uno por función, CLAUDE.md §5 A05) ---
+    SaludLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-salud-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        # Sin política de DynamoDB: /api/salud no toca ninguna tabla.
+
+    SsrLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-ssr-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        # Sin política de DynamoDB: el SSR solo renderiza, no lee datos.
+
+    # --- Tablas DynamoDB (tech-specs.md §5.2) ---
+    # Todas PAY_PER_REQUEST, sin excepción, sin ProvisionedThroughput en
+    # tabla ni GSI — regla de mayor prioridad de CLAUDE.md (sección "Costos
+    # de infraestructura"), derivada del incidente real de Babel
+    # (docs/advertencia-urgente-costos-aws.md: US$90,34 en un mes por
+    # capacidad PROVISIONED olvidada, con las tablas de producción vacías).
+    AgoraUsuarios:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.nombresTablas.usuarios}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+
+    AgoraEventos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.nombresTablas.eventos}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: eventoId
+            AttributeType: S
+          - AttributeName: slug
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
+          - AttributeName: fechaHora
+            AttributeType: S
+        KeySchema:
+          - AttributeName: eventoId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: slug-index
+            KeySchema:
+              - AttributeName: slug
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            # Sin ProvisionedThroughput: en PAY_PER_REQUEST el GSI hereda el
+            # modo de la tabla; declararlo aquí hace fallar el despliegue.
+          - IndexName: estado-fechaHora-index
+            KeySchema:
+              - AttributeName: estado
+                KeyType: HASH
+              - AttributeName: fechaHora
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    AgoraCompras:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.nombresTablas.compras}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: compraId
+            AttributeType: S
+          - AttributeName: eventoId
+            AttributeType: S
+          - AttributeName: creadaEn
+            AttributeType: S
+          - AttributeName: tokenAprobacionHash
+            AttributeType: S
+        KeySchema:
+          - AttributeName: compraId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: eventoId-creadaEn-index
+            KeySchema:
+              - AttributeName: eventoId
+                KeyType: HASH
+              - AttributeName: creadaEn
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: tokenAprobacionHash-index
+            KeySchema:
+              - AttributeName: tokenAprobacionHash
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        # TTL: el reloj de limpieza y devolución de aforo, NO el reloj de
+        # negocio — toda lectura debe tratar como expirada una reserva con
+        # expiraEn pasado, exista o no todavía el ítem (tech-specs.md §5.4
+        # punto 4, MEMORY.md §7).
+        TimeToLiveSpecification:
+          AttributeName: expiraEn
+          Enabled: true
+        # Streams: consumidos por la futura Lambda `liberarReservas`
+        # (tech-specs.md §5.3, roadmap #8) para devolver el aforo cuando el
+        # TTL borra una reserva vencida. NEW_AND_OLD_IMAGES porque el evento
+        # de borrado por TTL necesita la imagen anterior para saber cuántas
+        # sillas devolver.
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+
+    AgoraBoletas:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.nombresTablas.boletas}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: boletaId
+            AttributeType: S
+          - AttributeName: eventoId
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
+          - AttributeName: compraId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: boletaId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: eventoId-estado-index
+            KeySchema:
+              - AttributeName: eventoId
+                KeyType: HASH
+              - AttributeName: estado
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: compraId-index
+            KeySchema:
+              - AttributeName: compraId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    AgoraAuditoria:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.nombresTablas.auditoria}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: entidadId
+            AttributeType: S
+          - AttributeName: ocurridoEn
+            AttributeType: S
+        KeySchema:
+          - AttributeName: entidadId
+            KeyType: HASH
+          - AttributeName: ocurridoEn
+            KeyType: RANGE
+        # Append-only (CLAUDE.md §5, A09): ningún código actualiza ni borra
+        # ítems de esta tabla, nunca al corregir un error.
+
+    # --- Buckets S3 (tech-specs.md §5, §7.1; CLAUDE.md §5 A02) ---
+    BucketComprobantes:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.nombresBuckets.comprobantes}
+        # Comprobantes de pago: documentos financieros de terceros. Block
+        # Public Access sin excepción — se sirven solo por URL prefirmada
+        # de vida corta generada por la Lambda (CLAUDE.md §5, A02).
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+
+    BucketActivos:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.nombresBuckets.activos}
+        # Imágenes de evento y QR: se sirven "vía CDN" en el diseño final
+        # (tech-specs.md §1), pero el CDN (CloudFront + dominio propio)
+        # todavía no existe (roadmap #17) — hasta entonces, Block Public
+        # Access igual que el bucket de comprobantes; la entrega pública se
+        # habilita con Origin Access Control cuando se monte CloudFront, no
+        # haciendo el bucket público directamente.
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256

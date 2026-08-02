@@ -1,0 +1,153 @@
+name: Build, test y despliegue
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  build-y-test:
+    name: Build + test (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias (reproducible, package-lock.json)
+        run: npm ci
+
+      - name: Build de producción del frontend Angular (SSR)
+        run: npm run build -- --configuration=production
+
+      - name: Build de TypeScript de las Lambdas
+        run: npm run build:api
+
+      - name: Pruebas unitarias (frontend)
+        run: npm test -- --watch=false
+
+      - name: Pruebas unitarias (backend)
+        run: npm run test:api
+
+      - name: Verificar sintaxis de infraestructura (serverless package)
+        run: npx serverless package --stage staging
+        env:
+          # License Key de Serverless Framework v4 (sin depender del
+          # dashboard), necesaria para que la CLI opere en CI sin login
+          # interactivo (tech-specs.md §9).
+          SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  desplegar-staging:
+    name: Deploy a staging
+    if: github.event_name == 'pull_request'
+    needs: build-y-test
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      # Un solo despliegue de staging a la vez: si hay pushes seguidos al
+      # mismo PR (o PRs distintos abiertos en paralelo), solo el más
+      # reciente termina desplegado — evita que dos runs se pisen entre sí
+      # sobre el mismo stack compartido de staging (MEMORY.md §7, gotcha
+      # heredado de Babel).
+      group: desplegar-staging
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias (reproducible, package-lock.json)
+        run: npm ci
+
+      - name: Build de producción del frontend Angular (SSR)
+        run: npm run build -- --configuration=production
+
+      - name: Build de TypeScript de las Lambdas
+        run: npm run build:api
+
+      - name: Desplegar con Serverless Framework (stage staging)
+        id: deploy
+        run: |
+          npx serverless deploy --stage staging | tee /tmp/deploy-staging.txt
+          endpoint=$(grep -oE 'https://[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com' /tmp/deploy-staging.txt | head -1)
+          echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
+        env:
+          SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Smoke test contra staging recién desplegado
+        run: |
+          url="${{ steps.deploy.outputs.endpoint }}/api/salud"
+          codigo=$(curl -sS -o /tmp/salud.json -w '%{http_code}' "$url")
+          echo "GET $url → HTTP $codigo"
+          cat /tmp/salud.json
+          test "$codigo" = "200"
+
+      - name: Comentar la URL de staging en el PR
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" --body \
+            "🚀 Desplegado a **staging**: ${{ steps.deploy.outputs.endpoint }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  desplegar-produccion:
+    name: Deploy a producción
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      # Mismo motivo que el grupo `desplegar-staging`: si varios PRs se
+      # fusionan a `main` en sucesión rápida, cada merge dispara su propio
+      # deploy a producción — sin este grupo, dos runs pueden chocar contra
+      # el mismo stack de CloudFormation en `UPDATE_IN_PROGRESS`
+      # (MEMORY.md §7, gotcha heredado de Babel). `cancel-in-progress: false`
+      # (a diferencia de staging): el run en curso termina en vez de
+      # cancelarse a mitad de un `serverless deploy`.
+      group: desplegar-produccion
+      cancel-in-progress: false
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias (reproducible, package-lock.json)
+        run: npm ci
+
+      - name: Build de producción del frontend Angular (SSR)
+        run: npm run build -- --configuration=production
+
+      - name: Build de TypeScript de las Lambdas
+        run: npm run build:api
+
+      - name: Desplegar con Serverless Framework (stage production)
+        run: npx serverless deploy --stage production
+        env:
+          SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
