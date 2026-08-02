@@ -83,8 +83,7 @@ Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cua
 |---|---|---|---|---|
 | Framework frontend | Angular | 22.x | SPA con SSR, standalone components, Signals | https://angular.dev |
 | SSR | `@angular/ssr` | 22.x | Renderizado en servidor sobre Express 5 | https://angular.dev/guide/ssr |
-| Suite UI | PrimeNG | 22.x | Componentes complejos: tabla, calendario, file upload, toast | https://primeng.org |
-| Puente PrimeNG–Tailwind | `tailwindcss-primeui` | latest | Utilidades Tailwind alineadas a los tokens de PrimeNG | https://primeng.org/tailwind |
+| Suite UI | Angular Material | 22.x | Componentes complejos: tabla, calendario, file upload; tema Material 3 propio. MIT, sin condiciones — ver ADR-012 (reemplaza a PrimeNG, que pasó a licencia comercial) | https://material.angular.dev |
 | CSS utility | Tailwind CSS | 4.x | Layout y utilidades; misma base que Babel/Comandante | https://tailwindcss.com |
 | Runtime | Node.js | 24.x | Runtime de todas las Lambdas | https://nodejs.org |
 | Lenguaje | TypeScript | ~6.0 | Estricto; `any` prohibido | https://typescriptlang.org |
@@ -172,7 +171,8 @@ agora/
     ├── main.ts
     ├── main.server.ts
     ├── server.ts                # Entrada del SSR
-    ├── styles.css               # Bloque @theme de Tailwind + preset de PrimeNG
+    ├── styles.css               # Bloque @theme de Tailwind
+    ├── material-theme.scss      # Tema Material 3 propio (mat.theme + overrides de marca)
     ├── environments/
     │   ├── environment.ts
     │   └── environment.production.ts
@@ -328,11 +328,13 @@ export interface Boleta {
 }
 ```
 
-### 4.4 Estilos: PrimeNG + Tailwind con tokens Le Tiende
+### 4.4 Estilos: Angular Material + Tailwind con tokens Le Tiende
 
-Ágora combina PrimeNG (componentes complejos) con Tailwind 4 (layout y utilidades). La identidad visual es la de Le Tiende, no la de PrimeNG.
+Ágora combina Angular Material (componentes complejos: tabla, calendario, file upload) con Tailwind 4 (layout y utilidades). La identidad visual es la de Le Tiende, no la de Material — nunca se usa un tema prebuilt (Azure/Blue, Rose/Red, etc.) sin adaptar.
 
-**Fuente de verdad de los tokens:** el bloque `@theme` de `src/styles.css`, igual que en Babel.
+**Fuente de verdad de los tokens:** dos archivos paralelos, cada uno alimentando un sistema distinto:
+- `src/styles.css` — bloque `@theme` de Tailwind (`--color-primary`, etc.), igual que en Babel. Alimenta las clases utilitarias (`bg-primary`, `text-neutral`, …).
+- `src/material-theme.scss` — tema Material 3 (`@include mat.theme(...)`), que alimenta los componentes de Angular Material vía variables CSS `--mat-sys-*`.
 
 | Token | Valor | Uso |
 |---|---|---|
@@ -343,10 +345,10 @@ export interface Boleta {
 | `surface` | `#FFF8F1` | Fondo de página |
 | `danger` | `#C0392B` | Errores, boleta inválida, acciones destructivas |
 
-- **Tipografía:** Poppins para toda la interfaz. Angellya está reservada al logotipo SVG de marca y **no existe como archivo de fuente cargable** en ningún repo de Le Tiende — nunca se integra en desarrollo.
-- **PrimeNG** se configura con un **preset de tema propio** que mapea sus tokens semánticos a la paleta anterior. Prohibido usar un tema de PrimeNG por defecto sin adaptar.
+- **Tipografía:** Poppins para toda la interfaz (incluido `typography: Poppins` en `mat.theme()`). Angellya está reservada al logotipo SVG de marca y **no existe como archivo de fuente cargable** en ningún repo de Le Tiende — nunca se integra en desarrollo.
+- **Angular Material** se configura con un **tema Material 3 propio**: la paleta tonal completa (`primary`, `secondary`, `tertiary`, `neutral`, `error`) se genera con el algoritmo oficial de Google (`@material/material-color-utilities`, el mismo que usa la Theme Builder de Angular) a partir de los hex de marca — no se escribe a mano. **El sistema M3 por defecto no usa el hex exacto de marca como `primary`:** en esquema claro mapea `primary` al tono 40 de la rampa generada (un tono medio, para contraste sobre fondo claro), no al hex más oscuro que Le Tiende usa como fondo de botón. Por eso, después de `mat.theme()`, se sobrescriben explícitamente `--mat-sys-primary`, `--mat-sys-on-primary`, `--mat-sys-secondary`, `--mat-sys-tertiary`/`--mat-sys-on-tertiary`, `--mat-sys-error`/`--mat-sys-on-error` y `--mat-sys-surface`/`--mat-sys-on-surface` a los hex exactos de la tabla de arriba. El resto de la rampa (hover, focus, disabled, elevación) sigue derivándose algorítmicamente, lo que da variación visual coherente sin tener que definir cada estado a mano.
 - **Precios:** pipe `precio` con `Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 })` → `$45.000`. No usar `CurrencyPipe`/`DecimalPipe` de Angular: obligan a registrar el locale `es-CO`, lo que complica el bundle SSR (hallazgo de Babel).
-- **Patrones heredados de Babel** (ya probados en producción, ver su `docs/DESIGN.md`): tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`; botón primario `h-12 rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase`; inputs `rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary`; contenedor de página `min-h-screen bg-surface px-4 py-8` con `max-w-*` interno.
+- **Patrones heredados de Babel** (ya probados en producción, ver su `docs/DESIGN.md`), para el HTML propio fuera de los componentes de Material: tarjetas `rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]`; botón primario `h-12 rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase`; inputs `rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary`; contenedor de página `min-h-screen bg-surface px-4 py-8` con `max-w-*` interno.
 - **Pantalla de puerta:** es la única que se aparta del patrón general. Alto contraste, veredicto a pantalla completa con color de fondo inequívoco (`tertiary` = pasa, `danger` = no pasa), tipografía grande, un solo objetivo táctil. Debe ser legible en penumbra y a un brazo de distancia (`PRD.md` §8).
 
 ### 4.5 SEO y SSR
@@ -707,7 +709,7 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 |---|---|---|---|
 | 1 | Andamiaje del proyecto | `package.json`, `angular.json`, `tsconfig*.json`, `src/`, `.gitignore` | — |
 | 2 | Infraestructura base y CI | `serverless.yml`, `.github/workflows/deploy.yml`, `server/api/handlers/salud.ts` | 1 |
-| 3 | Tema visual Le Tiende | `src/styles.css`, preset de PrimeNG, `shared/pipes/precio.pipe.ts` | 1 |
+| 3 | Tema visual Le Tiende | `src/styles.css`, `src/material-theme.scss`, `shared/pipes/precio.pipe.ts` | 1 |
 | 4 | Autenticación y roles | `core/auth/`, `core/guardias/`, `server/api/lib/verificar-token.ts`, `resolver-permisos.ts`, tabla `agora-usuarios` | 2 |
 | 5 | Gestión de usuarios | `features/admin/gestion-usuarios/`, `server/api/handlers/usuarios.ts` | 4 |
 | 6 | CRUD de eventos | `features/admin/gestion-eventos/`, `server/api/handlers/eventos.ts`, tabla `agora-eventos`, S3 activos | 4 |

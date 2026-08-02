@@ -10,8 +10,8 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 | Atributo | Valor |
 |---|---|
-| **Versión** | 0.0.0 — sin código |
-| **Fase** | Definición de especificaciones (`Specs definition`) |
+| **Versión** | 0.1.0 — andamiaje de Angular en curso |
+| **Fase** | Scaffold (`Scaffold`) |
 | **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada |
 | **URL de staging** | ⬜ no aprovisionada (será el endpoint de API Gateway) |
 | **Rama principal** | `main` |
@@ -34,12 +34,12 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 - [x] `docs/tech-specs.md` — arquitectura de referencia (31/07/2026)
 - [x] `docs/MEMORY.md` — este documento (31/07/2026)
 - [x] `docs/TODO.md` — motor JIT con 2 tareas atómicas (31/07/2026)
+- [x] Andamiaje del proyecto Angular 22 + Angular Material 22 + Tailwind 4 (01-02/08/2026; empezó con PrimeNG 22, reemplazado por licencia — ver §3 ADR-012)
 
 ### Pendiente (v1 — MVP)
 
-- [ ] Andamiaje del proyecto Angular 22 + PrimeNG 22 + Tailwind 4
 - [ ] `serverless.yml` y flujo de CI/CD a staging
-- [ ] Tema visual Le Tiende (preset PrimeNG + tokens Tailwind)
+- [ ] `docs/DESIGN.md` — el mapeo completo de los 4 tokens semánticos a Angular Material ya existe (`src/material-theme.scss`, ADR-012); falta documentar el sistema de diseño (tarjetas, inputs, botones secundarios, patrones de página) como en el `DESIGN.md` de Babel
 - [ ] Autenticación con Google y resolución de roles
 - [ ] Gestión de usuarios
 - [ ] CRUD de eventos
@@ -136,7 +136,7 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ### ADR-006 — PrimeNG 22 sobre Tailwind 4 con tokens Le Tiende
 
-**Fecha:** 31/07/2026 · **Estado:** Aceptada
+**Fecha:** 31/07/2026 · **Estado:** ⚠️ **Revertida el 02/08/2026 — ver ADR-012.** PrimeNG 22 resultó no ser MIT (cambio de licencia no detectado al tomar esta decisión). Se conserva este registro tal como se escribió, por trazabilidad — no refleja el stack actual.
 
 **Decisión:** Ágora usa PrimeNG 22 para los componentes complejos (tabla del panel, calendario, carga de archivos, toasts) y Tailwind 4 para layout y utilidades, unidos con `tailwindcss-primeui`. PrimeNG se configura con un **preset de tema propio** que mapea sus tokens semánticos a la paleta Le Tiende.
 
@@ -212,33 +212,54 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ---
 
+### ADR-012 — PrimeNG reemplazado por Angular Material (PrimeNG dejó de ser MIT)
+
+**Fecha:** 02/08/2026 · **Estado:** Aceptada — **revierte ADR-006**
+
+**Decisión:** Ágora usa **Angular Material 22** (MIT, sin condiciones) para los componentes complejos, en vez de PrimeNG. El tema propio vive en `src/material-theme.scss`: `mat.theme()` con una paleta tonal M3 completa generada desde `#230C00` (primary) y `#00B7A3` (tertiary) usando `@material/material-color-utilities` (el mismo algoritmo que la Theme Builder oficial de Angular), más overrides explícitos de `--mat-sys-primary`, `--mat-sys-on-primary`, `--mat-sys-secondary`, `--mat-sys-tertiary`/`--mat-sys-on-tertiary`, `--mat-sys-error`/`--mat-sys-on-error` y `--mat-sys-surface`/`--mat-sys-on-surface` a los hex exactos de marca — necesarios porque el esquema claro de M3 mapea `primary` al tono 40 de la rampa (un tono medio), no al hex más oscuro que Le Tiende usa como fondo de botón.
+
+**Contexto:** el usuario reportó un banner "Invalid PrimeUI License" al cargar `http://localhost:4000`. Se investigó de raíz, no se asumió nada:
+- El build ya mostraba `[PrimeUI] PrimeUI license is not configured` desde la Tarea 1 original — se había pasado por alto.
+- Se rastreó el origen hasta `node_modules/primeng/fesm2022/primeng-config.mjs`: `providePrimeNG()` llama incondicionalmente a `verifyLicense('primeui', ...)` de `@primeui/license-manager`; sin llave configurada, devuelve `unconfigured` y la función **muestra un banner en pantalla** (`showInvalidLicenseBanner()`), además del warning en consola.
+- Se leyó el `LICENSE.md` real empaquetado en `node_modules/primeng` (no la documentación de marketing): PrimeNG 22 es parte de "PrimeUI", una familia de librerías **comerciales**. La "Community License (Free)" exige: <US$1M de ingresos anuales, <5 desarrolladores, <10 empleados, <US$3M de financiación externa; **registro y llave de licencia**; **renovación anual** confirmando elegibilidad; el paquete se distribuye compilado y prohíbe ingeniería inversa o redistribución.
+- Se verificó el histórico real descargando tarballs de npm (`npm pack`) de varias versiones, no de memoria: PrimeNG fue **MIT puro hasta la 17.x**; de la **18.x a la 21.x** el campo `license` cambió a "SEE LICENSE IN LICENSE.md" pero el contenido real seguía siendo el texto MIT completo bajo el nombre "PRIMENG COMMUNITY VERSIONS LICENSE" (gratis, sin llave, sin banner); **la 22.x cambió el contenido real** a la licencia comercial "PrimeUI" descrita arriba. Es exactamente el mismo tipo de error que motivó ADR-011: una suposición desactualizada sobre un tercero, escrita como hecho en ADR-006 sin verificar ese día.
+- Se verificó que la última versión genuinamente MIT (21.1.9) exige `@angular/core ^21.0.7` — **no es compatible con Angular 22**, que ya es la base del proyecto. No existe hoy una versión de PrimeNG que sea a la vez MIT y compatible con Angular 22.
+- Se verificó `@angular/material@22`: `license: "MIT"` en el registro de npm, peer dependency `@angular/core: ^22.0.0 || ^23.0.0` — compatible sin condiciones.
+
+Se presentaron cuatro opciones al usuario (Angular Material, solo Tailwind sin suite de componentes, registrar la licencia Community de PrimeNG, o bajar todo el proyecto a Angular 21) y eligió Angular Material.
+
+**Razón:** es la única opción que preserva simultáneamente los dos objetivos originales de ADR-006 (componentes complejos ya construidos, sin construir tabla/calendario/upload a mano) y Angular 22 (ya elegido para todo el proyecto), sin introducir una dependencia de licencia condicionada a la elegibilidad de la organización ni una obligación de renovación anual que "100% gratuito" no debería tener.
+
+**Consecuencias:** hay que rehacer el trabajo de tema/preset de la Tarea 1 (ya hecho en esta misma sesión). El bundle inicial bajó de 528 kB a 314 kB (Material con solo el módulo de botón es más liviano que PrimeNG). Selectores de componentes distintos (`matButton="filled"` en vez de `<p-button>`); hay que rehacer también los patrones de tabla/calendario/upload cuando se implementen (todavía no existen). `docs/DESIGN.md` (Tarea 1 activa de `TODO.md`) debe documentar Material en vez de PrimeNG. Generar la paleta M3 requirió instalar temporalmente `@material/material-color-utilities` (desinstalado tras capturar el resultado como valores Sass literales en `material-theme.scss`, con su procedencia documentada en un comentario) — si la paleta necesita regenerarse en el futuro (cambio de color de marca), reinstalar el paquete y repetir el proceso documentado ahí.
+
+---
+
 ## 4. Dependencias instaladas
 
-Ninguna todavía — no existe `package.json`. Estas son las versiones **previstas**, heredadas de Babel donde aplica. Al crear el proyecto, reemplazar esta tabla por las versiones exactas resueltas en `package-lock.json`.
+Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` en la rama `feature/andamiaje-angular-primeng-tailwind` (nombre de rama desactualizado tras ADR-012 — se conserva por no romper el PR abierto). Las marcadas "prevista" aún no existen — se agregan en tareas posteriores (backend, AWS SDK, WhatsApp/QR).
 
-| Paquete | Versión prevista | Uso |
-|---|---|---|
-| `@angular/core`, `common`, `router`, `forms` | ^22.0.0 | Framework |
-| `@angular/ssr` | ^22.0.7 | Renderizado en servidor |
-| `@angular/platform-server` | ^22.0.0 | SSR |
-| `primeng` | ^22.0.0 | Componentes UI |
-| `@primeuix/themes` | latest | Preset de tema propio |
-| `tailwindcss` | ^4.3.3 | Utilidades CSS |
-| `tailwindcss-primeui` | latest | Puente PrimeNG–Tailwind |
-| `express` | ^5.1.0 | Servidor SSR |
-| `@codegenie/serverless-express` | ^5.0.0 | Adaptador Lambda |
-| `@aws-sdk/client-dynamodb`, `lib-dynamodb` | ^3.x | Acceso a datos |
-| `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.x | Comprobantes y activos |
-| `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional |
-| `firebase` | ^12.16.0 | SDK cliente de autenticación |
-| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas |
-| `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta |
-| `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) |
-| `xlsx` | ^0.18.5 | Exportación de reportes (v2) |
-| `serverless` | 4.x | IaC |
-| `typescript` | ~6.0.2 | Lenguaje |
-| `vitest` | ^4.0.8 | Pruebas del backend |
-| `prettier` | ^3.8.1 | Formato |
+| Paquete | Versión | Uso | Estado |
+|---|---|---|---|
+| `@angular/core`, `common`, `router`, `forms`, `animations` | ^22.1.0 | Framework (`animations` requerido por `provideAnimationsAsync`, usado por Angular Material para ripples/transiciones) | ✅ Instalada |
+| `@angular/ssr` | ^22.1.2 | Renderizado en servidor | ✅ Instalada |
+| `@angular/platform-server` | ^22.1.0 | SSR | ✅ Instalada |
+| `@angular/material` | ^22.1.0 | Componentes UI. MIT — ver ADR-012 (reemplaza a `primeng`, que pasó a licencia comercial) | ✅ Instalada |
+| `@angular/cdk` | ^22.1.0 | Peer dependency de Angular Material | ✅ Instalada |
+| `tailwindcss` + `@tailwindcss/postcss` | ^4.3.3 | Utilidades CSS, vía `.postcssrc.json` | ✅ Instalada |
+| `express` | ^5.1.0 | Servidor SSR | ✅ Instalada |
+| `vitest` | ^4.0.8 | Pruebas (frontend, vía `@angular/build:unit-test`) | ✅ Instalada |
+| `prettier` | ^3.8.1 | Formato | ✅ Instalada |
+| `typescript` | ~6.0.2 | Lenguaje | ✅ Instalada |
+| `@codegenie/serverless-express` | ^5.0.0 | Adaptador Lambda (SSR en API Gateway) | ⬜ Prevista — Tarea 2 |
+| `@aws-sdk/client-dynamodb`, `lib-dynamodb` | ^3.x | Acceso a datos | ⬜ Prevista |
+| `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.x | Comprobantes y activos | ⬜ Prevista |
+| `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional | ⬜ Prevista |
+| `firebase` | ^12.16.0 | SDK cliente de autenticación | ⬜ Prevista |
+| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas | ⬜ Prevista |
+| `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta | ⬜ Prevista |
+| `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) | ⬜ Prevista |
+| `xlsx` | ^0.18.5 | Exportación de reportes (v2) | ⬜ Prevista |
+| `serverless` | 4.x | IaC | ⬜ Prevista — Tarea 2 |
 
 ---
 
@@ -318,6 +339,7 @@ Heredados de Babel salvo indicación contraria. Los marcados como **verificado e
 | **Verificado:** el deploy falla porque la `description` de una función Lambda supera 256 caracteres | CloudFormation impone ese límite. Descripciones cortas en `serverless.yml`; explicar en la documentación, no en el YAML |
 | **Verificado:** dos merges seguidos a `main` chocan con `Stack ... is in UPDATE_IN_PROGRESS state and can not be updated` | `concurrency` en GitHub Actions: grupo `desplegar-produccion` con `cancel-in-progress: false`, grupo `desplegar-staging` con `true` |
 | **Verificado:** el dominio personalizado devuelve error de `Host` no autorizado | Configurar `NG_ALLOWED_HOSTS` con el dominio propio **junto con** el montaje del dominio, no después de que producción falle |
+| **Verificado en Ágora (01/08/2026):** hasta `curl http://localhost:4000/` tras `npm run serve:ssr` devuelve `Header "host"... is not allowed` | `angular.json` → `architect.build.options.security.allowedHosts` **NO controla el chequeo de Host en tiempo de ejecución** del servidor Express de SSR (solo protege el prerenderizado contra SSRF) — el `src/server.ts` generado instancia `new AngularNodeAppEngine()` sin config, que lee la lista permitida de la variable de entorno `NG_ALLOWED_HOSTS` (coma-separada) en cada arranque. Para probar SSR en local: `NG_ALLOWED_HOSTS=localhost npm run serve:ssr`. En producción, esta variable va en el entorno de la Lambda (`serverless.yml`), con `agora.letiende.co` |
 | **Verificado:** las fotos de perfil de Google devuelven 429 | `referrerpolicy="no-referrer"` en todo `<img>` que cargue `lh3.googleusercontent.com` |
 | Primer escaneo del día en la puerta es lento | Cold start de la Lambda tras horas de inactividad, justo cuando se forma la fila. Considerar calentamiento manual al abrir la pantalla de ingreso; `provisioned concurrency` rompe el objetivo de costo $0 |
 | La cámara no abre en iOS Safari | `getUserMedia` exige HTTPS y un gesto explícito del usuario. Disparar siempre desde un manejador de click/tap, nunca al cargar la página |
@@ -325,6 +347,8 @@ Heredados de Babel salvo indicación contraria. Los marcados como **verificado e
 | El aforo crece por encima de `sillasTotales` | DynamoDB Streams entrega *at-least-once*: un evento duplicado devolvió sillas dos veces. La devolución debe ser condicional sobre `sillasReservadas >= :n` |
 | Las boletas llegan a la carpeta de spam | Una boleta en spam es un cliente sin poder entrar. Verificar SPF (`include:amazonses.com`), DKIM y DMARC en `letiende.co`, y probar contra Gmail y Outlook reales antes del primer evento |
 | Un locale `es-CO` mal registrado rompe el build SSR | Usar `Intl.NumberFormat` directamente en un pipe propio, no `CurrencyPipe`/`DecimalPipe` |
+| **Verificado en Ágora (02/08/2026):** el botón sale de un color naranja/marrón medio en vez del `#230C00` casi negro de marca, aunque el hex de marca sí se usó como fuente de la paleta | El esquema claro de Material 3 mapea `primary` al **tono 40** de la rampa tonal (un tono medio, pensado para contraste sobre fondo claro), no al hex exacto que se pasó como semilla. Hay que sobrescribir `--mat-sys-primary`/`--mat-sys-on-primary` (y el resto de tokens de marca) explícitamente después de `mat.theme()` — igual que hubo que hacer con el preset de PrimeNG. Ver ADR-012 y `src/material-theme.scss` |
+| `@material/material-color-utilities` falla con `ERR_MODULE_NOT_FOUND` al ejecutarlo directo con `node` | El paquete es ESM puro y uno de sus archivos internos (`dynamiccolor/color_spec_2025.js`) importa una ruta relativa sin extensión `.js`, lo que Node en modo ESM estricto rechaza (los bundlers como esbuild/webpack lo toleran, Node plano no). Workaround: empaquetar el script con `esbuild --bundle --platform=node --format=esm` **ejecutado desde el directorio del proyecto** (para que resuelva `node_modules` correctamente) y correr el bundle resultante, no el archivo fuente |
 
 ---
 
@@ -400,6 +424,35 @@ A mitad de la Tarea 1 (andamiaje de Angular, ya con `npm install` corrido pero s
 - **`docs/TODO.md` — Tarea 2:** es la tarea que más importaba corregir, porque es exactamente donde se repetiría el error de Babel. Se agregó un paso 0 (leer la advertencia antes de empezar), se marcó el paso de declarar las tablas como "la regla de mayor prioridad de toda la tarea", se agregó verificación explícita de que la plantilla de Babel que se copia ya está corregida (se confirmó por CLI: commit `2ce744a`, `BillingMode: PAY_PER_REQUEST` en las 9 tablas), y se amplió la Definition of Done con verificación post-despliegue por CLI (no solo lectura del YAML), etiquetado, `logRetentionInDays`, ausencia de NAT Gateway, estimación de costo en el PR y recordatorio de revisión a 48 horas.
 - **`docs/MEMORY.md`:** este ADR-011, fila nueva de gotcha (§7, marcada 🔴 como la más cara), y en §5 se documentaron los dos presupuestos de cuenta ya existentes y verificados por CLI (`Costo diario` US$4, `Costos promedio` US$10, ambos con email confirmado) más un pendiente: crear un presupuesto filtrado por etiqueta específico de Ágora antes del primer tráfico real.
 
-**Nota operativa:** al ejecutar `git checkout main` tras abrir el PR de ADR-009/010 y antes de que el usuario lo fusionara, la rama de Tarea 1 (`feature/andamiaje-angular-primeng-tailwind`) se cortó de un `main` que todavía no tenía esos ADRs. El PR se fusionó mientras se trabajaba en esta interrupción; se detectó a tiempo (antes de commitear) y se resolvió con `git stash` + `rebase` sobre el `main` actualizado + `stash pop`, con un conflicto menor en `docs/TODO.md` (el paso 6 de Tarea 2) resuelto combinando ambas versiones. Lección para el futuro: verificar si hay un PR de documentación pendiente de fusionar antes de ramificar para una tarea de código nueva.
+**Nota operativa:** al ejecutar `git checkout main` tras abrir el PR de ADR-009/010 y antes de que el usuario lo fusionara, la rama de Tarea 1 (`feature/andamiaje-angular-primeng-tailwind`) se cortó de un `main` que todavía no tenía esos ADRs. El PR se fusionó mientras se trabajaba en esta interrupción; se detectó a tiempo (antes de commitear) y se resolvió con `git stash` + `rebase` sobre el `main` actualizado + `stash pop`, con un conflicto menor en `docs/TODO.md` (el paso 6 de Tarea 2) resuelto combinando ambas versiones. Lección para el futuro: verificar si hay un PR de documentación pendiente de fusionar antes de ramificar para una tarea de código nueva. **Esta misma lección se repitió, sin aprenderla, en la sesión siguiente** — ver nota más abajo.
 
 **Próxima tarea sugerida:** retomar la Tarea 1 (andamiaje de Angular) donde quedó — `npm install` ya corrido, falta configurar el tema PrimeNG/Tailwind, el pipe de precio, la página de inicio y verificar el build.
+
+**Sesión del 01/08/2026 (continuación) — Tarea 1 completa: andamiaje de Angular 22 + PrimeNG + Tailwind**
+
+Se ejecutó la Tarea 1 completa, con una interrupción en el medio para una corrección urgente de costos de AWS (ver rama y PR separados: `fix/costos-dynamodb-pay-per-request`, no incluida en esta rama por diseño — las dos concernientes se mantuvieron en PRs distintos).
+
+Lo hecho:
+- `ng new` no se pudo correr directo por conflicto con `README.md`/`.gitignore` ya existentes (la CLI aborta sin escribir nada ante un conflicto — comportamiento transaccional). Se resolvió apartando ambos archivos temporalmente, generando el proyecto, y fusionando el contenido a mano después: `README.md` reescrito siguiendo el patrón SLIM de Babel; `.gitignore` fusionado (categorías de Angular + nuestras entradas: `.claude`, `.omc`, `docs/tareas-a-realizar.md`, `dist-server`, `.env`).
+- PrimeNG 22 + `@primeuix/themes` + Tailwind 4 instalados. Preset propio (`src/app/core/tema/le-tiende-preset.ts`) con `definePreset(Aura, ...)` y el helper `palette()` de `@primeuix/themes` para generar la escala completa 50-950 a partir del hex de marca — mapea `colorScheme.light.primary.color` a `#230c00` y `.contrastColor` a `#ffe7b3` explícitamente (no solo `primary` genérico), para que los botones salgan `bg-primary`/`text-neutral` sin depender de la heurística por defecto de Aura.
+- `@angular/animations` fue una dependencia oculta necesaria: `provideAnimationsAsync()` (que requiere PrimeNG) falla el build con "Could not resolve @angular/animations/browser" si no está instalada — no aparece en ningún tutorial de PrimeNG 22 como prerequisito explícito.
+- Verificación del DoD hecha por **inspección del HTML servido por SSR real** (`curl` tras `NG_ALLOWED_HOSTS=localhost npm run serve:ssr`), no solo visual: se confirmó `--p-primary-color:#230c00` y `--p-primary-contrast-color:#ffe7b3` en el `<style>` embebido, y `$45.000` en el texto renderizado del pipe `precio`. Ver el gotcha nuevo en §7 sobre `NG_ALLOWED_HOSTS`.
+- `angular.json`: presupuesto de bundle inicial subido de 500kB a 700kB (PrimeNG + Tailwind + animations empujan el bundle de forma esperada y ya conocida al elegir esta suite de UI, no es una regresión a corregir).
+- `app.spec.ts` reescrito: la prueba generada por defecto ("Hello, {{title}}") ya no aplica al reemplazar la plantilla; se agregó además una prueba que verifica el pipe de precio end-to-end.
+- Build de producción, SSR y `npm run test` (3/3) verificados en verde antes de cerrar la tarea.
+
+**Próxima tarea sugerida:** con Tarea 1 cerrada, el motor JIT promueve el siguiente ítem del backlog (`Tema visual Le Tiende completo y docs/DESIGN.md`) al segundo slot activo de `docs/TODO.md`, junto a la Tarea 2 (infraestructura) que sigue activa.
+
+**Sesión del 02/08/2026 — PrimeNG reemplazado por Angular Material (ADR-012)**
+
+El usuario reportó un banner "Invalid PrimeUI License" al cargar la app en local y pidió usar "el paquete 100% gratuito de PrimeNG". La investigación llevó a un hallazgo mayor: PrimeNG 22 (instalado en la Tarea 1) **ya no es MIT**. Se verificó descargando y leyendo los `LICENSE.md` reales de varias versiones desde npm (no de memoria ni de la web de marketing de PrimeTek): MIT puro hasta la 17.x, texto MIT bajo otro nombre en 18.x-21.x, y licencia comercial "PrimeUI" genuina desde la 22.x — la que Ágora tenía instalada. La versión 21.x, la última realmente MIT, no es compatible con Angular 22.
+
+Se presentaron cuatro opciones (Angular Material, solo Tailwind, licencia Community gratuita de PrimeNG con condiciones, o bajar todo a Angular 21) y el usuario eligió **Angular Material 22** — MIT sin condiciones, verificado también contra el registro de npm antes de proponerlo.
+
+Se migró en la misma sesión: se desinstaló `primeng`/`@primeuix/themes`/`tailwindcss-primeui`, se corrió `ng add @angular/material@22`, y se construyó un tema Material 3 propio (`src/material-theme.scss`) con la paleta tonal generada por el algoritmo oficial de Google (`@material/material-color-utilities`, instalado temporalmente solo para la generación, luego desinstalado) a partir de los hex de marca — con los mismos overrides explícitos de tokens que ya habían sido necesarios para PrimeNG, porque M3 tampoco usa el hex exacto como color por defecto. Se reverificó todo el DoD original de la Tarea 1 (color del botón, pipe de precio) por inspección del HTML de SSR real, igual que la primera vez.
+
+Se actualizó toda la documentación que asumía PrimeNG (`CLAUDE.md`, `docs/tech-specs.md`, `docs/PRD.md`, `README.md`, `docs/TODO.md`), y ADR-006 quedó marcada como revertida (no borrada) con referencia a esta ADR-012 — mismo tratamiento de trazabilidad que ya se le dio a la corrección de costos de la sesión anterior.
+
+**Nota operativa (se repitió el problema de la sesión anterior):** al empezar esta corrección, el PR #3 (ADR-011, costos) ya se había fusionado a `main` sin que esta rama lo supiera. Se resolvió de nuevo con `git stash` + `rebase` sobre `main` actualizado + `stash pop`, esta vez con conflictos reales en `docs/MEMORY.md` y `docs/tracking.csv` (ambos archivos habían recibido entradas nuevas en las dos ramas a la vez) — resueltos conservando ambas entradas en orden cronológico real. **La lección de "verificar PRs pendientes de fusión antes de ramificar" quedó anotada dos veces sin aplicarse a tiempo la segunda; para una próxima sesión, sería mejor hacer `git fetch && git log origin/main..HEAD` (o revisar `gh pr list`) antes de empezar cualquier tarea nueva, no solo al final.**
+
+**Próxima tarea sugerida:** retomar la Tarea 1 activa de `docs/TODO.md` (ahora solo `docs/DESIGN.md`, ya que el mapeo de tokens se adelantó en esta sesión) o commitear y abrir PR con los cambios de esta migración antes de continuar.
