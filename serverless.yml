@@ -324,4 +324,28 @@ resources:
     # `tee`, y el resumen de endpoints salió por stderr — MEMORY.md §7).
     HttpApiUrl:
       Description: URL base del endpoint de API Gateway (HTTP API)
-      Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+      # Fn::Join en vez de !Sub: el resolvedor de variables ${...} de
+      # Serverless Framework intenta resolver ${HttpApi}/${AWS::Region}
+      # ANTES de que CloudFormation vea el Fn::Sub, y el resultado quedó
+      # como un Value con Fn::Join y Fn::Sub mezclados en el mismo mapa —
+      # inválido para CloudFormation ("must evaluate to a String and not
+      # a Map"), y rompió el primer despliegue real de este Output
+      # (MEMORY.md §7). Fn::Join con !Ref no contiene ningún `${...}`, así
+      # que el resolvedor de Serverless no lo toca.
+      #
+      # AWS::URLSuffix explícito, no el literal '.amazonaws.com': Serverless
+      # Framework reescribe automáticamente cualquier Fn::Join que reconoce
+      # como URL de API Gateway para usar el pseudo-parámetro dinámico, y
+      # si ya hay un '.amazonaws.com' literal en la lista, el suyo se
+      # AGREGA en vez de reemplazarlo — el segundo intento de este Output
+      # produjo 'amazonaws.comamazonaws.com' duplicado. Referenciarlo aquí
+      # explícitamente evita que Serverless "corrija" nada.
+      Value:
+        Fn::Join:
+          - ''
+          - - 'https://'
+            - !Ref HttpApi
+            - '.execute-api.'
+            - !Ref 'AWS::Region'
+            - '.'
+            - !Ref 'AWS::URLSuffix'
