@@ -10,16 +10,16 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 | Atributo | Valor |
 |---|---|
-| **Versión** | 0.1.0 — andamiaje de Angular en curso |
-| **Fase** | Scaffold (`Scaffold`) |
-| **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada |
-| **URL de staging** | ⬜ no aprovisionada (será el endpoint de API Gateway) |
+| **Versión** | 0.1.0 — infraestructura base desplegada a staging |
+| **Fase** | Backend inicial (`Auth`) |
+| **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada (roadmap #17) |
+| **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` (verificado 02/08/2026) |
 | **Rama principal** | `main` |
-| **Último commit** | `7560cc9 docs: documentación inicial` |
-| **Repositorio remoto** | ⬜ por confirmar (GitHub, cuenta `ocastelblanco`) |
+| **Último commit** | `a0bfe9a` (merge del PR de infraestructura, Tarea 2) |
+| **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 31/07/2026 — bootstrap completo de documentación (este documento incluido) |
+| **Última sesión** | 02/08/2026 — `docs/DESIGN.md`, infraestructura base y CI/CD a staging, primer despliegue real verificado |
 
 ---
 
@@ -35,11 +35,12 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 - [x] `docs/MEMORY.md` — este documento (31/07/2026)
 - [x] `docs/TODO.md` — motor JIT con 2 tareas atómicas (31/07/2026)
 - [x] Andamiaje del proyecto Angular 22 + Angular Material 22 + Tailwind 4 (01-02/08/2026; empezó con PrimeNG 22, reemplazado por licencia — ver §3 ADR-012)
+- [x] Tema visual Le Tiende completo: `src/styles.css` (tokens Tailwind), `src/material-theme.scss` (tema Material 3), `shared/pipes/precio.pipe.ts` — hecho como parte del andamiaje/migración de ADR-012
+- [x] `docs/DESIGN.md` — sistema de diseño prescriptivo completo (colores, tipografía, contenedor, tarjetas, variantes de botón, inputs, matriz Material vs. HTML propio, patrón de la pantalla de puerta) (02/08/2026, PR #5)
+- [x] `serverless.yml` y flujo de CI/CD a staging (02/08/2026, PR #6) — 5 tablas DynamoDB `PAY_PER_REQUEST`, 2 buckets S3 privados, funciones `salud`/`ssr`, primer despliegue real a staging verificado por CLI
 
 ### Pendiente (v1 — MVP)
 
-- [ ] `serverless.yml` y flujo de CI/CD a staging
-- [ ] `docs/DESIGN.md` — el mapeo completo de los 4 tokens semánticos a Angular Material ya existe (`src/material-theme.scss`, ADR-012); falta documentar el sistema de diseño (tarjetas, inputs, botones secundarios, patrones de página) como en el `DESIGN.md` de Babel
 - [ ] Autenticación con Google y resolución de roles
 - [ ] Gestión de usuarios
 - [ ] CRUD de eventos
@@ -273,11 +274,11 @@ Esta tabla se completa a medida que se crean los recursos — es el lugar donde 
 | Cuenta AWS | Compartida con Babel y Comandante — `696912647258` | ✅ Existe |
 | Usuario IAM de despliegue | Compartido, `@ocastelblanco` (grupo `Administrador`, `AdministratorAccess`) — mismo usuario que Babel y Comandante, **no dedicado a Ágora** (ADR-009) | ✅ Existe — perfil `default` en `~/.aws/credentials` |
 | Access Key ID de despliegue | `AKIA2EQZ3CRNMVGRO5X4` (no sensible; el secreto sí lo es y no se documenta aquí) | ✅ Ya usada por Babel en sus GitHub Secrets desde el 17/07/2026 |
-| Nombre del servicio Serverless | `agora-letiende` | ⬜ Por crear (Tarea 2 de `TODO.md`) |
-| Tablas DynamoDB | `agora-{usuarios,eventos,compras,boletas,auditoria}-{stage}` | ⬜ Por crear (Tarea 2) |
-| Bucket de comprobantes | `agora-comprobantes-{stage}` (privado, SSE-S3, Block Public Access) | ⬜ Por crear (Tarea 2) |
-| Bucket de activos | `agora-activos-{stage}` (imágenes de evento, QR) | ⬜ Por crear (Tarea 2) |
-| Endpoint de API Gateway (staging) | — | ⬜ Por crear (Tarea 2) |
+| Nombre del servicio Serverless | `agora-letiende` | ✅ Creado y desplegado a `staging` (02/08/2026) |
+| Tablas DynamoDB | `agora-{usuarios,eventos,compras,boletas,auditoria}-staging` | ✅ Creadas, verificado `PAY_PER_REQUEST` por CLI (02/08/2026); `agora-compras` con TTL en `expiraEn` y Streams `NEW_AND_OLD_IMAGES` |
+| Bucket de comprobantes | `agora-comprobantes-staging` (privado, SSE-S3, Block Public Access) | ✅ Creado, Block Public Access verificado por CLI (02/08/2026) |
+| Bucket de activos | `agora-activos-staging` (imágenes de evento, QR) | ✅ Creado, Block Public Access verificado por CLI (02/08/2026) |
+| Endpoint de API Gateway (staging) | `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` | ✅ Desplegado y verificado (`GET /api/salud` → 200), smoke test de CI en verde (02/08/2026) |
 | Dominio de producción | `agora.letiende.co` | ⬜ Por configurar (DNS + certificado ACM) |
 | Proyecto Firebase | `comandante-letiende` (compartido con Comandante y Babel) | ✅ Existe |
 | App web de Firebase | **No hay una propia — se reutiliza `firebaseConfig` de Comandante** (ADR-010) | ✅ Resuelto, no aplica crear una |
