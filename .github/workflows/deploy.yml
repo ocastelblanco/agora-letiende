@@ -88,8 +88,18 @@ jobs:
       - name: Desplegar con Serverless Framework (stage staging)
         id: deploy
         run: |
-          npx serverless deploy --stage staging | tee /tmp/deploy-staging.txt
-          endpoint=$(grep -oE 'https://[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com' /tmp/deploy-staging.txt | head -1)
+          npx serverless deploy --stage staging
+          # Se lee el endpoint del Output de CloudFormation (serverless.yml
+          # resources.Outputs.HttpApiUrl), no del texto de salida de
+          # `serverless deploy`: en Serverless Framework 4 ese resumen no
+          # siempre llega por stdout, y parsearlo con `tee`/grep dejó el
+          # smoke test sin URL en el primer despliegue real de esta
+          # infraestructura (MEMORY.md §7).
+          endpoint=$(aws cloudformation describe-stacks \
+            --stack-name agora-letiende-staging \
+            --region us-east-1 \
+            --query "Stacks[0].Outputs[?OutputKey=='HttpApiUrl'].OutputValue" \
+            --output text)
           echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
         env:
           SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}

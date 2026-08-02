@@ -314,3 +314,14 @@ resources:
           ServerSideEncryptionConfiguration:
             - ServerSideEncryptionByDefault:
                 SSEAlgorithm: AES256
+
+  Outputs:
+    # Fuente confiable de la URL del endpoint para el smoke test de CI
+    # (.github/workflows/deploy.yml) — evita parsear el texto de salida de
+    # `serverless deploy`, que en Serverless Framework 4 no siempre llega
+    # por stdout (gotcha real: el primer despliegue de esta infraestructura
+    # rompió el smoke test porque el paso de CI solo capturaba stdout con
+    # `tee`, y el resumen de endpoints salió por stderr — MEMORY.md §7).
+    HttpApiUrl:
+      Description: URL base del endpoint de API Gateway (HTTP API)
+      Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
