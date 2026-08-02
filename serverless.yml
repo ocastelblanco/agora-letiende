@@ -66,6 +66,59 @@ functions:
           path: /api/salud
           method: get
 
+  usuariosMe:
+    handler: dist-server/api/handlers/usuarios-me.handler
+    role: !GetAtt UsuariosMeLambdaRole.Arn
+    description: >-
+      GET /api/usuarios/me — verifica el ID Token de Firebase y resuelve el
+      rol contra agora-usuarios (tech-specs.md §8.1, TODO.md Tarea 1).
+    environment:
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+    package:
+      # firebase-admin (a diferencia de `salud`) necesita su árbol de
+      # dependencias completo, así que se incluye todo `node_modules/**` y
+      # se excluyen explícitamente los paquetes que solo usa el frontend o
+      # las herramientas de build (Angular, Tailwind, Vitest, TypeScript,
+      # Serverless Framework, etc. — no viajan a la Lambda).
+      # <!-- SIN VERIFICAR: tamaño final del paquete; confirmar con
+      # `npx serverless package --stage staging` y ajustar exclusiones si
+      # el .zip resulta pesado -->
+      patterns:
+        - '!**'
+        - 'dist-server/api/handlers/usuarios-me.js'
+        - 'dist-server/api/lib/**'
+        - 'dist-server/api/services/**'
+        - 'node_modules/**'
+        - '!node_modules/.bin/**'
+        - '!node_modules/@angular*/**'
+        - '!node_modules/@schematics/**'
+        - '!node_modules/@tailwindcss/**'
+        - '!node_modules/@codegenie/**'
+        - '!node_modules/@types/**'
+        - '!node_modules/tailwindcss/**'
+        - '!node_modules/postcss*/**'
+        - '!node_modules/prettier/**'
+        - '!node_modules/jsdom/**'
+        - '!node_modules/vitest/**'
+        - '!node_modules/@vitest/**'
+        - '!node_modules/vite/**'
+        - '!node_modules/typescript/**'
+        - '!node_modules/serverless/**'
+        - '!node_modules/@serverless/**'
+        - '!node_modules/rxjs/**'
+        - '!node_modules/express/**'
+        - '!node_modules/tslib/**'
+        - '!node_modules/**/*.md'
+        - '!node_modules/**/*.map'
+        - '!node_modules/**/test/**'
+        - '!node_modules/**/tests/**'
+        - '!node_modules/**/.github/**'
+    events:
+      - httpApi:
+          path: /api/usuarios/me
+          method: get
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -110,6 +163,32 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         # Sin política de DynamoDB: /api/salud no toca ninguna tabla.
+
+    UsuariosMeLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-usuarios-me-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): solo lectura puntual
+          # (GetItem, no Query/Scan) sobre agora-usuarios, sin comodines de
+          # Resource ni acceso a ninguna otra tabla.
+          - PolicyName: agora-usuarios-me-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
 
     SsrLambdaRole:
       Type: AWS::IAM::Role

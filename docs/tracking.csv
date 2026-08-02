@@ -7,3 +7,4 @@ Scaffold,01/08/2026 14:20,01/08/2026 14:50,0:30:00,AI,Sonnet 5,Tarea 1 parte 1: 
 Cloud infraestructure,01/08/2026 14:50,01/08/2026 15:30,0:40:00,AI,Sonnet 5,Correccion urgente costos AWS: DynamoDB PAY_PER_REQUEST ADR-011 guardarrailes en Tarea 2 y verificacion de presupuestos por CLI,Claude Code,cli,high
 Scaffold,01/08/2026 15:30,01/08/2026 15:48,0:18:00,AI,Sonnet 5,Tarea 1 parte 2: preset PrimeNG pipe de precio pagina de verificacion build SSR y tests en verde cierre en MEMORY y TODO,Claude Code,cli,medium
 Frontend,02/08/2026 09:09,02/08/2026 10:09,1:00:00,AI,Sonnet 5,Migracion PrimeNG a Angular Material tras verificar cambio de licencia ADR-012 tema Material 3 con paleta M3 generada y actualizacion de toda la documentacion,Claude Code,cli,high
+Backend,02/08/2026 14:50,02/08/2026 15:20,0:30:00,AI,Sonnet 5,Backend de autenticacion: verificar-token resolver-permisos y GET /api/usuarios/me con pruebas en verde,Claude Code,mobile,high
