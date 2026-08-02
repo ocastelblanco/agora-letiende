@@ -105,6 +105,12 @@ jobs:
           SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # Sin esto, `${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}` en
+          # serverless.yml resuelve a cadena vacía y la Lambda `usuariosMe`
+          # despliega sin credencial real: verifyIdToken nunca llega a
+          # ejecutarse, GET /api/usuarios/me responde 500 en vez de 200/403
+          # (verificado en vivo en staging — MEMORY.md §7).
+          FIREBASE_SERVICE_ACCOUNT_AGORA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AGORA }}
 
       - name: Smoke test contra staging recién desplegado
         run: |
@@ -161,3 +167,4 @@ jobs:
           SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_AGORA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AGORA }}
