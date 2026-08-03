@@ -45,6 +45,7 @@ Thumbs.db
 
 # Backend compilado (Lambdas)
 /dist-server
+/dist-server-bundle
 
 # Artefactos locales de Serverless Framework (package/deploy)
 /.serverless

@@ -67,7 +67,7 @@ functions:
           method: get
 
   usuariosMe:
-    handler: dist-server/api/handlers/usuarios-me.handler
+    handler: dist-server-bundle/usuarios-me.handler
     role: !GetAtt UsuariosMeLambdaRole.Arn
     description: >-
       GET /api/usuarios/me — verifica el ID Token de Firebase y resuelve el
@@ -76,44 +76,20 @@ functions:
       TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
     package:
-      # firebase-admin (a diferencia de `salud`) necesita su árbol de
-      # dependencias completo, así que se incluye todo `node_modules/**` y
-      # se excluyen explícitamente los paquetes que solo usa el frontend o
-      # las herramientas de build (Angular, Tailwind, Vitest, TypeScript,
-      # Serverless Framework, etc. — no viajan a la Lambda).
-      # <!-- SIN VERIFICAR: tamaño final del paquete; confirmar con
-      # `npx serverless package --stage staging` y ajustar exclusiones si
-      # el .zip resulta pesado -->
+      # firebase-admin tiene un árbol de dependencias transitivas profundo
+      # y cambiante. Copiar a mano un subconjunto de `node_modules/**` en
+      # este archivo (versión anterior de este bloque) dejó algo fuera sin
+      # que ningún build local lo detectara — verificado en vivo en staging
+      # (MEMORY.md §7): la Lambda fallaba en el arranque, antes de que
+      # corriera el handler, incluso sin header `Authorization`. En su
+      # lugar, `npm run bundle:api` (server/bundle-lambdas.mjs) empaqueta
+      # esta función con esbuild en un único archivo autocontenido — el
+      # propio resolvedor de módulos de esbuild encuentra todo lo que el
+      # código realmente importa, igual que Node, así que no puede faltar
+      # nada. Sin `node_modules/**` en el paquete: no hace falta.
       patterns:
         - '!**'
-        - 'dist-server/api/handlers/usuarios-me.js'
-        - 'dist-server/api/lib/**'
-        - 'dist-server/api/services/**'
-        - 'node_modules/**'
-        - '!node_modules/.bin/**'
-        - '!node_modules/@angular*/**'
-        - '!node_modules/@schematics/**'
-        - '!node_modules/@tailwindcss/**'
-        - '!node_modules/@codegenie/**'
-        - '!node_modules/@types/**'
-        - '!node_modules/tailwindcss/**'
-        - '!node_modules/postcss*/**'
-        - '!node_modules/prettier/**'
-        - '!node_modules/jsdom/**'
-        - '!node_modules/vitest/**'
-        - '!node_modules/@vitest/**'
-        - '!node_modules/vite/**'
-        - '!node_modules/typescript/**'
-        - '!node_modules/serverless/**'
-        - '!node_modules/@serverless/**'
-        - '!node_modules/rxjs/**'
-        - '!node_modules/express/**'
-        - '!node_modules/tslib/**'
-        - '!node_modules/**/*.md'
-        - '!node_modules/**/*.map'
-        - '!node_modules/**/test/**'
-        - '!node_modules/**/tests/**'
-        - '!node_modules/**/.github/**'
+        - 'dist-server-bundle/usuarios-me.js'
     events:
       - httpApi:
           path: /api/usuarios/me
