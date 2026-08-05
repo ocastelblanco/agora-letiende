@@ -173,4 +173,19 @@ export class ServicioAuth {
     this.usuarioActualSignal.set(null);
     this.rolSignal.set(null);
   }
+
+  /**
+   * ID Token de Firebase del usuario actual, para enviar como
+   * `Authorization: Bearer <token>` a cualquier endpoint de `/api/*`
+   * (CLAUDE.md §5, A01/A07). `null` si no hay sesión activa. Espera
+   * `esperarListo()` primero, mismo motivo que el resto de la clase.
+   */
+  async obtenerIdToken(): Promise<string | null> {
+    await this.esperarListo();
+    const usuario = this.usuarioActualSignal();
+    if (!usuario) {
+      return null;
+    }
+    return usuario.getIdToken();
+  }
 }

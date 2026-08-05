@@ -4,6 +4,23 @@ import type { User } from 'firebase/auth';
 import { ServicioAuth } from '../auth/servicio-auth';
 import { guardiaAuth } from './guardia-auth';
 
+// `servicio-auth.ts` (importado abajo solo como token de DI) importa el SDK
+// real de Firebase a nivel de módulo. Se mockea aquí para que este archivo
+// nunca lo cargue de verdad — si lo hiciera, "envenenaría" el registro de
+// módulos compartido entre archivos de prueba (mismo motivo que
+// servicio-auth.spec.ts) y podría romper otro spec que sí dependa del mock
+// real de `GoogleAuthProvider`/`onAuthStateChanged`.
+vi.mock('firebase/app', () => ({ initializeApp: vi.fn(() => ({})) }));
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn(),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  GoogleAuthProvider: vi.fn(function () {
+    return { setCustomParameters: vi.fn() };
+  }),
+}));
+
 const urlTreeFalso = { esUrlTree: true };
 
 function configurarPrueba(usuarioActual: User | null, rol: string | null) {

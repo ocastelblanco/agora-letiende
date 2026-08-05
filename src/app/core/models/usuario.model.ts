@@ -7,6 +7,29 @@ export interface PerfilUsuario {
   rol: Rol;
 }
 
+/** Registro completo de `agora-usuarios` (server/api/handlers/usuarios.ts). */
+export interface Usuario {
+  email: string;
+  nombre: string;
+  rol: Rol;
+  activo: boolean;
+  creadoEn: string;
+}
+
+/** Datos editables de un usuario existente (`PUT /api/usuarios/:email`). */
+export interface DatosUsuario {
+  nombre?: string;
+  rol?: Rol;
+  activo?: boolean;
+}
+
+/** Datos para crear un usuario nuevo (`POST /api/usuarios`) — incluye `email`, la clave primaria. */
+export interface DatosNuevoUsuario {
+  email: string;
+  nombre: string;
+  rol: Rol;
+}
+
 /**
  * Espejo de UX de la jerarquía `administrador > productor > portero` que
  * ya resuelve `server/api/lib/resolver-permisos.ts` en el backend — la

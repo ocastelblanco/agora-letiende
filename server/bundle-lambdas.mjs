@@ -21,6 +21,9 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 const entradas = [
   { entrada: 'dist-server/api/handlers/usuarios-me.js', salida: `${OUT_DIR}/usuarios-me.js` },
+  // usuarios.ts depende de firebase-admin transitivamente (vía
+  // lib/autorizacion.ts -> lib/verificar-token.ts), mismo motivo de bundle.
+  { entrada: 'dist-server/api/handlers/usuarios.js', salida: `${OUT_DIR}/usuarios.js` },
 ];
 
 for (const { entrada, salida } of entradas) {

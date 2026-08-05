@@ -95,6 +95,36 @@ functions:
           path: /api/usuarios/me
           method: get
 
+  usuarios:
+    handler: dist-server-bundle/usuarios.handler
+    role: !GetAtt UsuariosLambdaRole.Arn
+    description: >-
+      CRUD de agora-usuarios (GET/POST /api/usuarios, PUT/DELETE
+      /api/usuarios/:email), exclusivo de administrador (TODO.md Tarea 1).
+    environment:
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+    package:
+      # Mismo motivo que usuariosMe: depende de firebase-admin
+      # transitivamente (vía lib/autorizacion.ts), así que se empaqueta con
+      # esbuild (npm run bundle:api) en vez de copiar node_modules/** a mano.
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/usuarios.js'
+    events:
+      - httpApi:
+          path: /api/usuarios
+          method: get
+      - httpApi:
+          path: /api/usuarios
+          method: post
+      - httpApi:
+          path: /api/usuarios/{email}
+          method: put
+      - httpApi:
+          path: /api/usuarios/{email}
+          method: delete
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -164,6 +194,38 @@ resources:
                 - Effect: Allow
                   Action:
                     - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
+
+    UsuariosLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-usuarios-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): solo las acciones que el
+          # CRUD de usuarios.ts realmente usa, acotadas exclusivamente a
+          # agora-usuarios, sin comodines de Resource ni acceso a otra tabla.
+          - PolicyName: agora-usuarios-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    # GetItem: exigirRol() resuelve el permiso del propio
+                    # solicitante (resolver-permisos.ts) antes de despachar.
+                    - dynamodb:GetItem
+                    - dynamodb:Scan
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
                   Resource: !GetAtt AgoraUsuarios.Arn
 
     SsrLambdaRole:

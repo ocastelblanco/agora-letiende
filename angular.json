@@ -78,7 +78,18 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            // Default de Angular es `false` (compatibilidad con
+            // Karma/Jasmine): todos los *.spec.ts corren en el mismo
+            // contexto sin aislar módulos por archivo. Eso hace que
+            // `vi.mock('firebase/auth', ...)` de un archivo se filtre a
+            // otros — verificado en vivo (múltiples specs de ServicioAuth
+            // fallaban de forma no determinística según el orden de
+            // ejecución). `true` aísla cada archivo en su propio contexto,
+            // como Vitest hace por defecto fuera de Angular.
+            "isolate": true
+          }
         }
       }
     }
