@@ -123,6 +123,29 @@ describe('ServicioAuth', () => {
     expect(signOutMock).toHaveBeenCalledTimes(1);
   });
 
+  it('obtenerIdToken devuelve null sin sesión y el ID Token real con sesión activa', async () => {
+    let callbackCapturado: ((usuario: User | null) => void) | undefined;
+    onAuthStateChangedMock.mockImplementation(
+      (_auth: unknown, callback: (usuario: User | null) => void) => {
+        callbackCapturado = callback;
+      },
+    );
+
+    const servicio = TestBed.inject(ServicioAuth);
+    callbackCapturado?.(null);
+    expect(await servicio.obtenerIdToken()).toBeNull();
+
+    const getIdTokenMock = vi.fn().mockResolvedValue('token-real');
+    callbackCapturado?.({ ...usuarioFalso, getIdToken: getIdTokenMock } as unknown as User);
+    await Promise.resolve();
+    await Promise.resolve();
+    httpMock
+      .expectOne('/api/usuarios/me')
+      .flush({ email: 'admin@letiende.co', nombre: 'Admin', rol: 'administrador' });
+
+    expect(await servicio.obtenerIdToken()).toBe('token-real');
+  });
+
   it('cerrarSesion invoca signOut de Firebase y limpia usuarioActual y rol', async () => {
     signInWithPopupMock.mockResolvedValue({ user: usuarioFalso });
     const servicio = TestBed.inject(ServicioAuth);

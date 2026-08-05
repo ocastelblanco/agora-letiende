@@ -5,19 +5,7 @@ import type {
 } from 'aws-lambda';
 import { ErrorAutenticacion, verificarToken } from '../lib/verificar-token';
 import { resolverPermisos } from '../lib/resolver-permisos';
-
-function respuestaJson(statusCode: number, cuerpo: unknown): APIGatewayProxyResultV2 {
-  return {
-    statusCode,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cuerpo),
-  };
-}
-
-function obtenerEncabezadoAuthorization(evento: APIGatewayProxyEventV2): string | undefined {
-  const encabezados = evento.headers ?? {};
-  return encabezados['authorization'] ?? encabezados['Authorization'];
-}
+import { obtenerEncabezadoAuthorization, respuestaJson } from '../lib/http';
 
 /**
  * `GET /api/usuarios/me` — encadena `verificar-token` + `resolver-permisos`

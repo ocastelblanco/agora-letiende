@@ -10,3 +10,4 @@ Frontend,02/08/2026 09:09,02/08/2026 10:09,1:00:00,AI,Sonnet 5,Migracion PrimeNG
 Backend,02/08/2026 14:50,02/08/2026 15:20,0:30:00,AI,Sonnet 5,Backend de autenticacion: verificar-token resolver-permisos y GET /api/usuarios/me con pruebas en verde,Claude Code,mobile,high
 Frontend,02/08/2026 15:20,02/08/2026 15:58,0:38:00,AI,Sonnet 5,Frontend de autenticacion: ServicioAuth guardias login component y recalculo del TODO,Claude Code,mobile,high
 Backend,02/08/2026 20:10,02/08/2026 20:42,0:32:00,AI,Sonnet 5,Diagnostico y fix de dos bugs reales en staging: secreto FIREBASE_SERVICE_ACCOUNT_AGORA y bundle esbuild de usuariosMe,Claude Code,mobile,high
+Backend,05/08/2026 13:30,05/08/2026 14:44,1:14:00,AI,Sonnet 5,Gestion de usuarios: CRUD completo backend y frontend panel admin usuarios y fix de aislamiento de pruebas,Claude Code,mobile,high

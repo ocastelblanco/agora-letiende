@@ -12,7 +12,9 @@ vi.mock('firebase/auth', () => ({
   onAuthStateChanged: vi.fn(),
   signInWithPopup: vi.fn(),
   signOut: vi.fn(),
-  GoogleAuthProvider: vi.fn(),
+  GoogleAuthProvider: vi.fn(function () {
+    return { setCustomParameters: vi.fn() };
+  }),
 }));
 
 function configurarPrueba(iniciarSesionConGoogleMock = vi.fn().mockResolvedValue(undefined)) {

@@ -6,6 +6,20 @@ import { ServicioAuth } from '../auth/servicio-auth';
 import type { Rol } from '../models/usuario.model';
 import { guardiaRol } from './guardia-rol';
 
+// Ver el mismo comentario en guardia-auth.spec.ts: `servicio-auth.ts`
+// importa el SDK real de Firebase a nivel de módulo, y sin mockearlo aquí
+// "envenena" el registro de módulos compartido entre archivos de prueba.
+vi.mock('firebase/app', () => ({ initializeApp: vi.fn(() => ({})) }));
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn(),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  GoogleAuthProvider: vi.fn(function () {
+    return { setCustomParameters: vi.fn() };
+  }),
+}));
+
 const urlTreeFalso = { esUrlTree: true };
 const usuarioFalso = { uid: 'uid-1' } as User;
 
