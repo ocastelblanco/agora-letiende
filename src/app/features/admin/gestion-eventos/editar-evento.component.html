@@ -1,0 +1,253 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-2xl">
+    <h1 class="mb-6 text-2xl font-bold text-primary">
+      {{ modoCrear ? 'Crear evento' : 'Editar evento' }}
+    </h1>
+
+    @if (cargando()) {
+      <p class="text-sm text-primary/70">Cargando…</p>
+    } @else if (eventoNoEncontrado()) {
+      <p class="text-sm text-danger">No se encontró ese evento.</p>
+    } @else {
+      <form
+        [formGroup]="formulario"
+        (ngSubmit)="guardar()"
+        class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
+      >
+        <div>
+          <label for="slug" class="mb-1 block text-sm font-semibold text-primary">
+            Slug (URL pública)
+          </label>
+          <input
+            id="slug"
+            type="text"
+            formControlName="slug"
+            placeholder="concierto-de-jazz"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          @if (formulario.controls.slug.invalid && formulario.controls.slug.touched) {
+            <p class="mt-1 text-xs text-danger">
+              Solo minúsculas, números y guiones, ej. "concierto-de-jazz".
+            </p>
+          }
+        </div>
+
+        <div>
+          <label for="nombre" class="mb-1 block text-sm font-semibold text-primary">Nombre</label>
+          <input
+            id="nombre"
+            type="text"
+            formControlName="nombre"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+          />
+        </div>
+
+        <div>
+          <label for="descripcion" class="mb-1 block text-sm font-semibold text-primary">
+            Descripción
+          </label>
+          <textarea
+            id="descripcion"
+            formControlName="descripcion"
+            rows="4"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+          ></textarea>
+        </div>
+
+        <div>
+          <label for="fechaHora" class="mb-1 block text-sm font-semibold text-primary">
+            Fecha y hora (Bogotá)
+          </label>
+          <input
+            id="fechaHora"
+            type="datetime-local"
+            formControlName="fechaHora"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+          />
+        </div>
+
+        <div>
+          <label for="sillasTotales" class="mb-1 block text-sm font-semibold text-primary">
+            Sillas totales
+          </label>
+          <input
+            id="sillasTotales"
+            type="number"
+            formControlName="sillasTotales"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          @if (!modoCrear) {
+            <p class="mt-1 text-xs text-primary/60">
+              El aforo no se edita aquí — todavía no existe el motor de aforo.
+            </p>
+          }
+        </div>
+
+        <div>
+          <label for="maxBoletasPorCompra" class="mb-1 block text-sm font-semibold text-primary">
+            Máximo de boletas por compra
+          </label>
+          <input
+            id="maxBoletasPorCompra"
+            type="number"
+            formControlName="maxBoletasPorCompra"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+          />
+        </div>
+
+        <div>
+          <label
+            for="plazoComprobanteMinutos"
+            class="mb-1 block text-sm font-semibold text-primary"
+          >
+            Plazo para subir el comprobante (minutos)
+          </label>
+          <input
+            id="plazoComprobanteMinutos"
+            type="number"
+            formControlName="plazoComprobanteMinutos"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+          />
+        </div>
+
+        <div>
+          <label for="productoresTexto" class="mb-1 block text-sm font-semibold text-primary">
+            Productores (correos separados por coma)
+          </label>
+          <input
+            id="productoresTexto"
+            type="text"
+            formControlName="productoresTexto"
+            placeholder="persona@letiende.co, otra@letiende.co"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+          />
+        </div>
+
+        @if (!modoCrear) {
+          <div>
+            <label for="estado" class="mb-1 block text-sm font-semibold text-primary">Estado</label>
+            <select
+              id="estado"
+              formControlName="estado"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            >
+              <option value="borrador">Borrador</option>
+              <option value="publicado">Publicado</option>
+              <option value="agotado">Agotado</option>
+              <option value="finalizado">Finalizado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+        }
+
+        <fieldset formGroupName="mediosPago" class="flex flex-col gap-2">
+          <legend class="mb-1 text-sm font-semibold text-primary">Medios de pago</legend>
+          @for (medio of mediosPagoDisponibles; track medio.valor) {
+            <label class="flex items-center gap-2 text-sm text-primary">
+              <input type="checkbox" [formControlName]="medio.valor" />
+              {{ medio.etiqueta }}
+            </label>
+          }
+        </fieldset>
+
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
+            <button mat-stroked-button type="button" (click)="agregarEtapa()">
+              Agregar etapa
+            </button>
+          </div>
+
+          <div formArrayName="etapas" class="flex flex-col gap-4">
+            @for (grupo of etapas.controls; track grupo; let indice = $index) {
+              <div
+                [formGroupName]="indice"
+                class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
+                  @if (etapas.length > 1) {
+                    <button
+                      mat-stroked-button
+                      color="warn"
+                      type="button"
+                      (click)="quitarEtapa(indice)"
+                    >
+                      Quitar
+                    </button>
+                  }
+                </div>
+
+                <input
+                  type="text"
+                  formControlName="nombre"
+                  placeholder="Nombre (ej. Preventa)"
+                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                />
+                <input
+                  type="number"
+                  formControlName="precio"
+                  placeholder="Precio en COP"
+                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                />
+                <p class="-mt-2 text-xs text-primary/60">
+                  {{ grupo.controls.precio.value | precio }}
+                </p>
+                <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
+                <input
+                  type="datetime-local"
+                  formControlName="cierraEn"
+                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                />
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <h2 class="text-sm font-semibold text-primary">Imagen y logotipo</h2>
+          @if (!puedeSubirActivos()) {
+            <p class="text-xs text-primary/60">Guarda el evento primero para subir imágenes.</p>
+          } @else {
+            <div>
+              <label class="mb-1 block text-xs text-primary/60">
+                Imagen del evento
+                @if (imagenKey()) {
+                  — cargada
+                }
+              </label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                [disabled]="subiendoImagen()"
+                (change)="subirImagen($event, 'imagen')"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs text-primary/60">
+                Logotipo
+                @if (logotipoKey()) {
+                  — cargado
+                }
+              </label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                [disabled]="subiendoLogotipo()"
+                (change)="subirImagen($event, 'logotipo')"
+              />
+            </div>
+          }
+        </div>
+
+        <button
+          type="submit"
+          [disabled]="guardando()"
+          class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {{ guardando() ? 'Guardando…' : modoCrear ? 'Crear evento' : 'Guardar cambios' }}
+        </button>
+      </form>
+    }
+  </div>
+</div>

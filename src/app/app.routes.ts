@@ -17,4 +17,24 @@ export const routes: Routes = [
     data: { rolMinimo: 'administrador' },
     title: 'Usuarios — Ágora',
   },
+  {
+    path: 'admin/eventos',
+    loadComponent: () =>
+      import('./features/admin/gestion-eventos/gestion-eventos.component').then(
+        (m) => m.GestionEventosComponent,
+      ),
+    canActivate: [guardiaRol],
+    data: { rolMinimo: 'administrador' },
+    title: 'Eventos — Ágora',
+  },
+  {
+    path: 'admin/eventos/:id',
+    loadComponent: () =>
+      import('./features/admin/gestion-eventos/editar-evento.component').then(
+        (m) => m.EditarEventoComponent,
+      ),
+    canActivate: [guardiaRol],
+    data: { rolMinimo: 'administrador' },
+    title: 'Editar evento — Ágora',
+  },
 ];

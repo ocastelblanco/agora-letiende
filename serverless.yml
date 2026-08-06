@@ -125,6 +125,40 @@ functions:
           path: /api/usuarios/{email}
           method: delete
 
+  eventos:
+    handler: dist-server-bundle/eventos.handler
+    role: !GetAtt EventosLambdaRole.Arn
+    description: >-
+      CRUD de agora-eventos (GET/POST /api/eventos, PUT
+      /api/eventos/:eventoId, POST
+      /api/eventos/:eventoId/activos/url-carga), exclusivo de administrador
+      (TODO.md Tarea 1).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+    package:
+      # Mismo motivo que usuarios/usuariosMe: depende de firebase-admin
+      # transitivamente (vía lib/autorizacion.ts), así que se empaqueta con
+      # esbuild (npm run bundle:api) en vez de copiar node_modules/** a mano.
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/eventos.js'
+    events:
+      - httpApi:
+          path: /api/eventos
+          method: get
+      - httpApi:
+          path: /api/eventos
+          method: post
+      - httpApi:
+          path: /api/eventos/{eventoId}
+          method: put
+      - httpApi:
+          path: /api/eventos/{eventoId}/activos/url-carga
+          method: post
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -227,6 +261,54 @@ resources:
                     - dynamodb:UpdateItem
                     - dynamodb:DeleteItem
                   Resource: !GetAtt AgoraUsuarios.Arn
+
+    EventosLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-eventos-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): solo las acciones que
+          # eventos.ts realmente usa, acotadas exclusivamente a
+          # agora-eventos, sin comodines de Resource ni acceso a otra tabla.
+          - PolicyName: agora-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Scan
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraEventos.Arn
+                - Effect: Allow
+                  # GetItem, no Query/Scan: exigirRol() resuelve el permiso
+                  # del propio solicitante (resolver-permisos.ts) contra
+                  # agora-usuarios, sin acceso a ninguna otra acción de esa
+                  # tabla desde esta función.
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
+          # s3:PutObject acotado al prefijo de activos de eventos — nunca
+          # s3:* ni Resource: "*" (CLAUDE.md §5, A05/A10). La URL prefirmada
+          # es lo único que permite escribir en el bucket; el backend nunca
+          # descarga una URL arbitraria.
+          - PolicyName: agora-eventos-s3-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                  Resource: !Sub '${BucketActivos.Arn}/eventos/*'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role
