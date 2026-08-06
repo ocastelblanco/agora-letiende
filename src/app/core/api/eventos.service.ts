@@ -6,6 +6,7 @@ import { DatosEditarEvento, DatosNuevoEvento, Evento } from '../models/evento.mo
 
 export type ResultadoOperacionEvento = { exito: true; evento: Evento } | { exito: false; error: string };
 export type ResultadoSubidaActivo = { exito: true; key: string } | { exito: false; error: string };
+export type ResultadoEliminarEvento = { exito: true } | { exito: false; error: string };
 
 /**
  * Cliente de `/api/eventos` (tech-specs.md §5.1, TODO.md Tarea 1) — CRUD
@@ -105,6 +106,29 @@ export class EventosService {
       return {
         exito: false,
         error: this.mensajeError(error, 'No se pudo actualizar el evento. Intenta de nuevo.'),
+      };
+    }
+  }
+
+  /** Llama `DELETE /api/eventos/{eventoId}`. Tras un `204` exitoso, recarga `eventos`. */
+  async eliminarEvento(eventoId: string): Promise<ResultadoEliminarEvento> {
+    const idToken = await this.servicioAuth.obtenerIdToken();
+    if (!idToken) {
+      return { exito: false, error: 'No se pudo eliminar el evento. Intenta de nuevo.' };
+    }
+
+    try {
+      await firstValueFrom(
+        this.http.delete<void>(`/api/eventos/${eventoId}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        }),
+      );
+      await this.cargarEventos();
+      return { exito: true };
+    } catch (error) {
+      return {
+        exito: false,
+        error: this.mensajeError(error, 'No se pudo eliminar el evento. Intenta de nuevo.'),
       };
     }
   }

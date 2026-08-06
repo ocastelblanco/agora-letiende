@@ -235,6 +235,31 @@ describe('handler de /api/eventos', () => {
     });
   });
 
+  describe('DELETE /api/eventos/:eventoId', () => {
+    it('elimina el evento y responde 204', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(respuesta.statusCode).toBe(204);
+    });
+
+    it('responde 404 si el eventoId no existe (ConditionExpression falla)', async () => {
+      sendMock.mockRejectedValue(new ConditionalCheckFailedException());
+
+      const respuesta = await invocar('DELETE', { eventoId: 'inexistente' });
+
+      expect(respuesta.statusCode).toBe(404);
+    });
+
+    it('responde 400 si falta el eventoId en la ruta', async () => {
+      const respuesta = await invocar('DELETE', {});
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /api/eventos/:eventoId/activos/url-carga', () => {
     it('devuelve una URL prefirmada y una key bajo el prefijo del evento', async () => {
       getSignedUrlMock.mockResolvedValue('https://s3.example.com/presignada');

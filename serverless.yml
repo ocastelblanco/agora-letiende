@@ -129,7 +129,7 @@ functions:
     handler: dist-server-bundle/eventos.handler
     role: !GetAtt EventosLambdaRole.Arn
     description: >-
-      CRUD de agora-eventos (GET/POST /api/eventos, PUT
+      CRUD de agora-eventos (GET/POST /api/eventos, PUT/DELETE
       /api/eventos/:eventoId, POST
       /api/eventos/:eventoId/activos/url-carga), exclusivo de administrador
       (TODO.md Tarea 1).
@@ -155,6 +155,9 @@ functions:
       - httpApi:
           path: /api/eventos/{eventoId}
           method: put
+      - httpApi:
+          path: /api/eventos/{eventoId}
+          method: delete
       - httpApi:
           path: /api/eventos/{eventoId}/activos/url-carga
           method: post
@@ -288,6 +291,7 @@ resources:
                     - dynamodb:Scan
                     - dynamodb:PutItem
                     - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
                   Resource: !GetAtt AgoraEventos.Arn
                 - Effect: Allow
                   # GetItem, no Query/Scan: exigirRol() resuelve el permiso

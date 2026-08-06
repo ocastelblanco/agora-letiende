@@ -192,6 +192,50 @@ describe('EventosService', () => {
     });
   });
 
+  describe('eliminarEvento', () => {
+    it('elimina el evento, recarga el listado y devuelve éxito cuando la API responde 204', async () => {
+      const servicio = configurarPrueba('token-valido');
+
+      const promesa = servicio.eliminarEvento('e1');
+      await Promise.resolve();
+      const peticionEliminar = httpMock.expectOne('/api/eventos/e1');
+      expect(peticionEliminar.request.method).toBe('DELETE');
+      peticionEliminar.flush(null, { status: 204, statusText: 'No Content' });
+
+      await Promise.resolve();
+      await Promise.resolve();
+      httpMock.expectOne('/api/eventos').flush([]);
+
+      expect(await promesa).toEqual({ exito: true });
+    });
+
+    it('devuelve error sin llamar a la API cuando no hay ID Token', async () => {
+      const servicio = configurarPrueba(null);
+
+      const resultado = await servicio.eliminarEvento('e1');
+
+      expect(resultado).toEqual({
+        exito: false,
+        error: 'No se pudo eliminar el evento. Intenta de nuevo.',
+      });
+    });
+
+    it('devuelve el mensaje de error del backend cuando la API responde 404', async () => {
+      const servicio = configurarPrueba('token-valido');
+
+      const promesa = servicio.eliminarEvento('inexistente');
+      await Promise.resolve();
+      httpMock
+        .expectOne('/api/eventos/inexistente')
+        .flush({ mensaje: 'No existe un evento con ese eventoId' }, { status: 404, statusText: 'Not Found' });
+
+      expect(await promesa).toEqual({
+        exito: false,
+        error: 'No existe un evento con ese eventoId',
+      });
+    });
+  });
+
   describe('subirActivo', () => {
     it('devuelve error sin llamar a la API cuando no hay ID Token', async () => {
       const servicio = configurarPrueba(null);

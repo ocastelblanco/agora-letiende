@@ -37,6 +37,17 @@ const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/web
  * crear el mismo evento varias veces con un segundo clic en "Crear
  * evento"). El Signal input sí se actualiza en cada navegación aunque la
  * instancia se reutilice, y el `effect()` de abajo reacciona a ese cambio.
+ *
+ * **Segunda capa, no solo el Signal input:** `guardar()` también transiciona
+ * `modoCrear`/`eventoId` a mano, de inmediato, al crear un evento con éxito
+ * — no depende únicamente de que la re-navegación reactive el `effect()`.
+ * Un primer intento de arreglo (solo el Signal input) se verificó con
+ * pruebas unitarias que simulan el router y con una réplica aislada de la
+ * mecánica real del Router (`RouterTestingHarness`, ruta perezosa +
+ * `canActivate`), y ambas confirmaron que el mecanismo funciona — pero el
+ * usuario reportó que el síntoma persistía en staging real, así que esta
+ * segunda capa deja de depender por completo de esa mecánica en vez de
+ * seguir buscando una causa que las pruebas no logran reproducir.
  */
 @Component({
   selector: 'app-editar-evento',
@@ -53,7 +64,18 @@ export class EditarEventoComponent {
 
   /** Parámetro de ruta `id` — `'nuevo'` en modo crear, el `eventoId` real al editar. */
   readonly id = input.required<string>();
-  protected readonly modoCrear = computed(() => this.id() === 'nuevo');
+
+  /**
+   * Refleja `id() === 'nuevo'`, pero es un Signal escribible (no `computed`)
+   * a propósito: `guardar()` lo actualiza **directamente** al crear un
+   * evento con éxito, en vez de depender por completo de que la
+   * re-navegación a `/admin/eventos/{eventoId}` dispare de vuelta el
+   * `effect()` de abajo. Los dos caminos son redundantes cuando ambos
+   * funcionan (el segundo simplemente repite la misma transición sin
+   * efecto visible), pero la actualización directa no depende de la
+   * mecánica de re-enlace de inputs del Router ante una ruta reutilizada.
+   */
+  protected readonly modoCrear = signal(true);
 
   /** `null` mientras se crea; el `eventoId` real una vez creado o al editar uno existente. */
   protected readonly eventoId = signal<string | null>(null);
@@ -120,10 +142,21 @@ export class EditarEventoComponent {
       const id = this.id();
 
       if (id === 'nuevo') {
+        this.modoCrear.set(true);
         this.reiniciarFormularioVacio();
         this.eventoId.set(null);
         this.eventoNoEncontrado.set(false);
         this.cargando.set(false);
+        return;
+      }
+
+      this.modoCrear.set(false);
+
+      // Si guardar() ya transicionó a este mismo eventoId de forma directa
+      // (creación exitosa, ver guardar()), no repitas la carga — cuando el
+      // Router también reactiva el input tras la navegación a esta misma
+      // ruta reutilizada, sería una recarga redundante.
+      if (this.eventoId() === id) {
         return;
       }
 
@@ -253,6 +286,12 @@ export class EditarEventoComponent {
 
         if (resultado.exito) {
           this.snackBar.open('Evento creado correctamente.', 'Cerrar', { duration: 4000 });
+          // Transición directa a modo edición — no depende de que la
+          // re-navegación de abajo dispare de vuelta el `effect()` del
+          // constructor (ver el comentario de `modoCrear` más arriba).
+          this.modoCrear.set(false);
+          this.eventoId.set(resultado.evento.eventoId);
+          this.precargarFormulario(resultado.evento);
           await this.router.navigate(['/admin/eventos', resultado.evento.eventoId]);
         } else {
           this.snackBar.open(resultado.error, 'Cerrar', { duration: 6000 });

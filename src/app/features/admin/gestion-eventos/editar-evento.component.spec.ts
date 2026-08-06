@@ -124,6 +124,14 @@ describe('EditarEventoComponent', () => {
       expect(snackBarOpenMock).toHaveBeenCalledWith('Evento creado correctamente.', 'Cerrar', {
         duration: 4000,
       });
+
+      // Regresión: la transición a modo edición debe ser inmediata, sin
+      // depender de que el Router reactive el Signal input `id` de vuelta
+      // (que en esta prueba nunca se simula) — ver el docstring de la
+      // clase sobre la "segunda capa" en guardar().
+      expect(componente['modoCrear']()).toBe(false);
+      expect(componente['eventoId']()).toBe('e1');
+      expect(componente['formulario'].controls.slug.disabled).toBe(true);
     });
 
     it('regresión: si el router reutiliza la instancia y el id pasa de "nuevo" al eventoId real, entra en modo edición en vez de quedar congelada en modo crear', async () => {

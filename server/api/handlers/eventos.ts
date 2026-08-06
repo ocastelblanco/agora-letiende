@@ -4,7 +4,7 @@ import type {
   APIGatewayProxyHandlerV2,
   APIGatewayProxyResultV2,
 } from 'aws-lambda';
-import { PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
@@ -409,7 +409,35 @@ async function generarUrlCargaActivo(
 }
 
 /**
- * `GET/POST /api/eventos`, `PUT /api/eventos/:eventoId`,
+ * `DELETE /api/eventos/:eventoId` — elimina el evento. Sin lectura previa:
+ * la `ConditionExpression` distingue 404 (no existe) de 204 (eliminado),
+ * mismo criterio que `usuarios.ts`.
+ */
+async function eliminarEvento(eventoId: string | undefined): Promise<APIGatewayProxyResultV2> {
+  if (!eventoId) {
+    return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
+  }
+
+  try {
+    await documentoDynamoDB.send(
+      new DeleteCommand({
+        TableName: process.env['TABLA_EVENTOS'],
+        Key: { eventoId },
+        ConditionExpression: 'attribute_exists(eventoId)',
+      }),
+    );
+  } catch (error) {
+    if (esErrorCondicionFallida(error)) {
+      return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+    }
+    throw error;
+  }
+
+  return { statusCode: 204 };
+}
+
+/**
+ * `GET/POST /api/eventos`, `PUT/DELETE /api/eventos/:eventoId`,
  * `POST /api/eventos/:eventoId/activos/url-carga` — CRUD de `agora-eventos`,
  * exclusivo de `administrador` (tech-specs.md §5.1, TODO.md Tarea 1).
  */
@@ -436,6 +464,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (
         return await crearEvento(evento);
       case 'PUT':
         return await actualizarEvento(eventoId, evento);
+      case 'DELETE':
+        return await eliminarEvento(eventoId);
       default:
         return respuestaJson(405, { mensaje: 'Método no soportado' });
     }
