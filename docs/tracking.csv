@@ -11,3 +11,5 @@ Backend,02/08/2026 14:50,02/08/2026 15:20,0:30:00,AI,Sonnet 5,Backend de autenti
 Frontend,02/08/2026 15:20,02/08/2026 15:58,0:38:00,AI,Sonnet 5,Frontend de autenticacion: ServicioAuth guardias login component y recalculo del TODO,Claude Code,mobile,high
 Backend,02/08/2026 20:10,02/08/2026 20:42,0:32:00,AI,Sonnet 5,Diagnostico y fix de dos bugs reales en staging: secreto FIREBASE_SERVICE_ACCOUNT_AGORA y bundle esbuild de usuariosMe,Claude Code,mobile,high
 Backend,05/08/2026 13:30,05/08/2026 14:44,1:14:00,AI,Sonnet 5,Gestion de usuarios: CRUD completo backend y frontend panel admin usuarios y fix de aislamiento de pruebas,Claude Code,mobile,high
+Backend,05/08/2026 15:00,05/08/2026 15:15,0:15:00,AI,Sonnet 5,Creacion del PR #10 de gestion de usuarios seguimiento hasta fusion y limpieza local,Claude Code,mobile,low
+Backend,06/08/2026 09:30,06/08/2026 11:20,1:50:00,AI,Sonnet 5,CRUD de eventos backend con URL prefirmada de S3 para activos EventosService paneles de gestion y edicion de eventos utilidad fecha Bogota y actualizacion del TODO,Claude Code,mobile,high
