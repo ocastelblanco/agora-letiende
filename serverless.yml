@@ -513,6 +513,23 @@ resources:
           ServerSideEncryptionConfiguration:
             - ServerSideEncryptionByDefault:
                 SSEAlgorithm: AES256
+        # Sin esto, la subida directa del navegador con la URL prefirmada
+        # (server/api/handlers/eventos.ts, generarUrlCargaActivo) falla en
+        # el preflight (OPTIONS) del propio navegador antes de llegar a S3
+        # — bug real encontrado en staging (MEMORY.md §7): cualquier imagen
+        # fallaba al subir, sin relación con su tamaño o formato.
+        # `AllowedOrigins: '*'` es aceptable aquí porque CORS solo controla
+        # qué origen puede *leer la respuesta* de la petición desde el
+        # navegador; la autorización real de la escritura la da la firma de
+        # la URL prefirmada (de vida corta, ligada a una key exacta), no el
+        # origen — mismo motivo por el que no hace falta acotarlo a un
+        # dominio fijo que además cambiaría con cada stage.
+        CorsConfiguration:
+          CorsRules:
+            - AllowedMethods: [PUT]
+              AllowedOrigins: ['*']
+              AllowedHeaders: ['*']
+              MaxAge: 3000
 
   Outputs:
     # Fuente confiable de la URL del endpoint para el smoke test de CI

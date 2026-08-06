@@ -1,7 +1,7 @@
 <div class="min-h-screen bg-surface px-4 py-8">
   <div class="mx-auto max-w-2xl">
     <h1 class="mb-6 text-2xl font-bold text-primary">
-      {{ modoCrear ? 'Crear evento' : 'Editar evento' }}
+      {{ modoCrear() ? 'Crear evento' : 'Editar evento' }}
     </h1>
 
     @if (cargando()) {
@@ -76,7 +76,7 @@
             formControlName="sillasTotales"
             class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
           />
-          @if (!modoCrear) {
+          @if (!modoCrear()) {
             <p class="mt-1 text-xs text-primary/60">
               El aforo no se edita aquí — todavía no existe el motor de aforo.
             </p>
@@ -123,7 +123,7 @@
           />
         </div>
 
-        @if (!modoCrear) {
+        @if (!modoCrear()) {
           <div>
             <label for="estado" class="mb-1 block text-sm font-semibold text-primary">Estado</label>
             <select
@@ -217,11 +217,21 @@
                 }
               </label>
               <input
+                #inputImagen
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
+                class="hidden"
                 [disabled]="subiendoImagen()"
                 (change)="subirImagen($event, 'imagen')"
               />
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="subiendoImagen()"
+                (click)="inputImagen.click()"
+              >
+                {{ subiendoImagen() ? 'Subiendo…' : 'Seleccionar imagen' }}
+              </button>
             </div>
             <div>
               <label class="mb-1 block text-xs text-primary/60">
@@ -231,11 +241,21 @@
                 }
               </label>
               <input
+                #inputLogotipo
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
+                class="hidden"
                 [disabled]="subiendoLogotipo()"
                 (change)="subirImagen($event, 'logotipo')"
               />
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="subiendoLogotipo()"
+                (click)="inputLogotipo.click()"
+              >
+                {{ subiendoLogotipo() ? 'Subiendo…' : 'Seleccionar logotipo' }}
+              </button>
             </div>
           }
         </div>
@@ -245,7 +265,7 @@
           [disabled]="guardando()"
           class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {{ guardando() ? 'Guardando…' : modoCrear ? 'Crear evento' : 'Guardar cambios' }}
+          {{ guardando() ? 'Guardando…' : modoCrear() ? 'Crear evento' : 'Guardar cambios' }}
         </button>
       </form>
     }

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { EventosService } from '../../../core/api/eventos.service';
 import type { Evento } from '../../../core/models/evento.model';
@@ -28,7 +28,6 @@ const eventoExistente: Evento = {
 };
 
 function configurarPrueba(opciones: {
-  id: string;
   eventos?: Evento[];
   crearEventoMock?: ReturnType<typeof vi.fn>;
   actualizarEventoMock?: ReturnType<typeof vi.fn>;
@@ -40,10 +39,6 @@ function configurarPrueba(opciones: {
     imports: [NoopAnimationsModule],
     providers: [
       provideRouter([]),
-      {
-        provide: ActivatedRoute,
-        useValue: { snapshot: { paramMap: convertToParamMap({ id: opciones.id }) } },
-      },
       {
         provide: EventosService,
         useValue: {
@@ -65,17 +60,22 @@ function configurarPrueba(opciones: {
 
   const fixture: ComponentFixture<EditarEventoComponent> =
     TestBed.createComponent(EditarEventoComponent);
-  fixture.detectChanges();
 
   return { fixture, cargarEventosMock, navigateMock, snackBarOpenMock };
+}
+
+async function activarConId(fixture: ComponentFixture<EditarEventoComponent>, id: string) {
+  fixture.componentRef.setInput('id', id);
+  fixture.detectChanges();
+  await fixture.whenStable();
 }
 
 describe('EditarEventoComponent', () => {
   describe('modo crear (id = "nuevo")', () => {
     it('no carga eventos existentes y no permite subir activos todavía', async () => {
-      const { fixture, cargarEventosMock } = configurarPrueba({ id: 'nuevo' });
+      const { fixture, cargarEventosMock } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
       const componente = fixture.componentInstance;
-      await fixture.whenStable();
 
       expect(cargarEventosMock).not.toHaveBeenCalled();
       expect(componente['cargando']()).toBe(false);
@@ -84,7 +84,8 @@ describe('EditarEventoComponent', () => {
 
     it('guardar() no llama a la API si el formulario es inválido', async () => {
       const crearEventoMock = vi.fn();
-      const { fixture } = configurarPrueba({ id: 'nuevo', crearEventoMock });
+      const { fixture } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
       const componente = fixture.componentInstance;
 
       componente['formulario'].patchValue({ nombre: '', slug: '' });
@@ -95,10 +96,8 @@ describe('EditarEventoComponent', () => {
 
     it('guardar() crea el evento y navega a la ruta de edición cuando la API responde éxito', async () => {
       const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
-      const { fixture, navigateMock, snackBarOpenMock } = configurarPrueba({
-        id: 'nuevo',
-        crearEventoMock,
-      });
+      const { fixture, navigateMock, snackBarOpenMock } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
       const componente = fixture.componentInstance;
 
       componente['formulario'].patchValue({
@@ -126,12 +125,26 @@ describe('EditarEventoComponent', () => {
         duration: 4000,
       });
     });
+
+    it('regresión: si el router reutiliza la instancia y el id pasa de "nuevo" al eventoId real, entra en modo edición en vez de quedar congelada en modo crear', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+      expect(componente['modoCrear']()).toBe(true);
+
+      await activarConId(fixture, 'e1');
+
+      expect(componente['modoCrear']()).toBe(false);
+      expect(componente['eventoId']()).toBe('e1');
+      expect(componente['formulario'].controls.slug.disabled).toBe(true);
+      expect(componente['formulario'].controls.nombre.value).toBe('Concierto de jazz');
+    });
   });
 
   describe('modo editar (id = eventoId real)', () => {
     it('precarga el formulario y deshabilita slug y sillasTotales', async () => {
-      const { fixture } = configurarPrueba({ id: 'e1', eventos: [eventoExistente] });
-      await fixture.whenStable();
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'e1');
       const componente = fixture.componentInstance;
 
       expect(componente['cargando']()).toBe(false);
@@ -144,8 +157,8 @@ describe('EditarEventoComponent', () => {
     });
 
     it('marca eventoNoEncontrado cuando el eventoId no está en el listado', async () => {
-      const { fixture } = configurarPrueba({ id: 'inexistente', eventos: [eventoExistente] });
-      await fixture.whenStable();
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'inexistente');
       const componente = fixture.componentInstance;
 
       expect(componente['eventoNoEncontrado']()).toBe(true);
@@ -156,11 +169,10 @@ describe('EditarEventoComponent', () => {
         .fn()
         .mockResolvedValue({ exito: true, evento: eventoExistente });
       const { fixture, snackBarOpenMock } = configurarPrueba({
-        id: 'e1',
         eventos: [eventoExistente],
         actualizarEventoMock,
       });
-      await fixture.whenStable();
+      await activarConId(fixture, 'e1');
       const componente = fixture.componentInstance;
 
       componente['formulario'].patchValue({ nombre: 'Nuevo nombre' });
@@ -185,12 +197,11 @@ describe('EditarEventoComponent', () => {
         .fn()
         .mockResolvedValue({ exito: true, evento: eventoExistente });
       const { fixture } = configurarPrueba({
-        id: 'e1',
         eventos: [eventoExistente],
         subirActivoMock,
         actualizarEventoMock,
       });
-      await fixture.whenStable();
+      await activarConId(fixture, 'e1');
       const componente = fixture.componentInstance;
 
       const archivo = new File(['contenido'], 'foto.png', { type: 'image/png' });

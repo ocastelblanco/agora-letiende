@@ -1,6 +1,6 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { EventosService } from '../../../core/api/eventos.service';
@@ -25,28 +25,40 @@ const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/web
  * crear). `sillasTotales` solo se fija al crear — la edición nunca la toca
  * (motor de aforo, roadmap #8, todavía no existe; ver
  * `server/api/handlers/eventos.ts`).
+ *
+ * El parámetro `id` se recibe como Signal input (`withComponentInputBinding()`
+ * en `app.config.ts`), no leyendo `ActivatedRoute.snapshot` una sola vez:
+ * al navegar de `/admin/eventos/nuevo` a `/admin/eventos/{eventoId}` tras
+ * crear un evento, Angular **reutiliza la misma instancia** de este
+ * componente (misma definición de ruta, solo cambia el parámetro) y nunca
+ * vuelve a ejecutar el constructor ni `ngOnInit` — un `snapshot` leído una
+ * vez quedaría "congelado" en `'nuevo'` para siempre, dejando el formulario
+ * en modo crear indefinidamente (bug real encontrado en staging: permitía
+ * crear el mismo evento varias veces con un segundo clic en "Crear
+ * evento"). El Signal input sí se actualiza en cada navegación aunque la
+ * instancia se reutilice, y el `effect()` de abajo reacciona a ese cambio.
  */
 @Component({
   selector: 'app-editar-evento',
   imports: [ReactiveFormsModule, MatButtonModule, PrecioPipe],
   templateUrl: './editar-evento.component.html',
 })
-export class EditarEventoComponent implements OnInit {
+export class EditarEventoComponent {
   private readonly fb = inject(FormBuilder);
   private readonly eventosService = inject(EventosService);
-  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
   protected readonly mediosPagoDisponibles = MEDIOS_PAGO;
 
-  private readonly idRuta = this.route.snapshot.paramMap.get('id');
-  protected readonly modoCrear = this.idRuta === 'nuevo';
+  /** Parámetro de ruta `id` — `'nuevo'` en modo crear, el `eventoId` real al editar. */
+  readonly id = input.required<string>();
+  protected readonly modoCrear = computed(() => this.id() === 'nuevo');
 
   /** `null` mientras se crea; el `eventoId` real una vez creado o al editar uno existente. */
-  protected readonly eventoId = signal<string | null>(this.modoCrear ? null : this.idRuta);
+  protected readonly eventoId = signal<string | null>(null);
 
-  protected readonly cargando = signal(!this.modoCrear);
+  protected readonly cargando = signal(true);
   protected readonly eventoNoEncontrado = signal(false);
   protected readonly guardando = signal(false);
   protected readonly subiendoImagen = signal(false);
@@ -100,13 +112,52 @@ export class EditarEventoComponent implements OnInit {
     }
   }
 
-  async ngOnInit(): Promise<void> {
-    if (this.modoCrear) {
-      return;
-    }
+  constructor() {
+    // Reacciona a cada cambio del Signal input `id` — incluida la reutilización
+    // de instancia descrita en el docstring de la clase, donde este es el
+    // único punto que se vuelve a ejecutar.
+    effect(() => {
+      const id = this.id();
 
+      if (id === 'nuevo') {
+        this.reiniciarFormularioVacio();
+        this.eventoId.set(null);
+        this.eventoNoEncontrado.set(false);
+        this.cargando.set(false);
+        return;
+      }
+
+      this.eventoId.set(id);
+      this.cargando.set(true);
+      this.eventoNoEncontrado.set(false);
+      void this.cargarEventoExistente(id);
+    });
+  }
+
+  private reiniciarFormularioVacio(): void {
+    this.formulario.reset({
+      slug: '',
+      nombre: '',
+      descripcion: '',
+      fechaHora: '',
+      sillasTotales: 100,
+      maxBoletasPorCompra: 4,
+      plazoComprobanteMinutos: 10,
+      productoresTexto: '',
+      estado: 'borrador',
+      mediosPago: { efectivo: true, transferencia: false, bold: false, bre_b: false },
+    });
+    this.formulario.controls.slug.enable();
+    this.formulario.controls.sillasTotales.enable();
+    this.etapas.clear();
+    this.etapas.push(this.crearGrupoEtapa());
+    this.imagenKey.set(undefined);
+    this.logotipoKey.set(undefined);
+  }
+
+  private async cargarEventoExistente(eventoId: string): Promise<void> {
     await this.eventosService.cargarEventos();
-    const evento = this.eventosService.eventos().find((e) => e.eventoId === this.idRuta);
+    const evento = this.eventosService.eventos().find((e) => e.eventoId === eventoId);
     if (!evento) {
       this.eventoNoEncontrado.set(true);
       this.cargando.set(false);
@@ -186,7 +237,7 @@ export class EditarEventoComponent implements OnInit {
     this.guardando.set(true);
 
     try {
-      if (this.modoCrear && this.eventoId() === null) {
+      if (this.modoCrear() && this.eventoId() === null) {
         const resultado = await this.eventosService.crearEvento({
           slug: valores.slug,
           nombre: valores.nombre,
