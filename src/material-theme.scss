@@ -172,6 +172,29 @@ html {
   --mat-sys-on-error: #ffffff;
   --mat-sys-surface: #fff8f1;
   --mat-sys-on-surface: #230c00;
+
+  // Bug real encontrado en vivo (07/08/2026, PR #13): el desplegable "Rol"
+  // de /admin/usuarios se veía transparente, mezclado con el resto del
+  // formulario — imposible seleccionar una opción. Causa verificada con el
+  // CSS generado real (no teoría): `mat.theme()` en esta versión de
+  // Angular Material (22.1.0) deja **vacíos** varios roles de superficie
+  // que derivan de la paleta neutra auto-generada
+  // (`--mat-sys-surface-container`, `-high`, `-low`, `-dim` — verificado
+  // buscando el texto exacto en el CSS compilado: `--mat-sys-surface-container: ;`,
+  // literalmente sin valor). `.mat-mdc-select-panel` usa
+  // `background-color: var(--mat-select-panel-background-color, var(--mat-sys-surface-container))`
+  // — con la variable vacía, cae al `transparent` inicial de
+  // `background-color`. Mismo patrón que la sobreescritura de arriba
+  // (M3 no siempre acierta, se fija a mano), pero aquí no es que el tono
+  // esté "mal", es que no existe ningún valor. Verificado en vivo con
+  // Chrome DevTools antes de fijar estos valores: al setear
+  // `--mat-sys-surface-container` manualmente, el panel recupera su fondo
+  // opaco de inmediato. Afecta a cualquier overlay MDC — mat-select,
+  // mat-menu, mat-autocomplete —, no solo a este formulario.
+  --mat-sys-surface-container-low: #f8efe6;
+  --mat-sys-surface-container: #f3e6d8;
+  --mat-sys-surface-container-high: #ede0d0;
+  --mat-sys-surface-dim: #e3d3c2;
 }
 
 body {

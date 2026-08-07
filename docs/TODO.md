@@ -2,40 +2,33 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (07/08/2026):** la Tarea 1 (Cartelera pública) se completó y se validó en vivo en staging por el usuario — ver `MEMORY.md` §2, §7 y §9 (incluye un bug real de empaquetado de `eventosPublicos` encontrado y corregido). Con eso cerrado, la Tarea 2 (Menú de navegación, roadmap #18) pasa a ser la Tarea 1 activa — su plan ya estaba aprobado desde la sesión anterior, sin cambios. El segundo slot lo vuelve a ocupar **Motor de aforo** (roadmap #8), que había quedado en el tope del backlog la noche del 06/08/2026 exactamente para este momento — su diseño ya estaba completo y no depende de nada más (`tech-specs.md` §5.4).
+**Prioridad de selección aplicada (07/08/2026):** la Tarea 1 (Menú de navegación) se completó y se validó en vivo en staging por el usuario — ver `MEMORY.md` §2, §7 y §9 (incluye dos bugs reales de CSS de Angular Material encontrados y corregidos, no relacionados con el menú en sí). Motor de aforo (Tarea 2, roadmap #8) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Menú de navegación lo ocupa **QR del evento para afiches** (roadmap #15) — es el único ítem del backlog que no depende de Motor de aforo (depende solo de #6, CRUD de eventos, ya completo) y estaba explícitamente marcado como promovible ("puede promoverse antes si conviene agruparlo con otra tarea de `eventos.ts`").
 
 ---
 
-## Tarea 1 — [FEATURE]: Menú de navegación para usuarios autenticados
+## Tarea 1 — [FEATURE]: QR del evento para afiches
 
-**Origen:** Reporte directo del usuario (06/08/2026 noche): "es un poco complicado navegar" — hoy `app.html` es solo `<router-outlet />`, sin ningún header/nav/shell en toda la app, y la única forma de moverse entre `/admin/eventos` y `/admin/usuarios` es escribir la URL a mano · `tech-specs.md` §11 ítem 18 · `CLAUDE.md` §5 (A01 — jerarquía de roles vía `cumpleRolMinimo`, nunca comparaciones ad hoc) · `PRD.md` (navegación por teclado y etiquetas semánticas)
+**Origen:** `PRD.md` línea 104 ("Al crear el evento, el sistema genera automáticamente un código QR con el enlace del evento, descargable en formato vectorial y de imagen, para imprimir en afiches y volantes"), CU-02/CU-03 (líneas 271-272) · `tech-specs.md` §11 ítem 15 (depende solo de #6, CRUD de eventos, ya completo) · `CLAUDE.md` §5 (A08 — el `slug` codificado en el QR se lee siempre de la base de datos, nunca de un payload)
 
-**Decisión de diseño clave (corrección explícita del usuario sobre el primer borrador de este plan):** la barra **siempre es visible**, con o sin sesión — nunca se oculta según `usuarioActual()` — porque debe ofrecer siempre una forma de llegar a `/login`. Ya autenticado, aparecen las secciones según rol, **incluyendo "Cartelera" (→ `/`)**, para que el personal autenticado también pueda saltar a ver la interfaz pública desde el mismo menú, no solo las secciones administrativas. Ver detalle completo de la decisión en `MEMORY.md` (sesión del 06/08/2026, noche).
+**Alcance:** el QR codifica la URL pública del evento (`https://agora.letiende.co/evento/{slug}`, la misma página que ya sirve Cartelera pública) — es un QR de *marketing* para imprimir, sin firma ni validación en puerta. No confundir con el QR de la boleta digital (roadmap #12, HMAC firmado, todavía no existe). Se genera **bajo demanda**, sin almacenarse en DynamoDB ni S3 — regenerarlo es barato y evita gestionar un activo más.
 
 **Archivos a crear:**
-- `src/app/shared/navegacion/secciones-navegacion.ts` — interfaz `SeccionNavegacion { etiqueta, ruta, rolMinimo: Rol }` + constante `SECCIONES_NAVEGACION`, única fuente de verdad consumida tanto por la barra (qué enlaces mostrar) como por `app.routes.ts` (qué `rolMinimo` exige cada guard). 3 secciones: `Cartelera` → `/` rol `portero` (el más bajo — visible para cualquier rol autenticado); `Eventos` → `/admin/eventos` rol `administrador`; `Usuarios` → `/admin/usuarios` rol `administrador`. **Actualización (07/08/2026): `/` ya existe** — Cartelera pública (roadmap #7) se completó y se fusiona en este mismo ciclo, así que el enlace "Cartelera" queda completamente funcional desde el primer momento, ya no es un enlace muerto.
-- `src/app/shared/navegacion/barra-navegacion.component.ts` (+ `.html`, `.spec.ts`) — standalone, sin `@Input()`, todo el estado sale de `ServicioAuth` inyectado.
-- `src/app/core/guardias/guardia-invitado.ts` (+ `.spec.ts`) — guard de `/login` que redirige a una sección accesible si ya hay sesión autorizada.
+- `server/api/services/qr.ts` (+ `.spec.ts`) — `generarQrSvg(url: string): Promise<string>`, `generarQrPng(url: string): Promise<Buffer>`, usando el paquete `qrcode` (nueva dependencia).
 
-**Qué hacer:**
-
-1. `BarraNavegacionComponent`: sin Angular Material nuevo (`MatToolbar`/`MatSidenav`/`MatMenu`/`MatIcon`) — la app solo usa `button`/`dialog`/`form-field`/`select`/`snack-bar`/`table` hoy, y `App` carga *eager* (no `loadComponent`), así que un módulo Material nuevo aquí pesaría en el bundle inicial de toda página, incluida la futura cartelera pública para visitantes anónimos. El drawer móvil (`< 768px`) se hace con `signal(false)` + `@if` + Tailwind, mismo patrón que `formularioVisible` de `GestionUsuariosComponent` — primer breakpoint `md:` real del proyecto.
-2. `secciones = computed(...)`: filtra `SECCIONES_NAVEGACION` con `cumpleRolMinimo(rol(), seccion.rolMinimo)`; `[]` si no hay rol.
-3. Sin sesión: logo (enlaza a `/`) + enlace "Ingresar" a `/login`, sin secciones ni avatar. Con sesión: logo + `secciones()` (con `routerLinkActive`/`ariaCurrentWhenActive="page"`) + avatar (`photoURL` con `referrerpolicy="no-referrer"`, fallback de inicial) + botón "Cerrar sesión" (`servicioAuth.cerrarSesion()` + `router.navigateByUrl('/login')` — primer consumidor real de `cerrarSesion()` en la app).
-4. `guardia-invitado.ts`: usa **`findLast`** (no `find`) sobre `SECCIONES_NAVEGACION` para elegir a dónde redirigir a un usuario ya autenticado que visita `/login` — con `find` normal, "Cartelera" (primera del arreglo, accesible para cualquier rol) siempre ganaría, rebotando incluso a un administrador hacia `/`, que todavía no existe. `findLast` prioriza la sección más específica que el rol cumple (administrador → `/admin/usuarios`).
-5. `app.routes.ts`: agregar `canActivate: [guardiaInvitado]` a `/login`; derivar `data.rolMinimo` de las 3 rutas `admin/*` desde `SECCIONES_NAVEGACION` (evita declarar el mismo rol dos veces).
-6. `app.html`/`app.ts`: `<app-barra-navegacion />` antes de `<router-outlet />`. `app.spec.ts` necesita los mismos `vi.mock('firebase/app'|'firebase/auth')` + `{ provide: ServicioAuth, useValue: {...} }` que ya usa `login.component.spec.ts`, porque `App` pasa a inyectar `ServicioAuth` transitivamente.
+**Archivos a modificar:**
+- `server/api/handlers/eventos.ts`: nueva subruta `GET /api/eventos/:eventoId/qr?formato=svg|png` (default `svg`), dentro del mismo handler que ya despacha por `rawPath`/método — exclusiva de `administrador` (ya pasa por `exigirRol` al inicio del handler, sin cambios ahí). Lee el evento real de DynamoDB para tomar su `slug` — el QR nunca codifica un slug u otro dato que llegue en la URL o el payload de la petición. Responde con `Content-Type: image/svg+xml` o `image/png` según `formato`, y `Content-Disposition: attachment; filename="qr-{slug}.{svg|png}"` para que el navegador lo descargue directo en vez de intentar mostrarlo inline.
+- `serverless.yml`: sin función nueva — vive en la Lambda `eventos` ya existente, mismo rol IAM (no necesita ningún permiso adicional, no toca DynamoDB más allá de la lectura que ya hacía, no toca S3). Si `qrcode` termina con un árbol de dependencias transitivas grande, se empaqueta igual que el resto de `eventos.ts` (ya pasa por esbuild en `server/bundle-lambdas.mjs` por depender de `firebase-admin` vía `exigirRol`) — no hace falta ningún cambio ahí, ya está cubierto.
+- `src/app/features/admin/gestion-eventos/editar-evento.component.ts`/`.html`: en modo edición (evento ya creado, mismo criterio que ya deshabilita `slug`/`sillasTotales` y habilita la subida de activos), agregar dos botones "Descargar QR (SVG)"/"Descargar QR (PNG)". Como es una descarga con autenticación, **no un `<a href>` plano** (no puede llevar el header `Authorization`) — usar `HttpClient` con `responseType: 'blob'`, más un `<a>` temporal + `URL.createObjectURL()` para disparar la descarga, mismo patrón que cualquier endpoint protegido que devuelve un archivo.
+- `src/app/core/api/eventos.service.ts` (+ `.spec.ts`): método nuevo `descargarQr(eventoId, formato)` que encapsula esa llamada `blob` + `Authorization` header (reutiliza `servicioAuth.obtenerIdToken()`, mismo patrón que el resto del servicio).
 
 **Definition of done:**
-- [ ] La barra se renderiza siempre (con y sin sesión), nunca condicionada a `usuarioActual()` a nivel de `@if` de todo el componente
-- [ ] Sin sesión: solo logo + "Ingresar"; con sesión: secciones filtradas por rol + avatar + "Cerrar sesión"
-- [ ] `administrador` ve "Cartelera", "Eventos" y "Usuarios"; `productor`/`portero` ven únicamente "Cartelera"
-- [ ] Ningún componente compara roles a mano — todo pasa por `cumpleRolMinimo`
-- [ ] `<img>` de `photoURL` lleva `referrerpolicy="no-referrer"`, con fallback de inicial si no hay foto
-- [ ] Sección activa marcada con `aria-current="page"`, foco visible con teclado (Tab)
-- [ ] `guardia-invitado.spec.ts` cubre: sin sesión → `true`; administrador → `createUrlTree(['/admin/usuarios'])`; portero → `createUrlTree(['/'])`
-- [ ] `npm test` en verde (incluye `app.spec.ts`, `barra-navegacion.component.spec.ts`, `guardia-invitado.spec.ts`)
-- [ ] `npm run build` sin errores (presupuesto de bundle y SSR)
+- [ ] El QR codifica exactamente `https://agora.letiende.co/evento/{slug}` del evento real, leído de DynamoDB — nunca un slug recibido en la petición
+- [ ] Ambos formatos (SVG y PNG) descargables desde `EditarEventoComponent` en modo edición
+- [ ] Endpoint exclusivo de `administrador` (reutiliza `exigirRol`, sin nueva lógica de autorización)
+- [ ] Sin almacenamiento persistente nuevo — ni tabla, ni atributo, ni bucket S3
+- [ ] `npm run test:api` y `npm run test` en verde
+- [ ] `npm run build` sin errores
+- [ ] Auditoría de costos sin coincidencias nuevas
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
@@ -82,9 +75,8 @@ Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). N
 4. Emisión de boletas con QR firmado
 5. Validación en puerta
 6. Venta en efectivo
-7. QR del evento para afiches (depende de CRUD de eventos, ya cerrado — puede promoverse antes si conviene agruparlo con otra tarea de `eventos.ts`)
-8. Panel de control básico
-9. Dominio personalizado `agora.letiende.co`
+7. Panel de control básico
+8. Dominio personalizado `agora.letiende.co`
 
 ---
 
