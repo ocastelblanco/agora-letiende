@@ -162,6 +162,34 @@ functions:
           path: /api/eventos/{eventoId}/activos/url-carga
           method: post
 
+  eventosPublicos:
+    handler: dist-server/api/handlers/eventos-publicos.handler
+    role: !GetAtt EventosPublicosLambdaRole.Arn
+    description: >-
+      Cartelera pública (GET /api/eventos-publicos,
+      /api/eventos-publicos/{slug}, /sitemap.xml), sin autenticación
+      (TODO.md Tarea 1).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
+    package:
+      # A diferencia de eventos/usuarios/usuariosMe, no depende de
+      # firebase-admin (nunca usa exigirRol) — empaquetado simple, igual que
+      # salud, sin bundle de esbuild.
+      patterns:
+        - '!**'
+        - 'dist-server/api/handlers/eventos-publicos.js'
+    events:
+      - httpApi:
+          path: /api/eventos-publicos
+          method: get
+      - httpApi:
+          path: /api/eventos-publicos/{slug}
+          method: get
+      - httpApi:
+          path: /sitemap.xml
+          method: get
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -326,6 +354,37 @@ resources:
                   Condition:
                     StringLike:
                       s3:prefix: 'eventos/*'
+
+    EventosPublicosLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-eventos-publicos-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): solo dynamodb:Query sobre
+          # agora-eventos (tabla + GSIs, el sufijo /index/* es obligatorio o
+          # Query sobre un GSI falla con AccessDenied) — sin Scan, sin
+          # acceso a agora-usuarios, sin s3:* (las URLs de imagen se
+          # calculan por convención de nombre, no requieren permiso S3: son
+          # públicas por bucket policy, no prefirmadas).
+          - PolicyName: agora-eventos-publicos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraEventos.Arn
+                    - !Sub '${AgoraEventos.Arn}/index/*'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role
@@ -515,17 +574,23 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:custom.nombresBuckets.activos}
-        # Imágenes de evento y QR: se sirven "vía CDN" en el diseño final
+        # Imágenes de evento y QR: en el diseño final se sirven "vía CDN"
         # (tech-specs.md §1), pero el CDN (CloudFront + dominio propio)
-        # todavía no existe (roadmap #17) — hasta entonces, Block Public
-        # Access igual que el bucket de comprobantes; la entrega pública se
-        # habilita con Origin Access Control cuando se monte CloudFront, no
-        # haciendo el bucket público directamente.
+        # todavía no existe (roadmap #17). Excepción deliberada tomada para
+        # la Tarea 1 (Cartelera pública): BlockPublicPolicy/RestrictPublicBuckets
+        # en false para permitir la BucketPolicy pública de abajo, acotada
+        # solo al prefijo `eventos/*` — las imágenes de evento necesitan una
+        # URL estable (no una prefirmada de 15 minutos) para servir como
+        # `og:image` y sobrevivir a la vista previa cacheada por WhatsApp.
+        # BlockPublicAcls/IgnorePublicAcls siguen en true: seguimos sin usar
+        # ACLs, solo una bucket policy. El resto del bucket (comprobantes no
+        # viven aquí, pero cualquier otro prefijo futuro) sigue privado por
+        # defecto. Esto se revisará cuando exista CloudFront/OAC (roadmap #17).
         PublicAccessBlockConfiguration:
           BlockPublicAcls: true
-          BlockPublicPolicy: true
+          BlockPublicPolicy: false
           IgnorePublicAcls: true
-          RestrictPublicBuckets: true
+          RestrictPublicBuckets: false
         BucketEncryption:
           ServerSideEncryptionConfiguration:
             - ServerSideEncryptionByDefault:
@@ -547,6 +612,25 @@ resources:
               AllowedOrigins: ['*']
               AllowedHeaders: ['*']
               MaxAge: 3000
+
+    # Excepción deliberada tomada para la Tarea 1 (Cartelera pública),
+    # distinta del resto de BucketActivos que sigue privado: lectura pública
+    # de solo lectura (s3:GetObject) acotada estrictamente al prefijo
+    # `eventos/*`, para que imagenUrl/logotipoUrl (calculadas en
+    # eventos-publicos.ts) sirvan como og:image con una URL estable — no una
+    # prefirmada de 15 minutos, que rompería la vista previa cacheada por
+    # WhatsApp. Se revisará cuando exista CloudFront/OAC (roadmap #17).
+    BucketActivosPolicyPublica:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref BucketActivos
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource: !Sub '${BucketActivos.Arn}/eventos/*'
 
   Outputs:
     # Fuente confiable de la URL del endpoint para el smoke test de CI
