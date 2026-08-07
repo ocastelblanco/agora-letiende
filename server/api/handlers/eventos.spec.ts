@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { exigirRolMock, sendMock, getSignedUrlMock } = vi.hoisted(() => ({
+const { exigirRolMock, sendMock, clienteS3SendMock, getSignedUrlMock } = vi.hoisted(() => ({
   exigirRolMock: vi.fn(),
   sendMock: vi.fn(),
+  clienteS3SendMock: vi.fn(),
   getSignedUrlMock: vi.fn(),
 }));
 
 vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
-vi.mock('../services/s3', () => ({ clienteS3: {} }));
+vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
 
 const { handler } = await import('./eventos');
@@ -71,6 +72,7 @@ describe('handler de /api/eventos', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosAdmin });
+    clienteS3SendMock.mockResolvedValue({ Contents: [] });
   });
 
   it('devuelve la respuesta de exigirRol tal cual cuando no está autorizado', async () => {
@@ -257,6 +259,44 @@ describe('handler de /api/eventos', () => {
 
       expect(respuesta.statusCode).toBe(400);
       expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('lista y borra los activos de S3 bajo el prefijo del evento', async () => {
+      sendMock.mockResolvedValue({});
+      clienteS3SendMock
+        .mockResolvedValueOnce({
+          Contents: [{ Key: 'eventos/e1/imagen-abc.png' }, { Key: 'eventos/e1/logotipo-def.png' }],
+        })
+        .mockResolvedValueOnce({});
+
+      await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(clienteS3SendMock).toHaveBeenCalledTimes(2);
+      const comandoListar = clienteS3SendMock.mock.calls[0][0];
+      expect(comandoListar.input.Prefix).toBe('eventos/e1/');
+      const comandoBorrar = clienteS3SendMock.mock.calls[1][0];
+      expect(comandoBorrar.input.Delete.Objects).toEqual([
+        { Key: 'eventos/e1/imagen-abc.png' },
+        { Key: 'eventos/e1/logotipo-def.png' },
+      ]);
+    });
+
+    it('no intenta borrar objetos de S3 si el evento no tenía ninguno', async () => {
+      sendMock.mockResolvedValue({});
+      clienteS3SendMock.mockResolvedValue({ Contents: [] });
+
+      await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(clienteS3SendMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('responde 204 aunque falle la limpieza de S3 (best-effort)', async () => {
+      sendMock.mockResolvedValue({});
+      clienteS3SendMock.mockRejectedValue(new Error('S3 no disponible'));
+
+      const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(respuesta.statusCode).toBe(204);
     });
   });
 

@@ -5,7 +5,7 @@ import type {
   APIGatewayProxyResultV2,
 } from 'aws-lambda';
 import { DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
@@ -13,7 +13,7 @@ import { exigirRol } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 
 export type EstadoEvento = 'borrador' | 'publicado' | 'agotado' | 'finalizado' | 'cancelado';
-export type MedioPago = 'bold' | 'bre_b' | 'efectivo' | 'transferencia';
+export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
 
 const ESTADOS_VALIDOS: readonly EstadoEvento[] = [
   'borrador',
@@ -22,7 +22,7 @@ const ESTADOS_VALIDOS: readonly EstadoEvento[] = [
   'finalizado',
   'cancelado',
 ];
-const MEDIOS_PAGO_VALIDOS: readonly MedioPago[] = ['bold', 'bre_b', 'efectivo', 'transferencia'];
+const MEDIOS_PAGO_VALIDOS: readonly MedioPago[] = ['bold', 'efectivo', 'transferencia'];
 
 // Comprobantes usan el mismo criterio (CLAUDE.md §5, A08): nunca SVG (vector
 // de XSS), el tipo se restringe por magic bytes en la carga, no aquí — esta
@@ -409,7 +409,38 @@ async function generarUrlCargaActivo(
 }
 
 /**
- * `DELETE /api/eventos/:eventoId` — elimina el evento. Sin lectura previa:
+ * Borra todos los objetos de S3 bajo `eventos/{eventoId}/` (imagen y
+ * logotipo). Best-effort: el evento ya se eliminó de DynamoDB en ese punto
+ * (lo que importa funcionalmente); si S3 falla, un objeto huérfano de unos
+ * KB no justifica que la eliminación completa del evento falle.
+ */
+async function eliminarActivosDelEvento(eventoId: string): Promise<void> {
+  try {
+    const listado = await clienteS3.send(
+      new ListObjectsV2Command({
+        Bucket: process.env['BUCKET_ACTIVOS'],
+        Prefix: `eventos/${eventoId}/`,
+      }),
+    );
+    const objetos = listado.Contents ?? [];
+    if (objetos.length === 0) {
+      return;
+    }
+
+    await clienteS3.send(
+      new DeleteObjectsCommand({
+        Bucket: process.env['BUCKET_ACTIVOS'],
+        Delete: { Objects: objetos.flatMap((o) => (o.Key ? [{ Key: o.Key }] : [])) },
+      }),
+    );
+  } catch {
+    // Best-effort — ver docstring de la función.
+  }
+}
+
+/**
+ * `DELETE /api/eventos/:eventoId` — elimina el evento y, mejor esfuerzo, sus
+ * activos en S3 (imagen/logotipo). Sin lectura previa del ítem de DynamoDB:
  * la `ConditionExpression` distingue 404 (no existe) de 204 (eliminado),
  * mismo criterio que `usuarios.ts`.
  */
@@ -432,6 +463,8 @@ async function eliminarEvento(eventoId: string | undefined): Promise<APIGatewayP
     }
     throw error;
   }
+
+  await eliminarActivosDelEvento(eventoId);
 
   return { statusCode: 204 };
 }

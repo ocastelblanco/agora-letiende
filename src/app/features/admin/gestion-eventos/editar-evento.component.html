@@ -15,24 +15,6 @@
         class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
       >
         <div>
-          <label for="slug" class="mb-1 block text-sm font-semibold text-primary">
-            Slug (URL pública)
-          </label>
-          <input
-            id="slug"
-            type="text"
-            formControlName="slug"
-            placeholder="concierto-de-jazz"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          />
-          @if (formulario.controls.slug.invalid && formulario.controls.slug.touched) {
-            <p class="mt-1 text-xs text-danger">
-              Solo minúsculas, números y guiones, ej. "concierto-de-jazz".
-            </p>
-          }
-        </div>
-
-        <div>
           <label for="nombre" class="mb-1 block text-sm font-semibold text-primary">Nombre</label>
           <input
             id="nombre"
@@ -64,6 +46,29 @@
             formControlName="fechaHora"
             class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
           />
+        </div>
+
+        <div>
+          <label for="slug" class="mb-1 block text-sm font-semibold text-primary">
+            Slug (URL pública)
+          </label>
+          <input
+            id="slug"
+            type="text"
+            formControlName="slug"
+            placeholder="concierto-de-jazz"
+            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          @if (formulario.controls.slug.invalid && formulario.controls.slug.touched) {
+            <p class="mt-1 text-xs text-danger">
+              Solo minúsculas, números y guiones, ej. "concierto-de-jazz".
+            </p>
+          }
+          @if (modoCrear()) {
+            <p class="mt-1 text-xs text-primary/60">
+              Se sugiere solo a partir del nombre y la fecha — puedes editarlo.
+            </p>
+          }
         </div>
 
         <div>

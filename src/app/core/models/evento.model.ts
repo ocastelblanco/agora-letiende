@@ -1,5 +1,5 @@
 export type EstadoEvento = 'borrador' | 'publicado' | 'agotado' | 'finalizado' | 'cancelado';
-export type MedioPago = 'bold' | 'bre_b' | 'efectivo' | 'transferencia';
+export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
 
 export interface EtapaBoleteria {
   etapaId: string;

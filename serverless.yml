@@ -301,10 +301,15 @@ resources:
                   Action:
                     - dynamodb:GetItem
                   Resource: !GetAtt AgoraUsuarios.Arn
-          # s3:PutObject acotado al prefijo de activos de eventos — nunca
-          # s3:* ni Resource: "*" (CLAUDE.md §5, A05/A10). La URL prefirmada
-          # es lo único que permite escribir en el bucket; el backend nunca
-          # descarga una URL arbitraria.
+          # s3:PutObject/DeleteObject acotados al prefijo de activos de
+          # eventos — nunca s3:* ni Resource: "*" (CLAUDE.md §5, A05/A10).
+          # La URL prefirmada es lo único que permite escribir en el bucket;
+          # el backend nunca descarga una URL arbitraria. DeleteObject es
+          # para limpiar imagen/logotipo al eliminar un evento
+          # (eliminarActivosDelEvento en eventos.ts); ListBucket es aparte
+          # porque actúa sobre el bucket, no sobre un objeto — se acota con
+          # una condición al mismo prefijo para que ni siquiera liste el
+          # resto del bucket.
           - PolicyName: agora-eventos-s3-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -312,7 +317,15 @@ resources:
                 - Effect: Allow
                   Action:
                     - s3:PutObject
+                    - s3:DeleteObject
                   Resource: !Sub '${BucketActivos.Arn}/eventos/*'
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: !GetAtt BucketActivos.Arn
+                  Condition:
+                    StringLike:
+                      s3:prefix: 'eventos/*'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role

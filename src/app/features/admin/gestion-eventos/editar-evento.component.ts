@@ -1,18 +1,23 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { merge } from 'rxjs';
 import { EventosService } from '../../../core/api/eventos.service';
 import { DatosEtapaBoleteria, Evento, MedioPago } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
 import { desdeInputBogota, paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
+import { slugificar } from '../../../shared/utilidades/slugificar';
 
+// Bre-B no es un medio de pago aparte: es una transferencia entre cuentas
+// de otras entidades financieras, así que queda dentro de "Transferencia"
+// (a diferencia del QR de Bre-B como flujo propio, roadmap v2).
 const MEDIOS_PAGO: readonly { valor: MedioPago; etiqueta: string }[] = [
   { valor: 'efectivo', etiqueta: 'Efectivo' },
   { valor: 'transferencia', etiqueta: 'Transferencia' },
   { valor: 'bold', etiqueta: 'Bold' },
-  { valor: 'bre_b', etiqueta: 'Bre-B' },
 ];
 
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -105,7 +110,6 @@ export class EditarEventoComponent {
       efectivo: [true],
       transferencia: [false],
       bold: [false],
-      bre_b: [false],
     }),
     etapas: this.fb.nonNullable.array<
       ReturnType<typeof this.crearGrupoEtapa>
@@ -123,6 +127,15 @@ export class EditarEventoComponent {
   protected get etapas() {
     return this.formulario.controls.etapas;
   }
+
+  /**
+   * `true` en cuanto el administrador edita el campo `slug` a mano — a
+   * partir de ahí, `actualizarSlugAutomatico()` deja de sobrescribirlo. Se
+   * detecta mediante `slug.valueChanges`, que solo emite ante una escritura
+   * real del usuario: el autocompletado usa `setValue(..., { emitEvent: false })`
+   * a propósito para no disparar esta misma bandera.
+   */
+  private slugTocadoManualmente = false;
 
   protected agregarEtapa(): void {
     this.etapas.push(this.crearGrupoEtapa());
@@ -165,6 +178,42 @@ export class EditarEventoComponent {
       this.eventoNoEncontrado.set(false);
       void this.cargarEventoExistente(id);
     });
+
+    // El slug se sugiere solo, a partir de nombre + fecha, mientras el
+    // administrador no lo haya tocado a mano — ver docstring de
+    // `slugTocadoManualmente`.
+    this.formulario.controls.slug.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.slugTocadoManualmente = true;
+    });
+    merge(
+      this.formulario.controls.nombre.valueChanges,
+      this.formulario.controls.fechaHora.valueChanges,
+    )
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.actualizarSlugAutomatico());
+  }
+
+  /**
+   * Regenera `slug` a partir de `nombre` + la fecha (ej. "Noche de engaños
+   * y karaoke" + 21/08/2026 → "noche-de-enganos-y-karaoke-2026-08-21").
+   * Solo mientras se crea (nunca en edición, donde `slug` ya está
+   * deshabilitado) y solo si el administrador no lo editó él mismo todavía.
+   */
+  private actualizarSlugAutomatico(): void {
+    if (!this.modoCrear() || this.slugTocadoManualmente) {
+      return;
+    }
+
+    const nombre = this.formulario.controls.nombre.value;
+    if (!nombre.trim()) {
+      return;
+    }
+
+    const fechaHora = this.formulario.controls.fechaHora.value;
+    const fecha = fechaHora.includes('T') ? fechaHora.split('T')[0] : '';
+    const base = slugificar(nombre);
+    const slug = fecha ? `${base}-${fecha}` : base;
+    this.formulario.controls.slug.setValue(slug, { emitEvent: false });
   }
 
   private reiniciarFormularioVacio(): void {
@@ -178,7 +227,7 @@ export class EditarEventoComponent {
       plazoComprobanteMinutos: 10,
       productoresTexto: '',
       estado: 'borrador',
-      mediosPago: { efectivo: true, transferencia: false, bold: false, bre_b: false },
+      mediosPago: { efectivo: true, transferencia: false, bold: false },
     });
     this.formulario.controls.slug.enable();
     this.formulario.controls.sillasTotales.enable();
@@ -186,6 +235,10 @@ export class EditarEventoComponent {
     this.etapas.push(this.crearGrupoEtapa());
     this.imagenKey.set(undefined);
     this.logotipoKey.set(undefined);
+    // El propio reset() de arriba dispara slug.valueChanges (con slug en
+    // '') y marcaría slugTocadoManualmente = true — deshacerlo para que el
+    // autocompletado siga activo en este formulario recién reiniciado.
+    this.slugTocadoManualmente = false;
   }
 
   private async cargarEventoExistente(eventoId: string): Promise<void> {

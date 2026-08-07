@@ -259,7 +259,7 @@ export interface EtapaBoleteria {
   orden: number;
 }
 
-export type MedioPago = 'bold' | 'bre_b' | 'efectivo' | 'transferencia';
+export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
 
 export interface Evento {
   eventoId: string;           // Clave primaria (UUID)

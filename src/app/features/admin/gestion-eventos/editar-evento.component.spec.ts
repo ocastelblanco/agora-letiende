@@ -134,6 +134,31 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.slug.disabled).toBe(true);
     });
 
+    it('sugiere el slug a partir del nombre y la fecha mientras el administrador no lo edite', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['formulario'].controls.nombre.setValue('Noche de engaños y karaoke');
+      componente['formulario'].controls.fechaHora.setValue('2026-08-21T20:00');
+
+      expect(componente['formulario'].controls.slug.value).toBe(
+        'noche-de-enganos-y-karaoke-2026-08-21',
+      );
+    });
+
+    it('deja de sugerir el slug en cuanto el administrador lo edita a mano', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['formulario'].controls.nombre.setValue('Concierto de jazz');
+      componente['formulario'].controls.slug.setValue('mi-slug-elegido');
+      componente['formulario'].controls.nombre.setValue('Otro nombre distinto');
+
+      expect(componente['formulario'].controls.slug.value).toBe('mi-slug-elegido');
+    });
+
     it('regresión: si el router reutiliza la instancia y el id pasa de "nuevo" al eventoId real, entra en modo edición en vez de quedar congelada en modo crear', async () => {
       const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
       await activarConId(fixture, 'nuevo');
