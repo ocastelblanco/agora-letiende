@@ -25,3 +25,4 @@ Specs definition,06/08/2026 20:53,06/08/2026 21:07,0:14:00,AI,Sonnet 5,Registro 
 Backend,06/08/2026 21:07,06/08/2026 21:40,0:33:00,AI,Sonnet 5,Tarea 1 cartelera publica rama nueva commit de docs y delegacion de implementacion PR 12,Claude Code,cli,high
 Backend,07/08/2026 08:15,07/08/2026 08:44,0:29:00,AI,Sonnet 5,Diagnostico y fix de bug real en staging empaquetado de eventosPublicos sin aws-sdk incluido,Claude Code,cli,high
 Specs definition,07/08/2026 08:44,07/08/2026 08:52,0:08:00,AI,Sonnet 5,Recalculo del motor JIT cierre de Tarea 1 cartelera y restauracion de motor de aforo,Claude Code,cli,medium
+Frontend,07/08/2026 08:52,07/08/2026 10:01,1:09:00,AI,Sonnet 5,Limpieza de main tras merge del PR 12 y delegacion del menu de navegacion,Claude Code,cli,high
