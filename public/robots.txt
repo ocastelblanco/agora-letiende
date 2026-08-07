@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /admin
+Disallow: /panel
+Disallow: /aprobar
+Disallow: /compra
+Disallow: /boleta
+
+Sitemap: https://agora.letiende.co/sitemap.xml

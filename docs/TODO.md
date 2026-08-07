@@ -2,42 +2,40 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (06/08/2026):** la Tarea 1 (CRUD de eventos) se completó — ver `MEMORY.md` §2, §4, §7 y §9. Con eso cerrado, los ítems #7 (Cartelera pública) y #8 (Motor de aforo) del roadmap técnico (`tech-specs.md` §11) dejan de depender de nada más y son **independientes entre sí** — ambos ocupan los dos slots activos.
+**Prioridad de selección aplicada (07/08/2026):** la Tarea 1 (Cartelera pública) se completó y se validó en vivo en staging por el usuario — ver `MEMORY.md` §2, §7 y §9 (incluye un bug real de empaquetado de `eventosPublicos` encontrado y corregido). Con eso cerrado, la Tarea 2 (Menú de navegación, roadmap #18) pasa a ser la Tarea 1 activa — su plan ya estaba aprobado desde la sesión anterior, sin cambios. El segundo slot lo vuelve a ocupar **Motor de aforo** (roadmap #8), que había quedado en el tope del backlog la noche del 06/08/2026 exactamente para este momento — su diseño ya estaba completo y no depende de nada más (`tech-specs.md` §5.4).
 
 ---
 
-## Tarea 1 — [FEATURE]: Cartelera pública y página de evento
+## Tarea 1 — [FEATURE]: Menú de navegación para usuarios autenticados
 
-**Origen:** `PRD.md` §6 (v1), §8 (Open Graph) · `tech-specs.md` §11 ítem 7, §4.1, §4.2, §4.5, §5.1 · `CLAUDE.md` §5 (A03, A05)
+**Origen:** Reporte directo del usuario (06/08/2026 noche): "es un poco complicado navegar" — hoy `app.html` es solo `<router-outlet />`, sin ningún header/nav/shell en toda la app, y la única forma de moverse entre `/admin/eventos` y `/admin/usuarios` es escribir la URL a mano · `tech-specs.md` §11 ítem 18 · `CLAUDE.md` §5 (A01 — jerarquía de roles vía `cumpleRolMinimo`, nunca comparaciones ad hoc) · `PRD.md` (navegación por teclado y etiquetas semánticas)
+
+**Decisión de diseño clave (corrección explícita del usuario sobre el primer borrador de este plan):** la barra **siempre es visible**, con o sin sesión — nunca se oculta según `usuarioActual()` — porque debe ofrecer siempre una forma de llegar a `/login`. Ya autenticado, aparecen las secciones según rol, **incluyendo "Cartelera" (→ `/`)**, para que el personal autenticado también pueda saltar a ver la interfaz pública desde el mismo menú, no solo las secciones administrativas. Ver detalle completo de la decisión en `MEMORY.md` (sesión del 06/08/2026, noche).
 
 **Archivos a crear:**
-- `server/api/handlers/eventos-publicos.ts` (+ `.spec.ts`) — `GET /api/eventos-publicos`, `GET /api/eventos-publicos/:slug`
-- `src/app/core/api/eventos-publicos.service.ts` (+ `.spec.ts`)
-- `src/app/features/cartelera/cartelera.component.ts` — ruta `/`
-- `src/app/features/evento/detalle-evento.component.ts` — ruta `/evento/:slug`
-- `public/robots.txt`
-- Ruta/handler de `sitemap.xml` dinámico (evaluar si vive en `eventos-publicos.ts` o en su propio handler — decidir al implementar)
+- `src/app/shared/navegacion/secciones-navegacion.ts` — interfaz `SeccionNavegacion { etiqueta, ruta, rolMinimo: Rol }` + constante `SECCIONES_NAVEGACION`, única fuente de verdad consumida tanto por la barra (qué enlaces mostrar) como por `app.routes.ts` (qué `rolMinimo` exige cada guard). 3 secciones: `Cartelera` → `/` rol `portero` (el más bajo — visible para cualquier rol autenticado); `Eventos` → `/admin/eventos` rol `administrador`; `Usuarios` → `/admin/usuarios` rol `administrador`. **Actualización (07/08/2026): `/` ya existe** — Cartelera pública (roadmap #7) se completó y se fusiona en este mismo ciclo, así que el enlace "Cartelera" queda completamente funcional desde el primer momento, ya no es un enlace muerto.
+- `src/app/shared/navegacion/barra-navegacion.component.ts` (+ `.html`, `.spec.ts`) — standalone, sin `@Input()`, todo el estado sale de `ServicioAuth` inyectado.
+- `src/app/core/guardias/guardia-invitado.ts` (+ `.spec.ts`) — guard de `/login` que redirige a una sección accesible si ya hay sesión autorizada.
 
 **Qué hacer:**
 
-1. `eventos-publicos.ts`: sin autenticación (público), **nunca** usa `exigirRol` ni toca `agora-usuarios`. `GET` lista solo eventos con `estado` en `['publicado', 'agotado']` — usar el GSI `estado-fechaHora-index` con `Query` (uno por cada estado visible), nunca `Scan` de toda la tabla. `GET /:slug` usa el GSI `slug-index` con `Query` (no `Scan`), y responde 404 si el evento no existe o su estado no es público. **Ambos excluyen `productores`** de la respuesta (son correos de personal interno, no dato público) — filtrar el ítem antes de responder, nunca confiar en que el frontend simplemente no los muestre.
-2. `detalle-evento.component.ts`: `title`/`description`/Open Graph/Twitter Card completos vía el servicio `Meta` de Angular, más JSON-LD `schema.org/Event` inyectado en el `<head>` (`tech-specs.md` §4.5) — la vista previa de Open Graph es el canal real de difusión por WhatsApp/Instagram (`PRD.md` §8), así que se verifica por inspección del HTML servido por SSR real (`curl`), no solo visualmente en el navegador.
-3. `public/robots.txt`: bloquea `/admin`, `/panel`, `/aprobar`, `/compra`, `/boleta` (rutas administrativas o de enlace mágico, nunca deben indexarse).
-4. `sitemap.xml`: generado dinámicamente a partir de los eventos `publicado` (mismo criterio de visibilidad que el endpoint público).
-5. `serverless.yml`: función `eventosPublicos` con rol IAM de **solo lectura** (`dynamodb:Query`) sobre `agora-eventos` exclusivamente — sin `Scan`, sin acceso a `agora-usuarios` (no hay `exigirRol` que lo necesite), sin `s3:*`. CORS abierto en estos endpoints está permitido (`CLAUDE.md` §5, A05: lectura pública, no mutación ni dato personal).
-6. `app.routes.ts`: `/` y `/evento/:slug`. `app.routes.server.ts`: **`RenderMode.Server`**, no `Client` ni `Prerender` — el contenido cambia con cada evento nuevo/editado (nada que prerenderizar de antemano) y los rastreadores de Open Graph/WhatsApp necesitan HTML ya resuelto en la primera respuesta, no una app que hidrate en el navegador (a diferencia de `/admin/*`, que sí puede ser `Client` porque no depende de SEO ni de rastreadores).
+1. `BarraNavegacionComponent`: sin Angular Material nuevo (`MatToolbar`/`MatSidenav`/`MatMenu`/`MatIcon`) — la app solo usa `button`/`dialog`/`form-field`/`select`/`snack-bar`/`table` hoy, y `App` carga *eager* (no `loadComponent`), así que un módulo Material nuevo aquí pesaría en el bundle inicial de toda página, incluida la futura cartelera pública para visitantes anónimos. El drawer móvil (`< 768px`) se hace con `signal(false)` + `@if` + Tailwind, mismo patrón que `formularioVisible` de `GestionUsuariosComponent` — primer breakpoint `md:` real del proyecto.
+2. `secciones = computed(...)`: filtra `SECCIONES_NAVEGACION` con `cumpleRolMinimo(rol(), seccion.rolMinimo)`; `[]` si no hay rol.
+3. Sin sesión: logo (enlaza a `/`) + enlace "Ingresar" a `/login`, sin secciones ni avatar. Con sesión: logo + `secciones()` (con `routerLinkActive`/`ariaCurrentWhenActive="page"`) + avatar (`photoURL` con `referrerpolicy="no-referrer"`, fallback de inicial) + botón "Cerrar sesión" (`servicioAuth.cerrarSesion()` + `router.navigateByUrl('/login')` — primer consumidor real de `cerrarSesion()` en la app).
+4. `guardia-invitado.ts`: usa **`findLast`** (no `find`) sobre `SECCIONES_NAVEGACION` para elegir a dónde redirigir a un usuario ya autenticado que visita `/login` — con `find` normal, "Cartelera" (primera del arreglo, accesible para cualquier rol) siempre ganaría, rebotando incluso a un administrador hacia `/`, que todavía no existe. `findLast` prioriza la sección más específica que el rol cumple (administrador → `/admin/usuarios`).
+5. `app.routes.ts`: agregar `canActivate: [guardiaInvitado]` a `/login`; derivar `data.rolMinimo` de las 3 rutas `admin/*` desde `SECCIONES_NAVEGACION` (evita declarar el mismo rol dos veces).
+6. `app.html`/`app.ts`: `<app-barra-navegacion />` antes de `<router-outlet />`. `app.spec.ts` necesita los mismos `vi.mock('firebase/app'|'firebase/auth')` + `{ provide: ServicioAuth, useValue: {...} }` que ya usa `login.component.spec.ts`, porque `App` pasa a inyectar `ServicioAuth` transitivamente.
 
 **Definition of done:**
-- [ ] `GET /api/eventos-publicos` y `GET /api/eventos-publicos/:slug` nunca exponen `productores`
-- [ ] Ambos endpoints usan `Query` sobre un GSI, nunca `Scan` de toda la tabla
-- [ ] Un evento en `borrador`, `finalizado` o `cancelado` no aparece en la lista pública ni resuelve por slug (404)
-- [ ] `/evento/:slug` renderiza Open Graph + Twitter Card + JSON-LD verificable por `curl` contra el HTML de SSR real
-- [ ] `robots.txt` bloquea `/admin`, `/panel`, `/aprobar`, `/compra`, `/boleta`
-- [ ] Rol IAM de `eventosPublicos` limitado a `Query` sobre `agora-eventos`, sin `Scan` ni acceso a otra tabla
-- [ ] `/` y `/evento/:slug` en `RenderMode.Server`
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
+- [ ] La barra se renderiza siempre (con y sin sesión), nunca condicionada a `usuarioActual()` a nivel de `@if` de todo el componente
+- [ ] Sin sesión: solo logo + "Ingresar"; con sesión: secciones filtradas por rol + avatar + "Cerrar sesión"
+- [ ] `administrador` ve "Cartelera", "Eventos" y "Usuarios"; `productor`/`portero` ven únicamente "Cartelera"
+- [ ] Ningún componente compara roles a mano — todo pasa por `cumpleRolMinimo`
+- [ ] `<img>` de `photoURL` lleva `referrerpolicy="no-referrer"`, con fallback de inicial si no hay foto
+- [ ] Sección activa marcada con `aria-current="page"`, foco visible con teclado (Tab)
+- [ ] `guardia-invitado.spec.ts` cubre: sin sesión → `true`; administrador → `createUrlTree(['/admin/usuarios'])`; portero → `createUrlTree(['/'])`
+- [ ] `npm test` en verde (incluye `app.spec.ts`, `barra-navegacion.component.spec.ts`, `guardia-invitado.spec.ts`)
+- [ ] `npm run build` sin errores (presupuesto de bundle y SSR)
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
@@ -59,13 +57,14 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
    - `confirmarSillas`: `SET sillasReservadas = sillasReservadas - :n` con `ConditionExpression: sillasReservadas >= :n`. Si el aforo llega a 0, además transiciona `estado` a `agotado` en la misma escritura.
    - `liberarSillas`: `SET sillasDisponibles = sillasDisponibles + :n, sillasReservadas = sillasReservadas - :n` con `ConditionExpression: sillasReservadas >= :n` — la condición sobre `sillasReservadas` (no un simple "siempre sumar") es lo que hace la operación segura ante un evento de Stream entregado dos veces (*at-least-once*, nunca *exactly-once*).
 2. `liberar-reservas.ts`: Lambda con `streamEnabled` sobre el Stream de `agora-compras`, filtra únicamente eventos `REMOVE` (borrado por TTL) cuyo `OLD image` tenía un estado que todavía retenía aforo reservado (`iniciada`, `esperando_comprobante`, `en_revision` — no `aprobada`/`rechazada`/`expirada`, que ya liberaron o confirmaron su aforo por otro camino), y llama `liberarSillas(eventoId, cantidad)`. Idempotente por diseño gracias a la `ConditionExpression` de `liberarSillas` — un reintento del mismo registro de Stream no vuelve a restar de `sillasReservadas` por debajo de lo real porque la condición fallaría.
-3. `serverless.yml`: función `liberarReservas` con evento `stream` apuntando al `StreamArn` de `AgoraCompras` (`BatchSize` pequeño, ej. 10, y `StartingPosition: LATEST`), rol IAM propio (`dynamodb:UpdateItem` sobre `agora-eventos` exclusivamente — sin acceso a `agora-compras` más allá de lo que el trigger de Streams ya provee, sin `agora-usuarios`, sin `exigirRol`: esta Lambda nunca la invoca un humano). Agregar a `server/bundle-lambdas.mjs` **solo si** termina dependiendo de algo con árbol de dependencias pesado — de lo contrario, empaquetar como `salud` (patrón simple, sin bundle).
+3. `serverless.yml`: función `liberarReservas` con evento `stream` apuntando al `StreamArn` de `AgoraCompras` (`BatchSize` pequeño, ej. 10, y `StartingPosition: LATEST`), rol IAM propio (`dynamodb:UpdateItem` sobre `agora-eventos` exclusivamente — sin acceso a `agora-compras` más allá de lo que el trigger de Streams ya provee, sin `agora-usuarios`, sin `exigirRol`: esta Lambda nunca la invoca un humano). **Empaquetar siempre con esbuild (`server/bundle-lambdas.mjs`), nunca "simple" como `salud`** — `aforo.ts` importa `documentoDynamoDB` (`@aws-sdk/lib-dynamodb`), y eso ya es suficiente para que la Lambda se caiga al arrancar si el paquete excluye `node_modules` (bug real encontrado en staging el 07/08/2026 con `eventosPublicos`, mismo motivo exacto — ver `MEMORY.md` §7). El criterio nunca fue "¿usa `firebase-admin`?", es "¿importa algo de `node_modules` en tiempo de ejecución?".
 
 **Definition of done:**
 - [ ] Las tres funciones de `aforo.ts` nunca leen el ítem del evento antes de escribir — toda modificación de aforo es una única escritura condicional
 - [ ] `liberarSillas` es segura ante un mismo registro de Stream entregado más de una vez (probado explícitamente con una prueba que invoca la función dos veces con el mismo `eventoId`/`cantidad` y verifica que la segunda falla o no duplica el efecto)
 - [ ] `liberar-reservas.ts` ignora eventos de Stream que no sean `REMOVE`, y los `REMOVE` cuyo estado previo ya no retenía aforo (`aprobada`/`rechazada`/`expirada`)
 - [ ] Rol IAM de `liberarReservas` limitado a `dynamodb:UpdateItem` sobre `agora-eventos`, sin comodines
+- [ ] `liberarReservas` empaquetada con esbuild (`server/bundle-lambdas.mjs`), no con `package.patterns` manual
 - [ ] `npm run test:api` en verde (con los registros de Stream simulados vía mocks, sin depender de Streams reales)
 - [ ] `npm run build:api` sin errores
 - [ ] Auditoría de costos sin coincidencias nuevas

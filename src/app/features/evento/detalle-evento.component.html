@@ -1,0 +1,41 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-3xl">
+    @if (cargando()) {
+      <p class="rounded-2xl bg-white p-4 text-sm text-primary/70 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        Cargando evento…
+      </p>
+    } @else if (noEncontrado()) {
+      <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <h1 class="mb-2 text-xl font-bold text-primary">Evento no encontrado</h1>
+        <p class="text-sm text-primary/70">Este evento no existe o ya no está disponible.</p>
+      </div>
+    } @else if (evento(); as detalleEvento) {
+      <div class="overflow-hidden rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        @if (detalleEvento.imagenUrl) {
+          <img
+            [src]="detalleEvento.imagenUrl"
+            [alt]="detalleEvento.nombre"
+            class="h-64 w-full object-cover"
+          />
+        }
+        <div class="p-6">
+          <h1 class="mb-2 text-2xl font-bold text-primary">{{ detalleEvento.nombre }}</h1>
+          <p class="mb-4 text-sm text-primary/70">{{ fechaLegible(detalleEvento.fechaHora) }}</p>
+          <p class="mb-6 whitespace-pre-line text-primary">{{ detalleEvento.descripcion }}</p>
+
+          @if (detalleEvento.etapas.length > 0) {
+            <h2 class="mb-2 text-lg font-semibold text-primary">Etapas de boletería</h2>
+            <ul class="divide-y divide-primary/10">
+              @for (etapa of detalleEvento.etapas; track etapa.etapaId) {
+                <li class="flex items-center justify-between py-2">
+                  <span class="text-primary">{{ etapa.nombre }}</span>
+                  <span class="font-semibold text-primary">{{ etapa.precio | precio }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

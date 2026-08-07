@@ -1,0 +1,33 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-5xl">
+    <h1 class="mb-2 text-2xl font-bold text-primary">Cartelera</h1>
+    <p class="mb-6 text-sm text-primary/70">Próximos eventos en el teatro de Le Tiende.</p>
+
+    @if (errorCarga()) {
+      <p class="rounded-2xl bg-white p-4 text-sm text-danger shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        No se pudieron cargar los eventos.
+      </p>
+    } @else if (eventos().length === 0) {
+      <p class="rounded-2xl bg-white p-4 text-sm text-primary/70 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        Todavía no hay eventos publicados.
+      </p>
+    } @else {
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        @for (evento of eventos(); track evento.eventoId) {
+          <a
+            [routerLink]="['/evento', evento.slug]"
+            class="block overflow-hidden rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)] transition-opacity hover:opacity-90"
+          >
+            @if (evento.imagenUrl) {
+              <img [src]="evento.imagenUrl" [alt]="evento.nombre" class="h-40 w-full object-cover" />
+            }
+            <div class="p-4">
+              <h2 class="text-lg font-semibold text-primary">{{ evento.nombre }}</h2>
+              <p class="mt-1 text-sm text-primary/70">{{ fechaLegible(evento.fechaHora) }}</p>
+            </div>
+          </a>
+        }
+      </div>
+    }
+  </div>
+</div>

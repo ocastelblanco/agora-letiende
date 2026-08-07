@@ -724,7 +724,8 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 15 | QR del evento para afiches | Generación SVG/PNG en `handlers/eventos.ts` | 6 |
 | 16 | Panel de control básico | `features/panel/`, `handlers/reportes.ts` | 13 |
 | 17 | Dominio personalizado | CloudFront + certificado ACM en `serverless.yml`, `NG_ALLOWED_HOSTS` | 2 |
-| 18 | **v2** — Bold | `handlers/bold-webhook.ts`, `services/bold.ts` | 12 |
-| 19 | **v2** — WhatsApp | `services/canal-whatsapp.ts` | 9 |
-| 20 | **v2** — Exportación XLSX/PDF | Ampliación de `handlers/reportes.ts` | 16 |
-| 21 | **v2** — Google Calendar | `services/google-calendar.ts` | 6 |
+| 18 | Menú de navegación para usuarios autenticados | `shared/navegacion/secciones-navegacion.ts`, `shared/navegacion/barra-navegacion.component.ts`, `core/guardias/guardia-invitado.ts` | 4 |
+| 19 | **v2** — Bold | `handlers/bold-webhook.ts`, `services/bold.ts` | 12 |
+| 20 | **v2** — WhatsApp | `services/canal-whatsapp.ts` | 9 |
+| 21 | **v2** — Exportación XLSX/PDF | Ampliación de `handlers/reportes.ts` | 16 |
+| 22 | **v2** — Google Calendar | `services/google-calendar.ts` | 6 |

@@ -3,6 +3,20 @@ import { guardiaRol } from './core/guardias/guardia-rol';
 
 export const routes: Routes = [
   {
+    path: '',
+    pathMatch: 'full',
+    loadComponent: () =>
+      import('./features/cartelera/cartelera.component').then((m) => m.CarteleraComponent),
+    title: 'Cartelera — Ágora',
+  },
+  {
+    path: 'evento/:slug',
+    loadComponent: () =>
+      import('./features/evento/detalle-evento.component').then((m) => m.DetalleEventoComponent),
+    // Sin `title` fijo aquí: DetalleEventoComponent lo establece dinámicamente
+    // con `Title.setTitle()` en cuanto carga el evento (ver su docstring).
+  },
+  {
     path: 'login',
     loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent),
     title: 'Ingresar — Ágora',

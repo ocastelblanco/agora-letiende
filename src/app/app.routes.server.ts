@@ -1,6 +1,20 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
 
 export const serverRoutes: ServerRoute[] = [
+  // Cartelera pública y detalle de evento: RenderMode.Server, no Client ni
+  // Prerender — el contenido cambia con cada evento nuevo/editado, y los
+  // rastreadores de Open Graph (WhatsApp/Instagram) necesitan HTML ya
+  // resuelto en la primera respuesta (tech-specs.md §4.5, TODO.md Tarea 1).
+  // Deben quedar declaradas explícitamente ANTES del wildcard '**' de abajo
+  // para no heredar por accidente su RenderMode.Prerender.
+  {
+    path: '',
+    renderMode: RenderMode.Server,
+  },
+  {
+    path: 'evento/:slug',
+    renderMode: RenderMode.Server,
+  },
   // La sesión de Firebase vive solo en el navegador (IndexedDB del SDK
   // cliente, sin cookie de sesión) — cualquier ruta protegida por
   // GuardiaAuth/GuardiaRol debe ser RenderMode.Client, nunca Server ni

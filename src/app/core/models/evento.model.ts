@@ -72,3 +72,34 @@ export interface DatosEditarEvento {
   imagenKey?: string;
   logotipoKey?: string;
 }
+
+/**
+ * Registro público de `agora-eventos` tal como lo devuelve
+ * `GET /api/eventos-publicos` y `GET /api/eventos-publicos/:slug`
+ * (server/api/handlers/eventos-publicos.ts, función `aVistaPublica`) —
+ * **sin `productores`** (correos de personal interno, nunca dato público,
+ * CLAUDE.md §5 A01) y con `imagenUrl`/`logotipoUrl` calculadas en el
+ * backend. Deliberadamente no reutiliza `Evento` completo: ese tipo
+ * mentiría sobre los campos realmente disponibles en el frontend público.
+ */
+export interface EventoPublico {
+  eventoId: string;
+  slug: string;
+  nombre: string;
+  descripcion: string;
+  imagenKey?: string;
+  logotipoKey?: string;
+  imagenUrl?: string;
+  logotipoUrl?: string;
+  fechaHora: string;
+  sillasTotales: number;
+  sillasDisponibles: number;
+  sillasReservadas: number;
+  etapas: EtapaBoleteria[];
+  maxBoletasPorCompra: number;
+  mediosPago: MedioPago[];
+  plazoComprobanteMinutos: number;
+  estado: EstadoEvento;
+  creadoEn: string;
+  actualizadoEn: string;
+}
