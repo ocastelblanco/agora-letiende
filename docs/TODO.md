@@ -2,34 +2,36 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (07/08/2026):** la Tarea 1 (Menú de navegación) se completó y se validó en vivo en staging por el usuario — ver `MEMORY.md` §2, §7 y §9 (incluye dos bugs reales de CSS de Angular Material encontrados y corregidos, no relacionados con el menú en sí). Motor de aforo (Tarea 2, roadmap #8) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Menú de navegación lo ocupa **QR del evento para afiches** (roadmap #15) — es el único ítem del backlog que no depende de Motor de aforo (depende solo de #6, CRUD de eventos, ya completo) y estaba explícitamente marcado como promovible ("puede promoverse antes si conviene agruparlo con otra tarea de `eventos.ts`").
+**Prioridad de selección aplicada (07/08/2026, noche):** la Tarea 1 (QR del evento para afiches) se completó y se probó de punta a punta (68 pruebas backend + 102 frontend), PR #14 abierto contra `main` — ver `MEMORY.md` §2 y §9. Motor de aforo (Tarea 2, roadmap #8) sigue activa sin cambios, todavía sin empezar. El slot que deja libre QR lo ocupa **Dominio personalizado `agora.letiende.co`** (roadmap #17) — es el único ítem del roadmap v1 que no depende de Motor de aforo (depende solo de #2, infraestructura base, ya completa desde el andamiaje inicial).
 
 ---
 
-## Tarea 1 — [FEATURE]: QR del evento para afiches
+## Tarea 1 — [FEATURE]: Dominio personalizado `agora.letiende.co`
 
-**Origen:** `PRD.md` línea 104 ("Al crear el evento, el sistema genera automáticamente un código QR con el enlace del evento, descargable en formato vectorial y de imagen, para imprimir en afiches y volantes"), CU-02/CU-03 (líneas 271-272) · `tech-specs.md` §11 ítem 15 (depende solo de #6, CRUD de eventos, ya completo) · `CLAUDE.md` §5 (A08 — el `slug` codificado en el QR se lee siempre de la base de datos, nunca de un payload)
+**Origen:** `tech-specs.md` §11 ítem 17 (depende solo de #2, infraestructura base, ya completa) · `tech-specs.md` §7.1 (diagrama de despliegue: CloudFront "opcional en v1, requerido para dominio propio") y §7.2 (tabla de entornos: `production` ya apunta a `https://agora.letiende.co`, todavía sin aprovisionar) · `CLAUDE.md` §7 (gotcha heredado de Babel: `NG_ALLOWED_HOSTS` debe configurarse junto con el dominio, no después de que producción falle)
 
-**Alcance:** el QR codifica la URL pública del evento (`https://agora.letiende.co/evento/{slug}`, la misma página que ya sirve Cartelera pública) — es un QR de *marketing* para imprimir, sin firma ni validación en puerta. No confundir con el QR de la boleta digital (roadmap #12, HMAC firmado, todavía no existe). Se genera **bajo demanda**, sin almacenarse en DynamoDB ni S3 — regenerarlo es barato y evita gestionar un activo más.
+**Alcance:** montar `agora.letiende.co` como dominio propio de `production`, con TLS, sobre la infraestructura ya desplegada (API Gateway HTTP API + Lambda SSR). `staging` sigue sin dominio propio (URL plana de API Gateway, sin cambios). No incluye nada de fase 2 (Bold, WhatsApp, Calendar).
 
-**Archivos a crear:**
-- `server/api/services/qr.ts` (+ `.spec.ts`) — `generarQrSvg(url: string): Promise<string>`, `generarQrPng(url: string): Promise<Buffer>`, usando el paquete `qrcode` (nueva dependencia).
+**Antes de escribir infraestructura — verificar, no asumir (`CLAUDE.md` §5-bis, disciplina de precios):**
+- Confirmar por CLI si ya existe una zona alojada de Route 53 para `letiende.co` en la cuenta compartida (`CLAUDE.md` menciona ~7 zonas ya activas para el ecosistema, ~US$3,58/mes repartidos entre las tres apps) — de ser así, esta tarea solo agrega un registro DNS, **nunca crea una zona nueva** (evita duplicar ese costo fijo).
+- Decidir y documentar como **ADR-013** en `MEMORY.md`, con cifra verificada el mismo día en <https://calculator.aws/>: CloudFront + certificado ACM (como sugiere el diagrama de §7.1) vs. dominio personalizado directo de API Gateway HTTP API con certificado ACM regional (sin CloudFront, menos piezas que mantener). Si Babel ya resolvió este mismo problema, verificar su patrón real en su `serverless.yml` antes de reinventar — mismo criterio que ya se siguió para ADR-001/002/009/010.
 
-**Archivos a modificar:**
-- `server/api/handlers/eventos.ts`: nueva subruta `GET /api/eventos/:eventoId/qr?formato=svg|png` (default `svg`), dentro del mismo handler que ya despacha por `rawPath`/método — exclusiva de `administrador` (ya pasa por `exigirRol` al inicio del handler, sin cambios ahí). Lee el evento real de DynamoDB para tomar su `slug` — el QR nunca codifica un slug u otro dato que llegue en la URL o el payload de la petición. Responde con `Content-Type: image/svg+xml` o `image/png` según `formato`, y `Content-Disposition: attachment; filename="qr-{slug}.{svg|png}"` para que el navegador lo descargue directo en vez de intentar mostrarlo inline.
-- `serverless.yml`: sin función nueva — vive en la Lambda `eventos` ya existente, mismo rol IAM (no necesita ningún permiso adicional, no toca DynamoDB más allá de la lectura que ya hacía, no toca S3). Si `qrcode` termina con un árbol de dependencias transitivas grande, se empaqueta igual que el resto de `eventos.ts` (ya pasa por esbuild en `server/bundle-lambdas.mjs` por depender de `firebase-admin` vía `exigirRol`) — no hace falta ningún cambio ahí, ya está cubierto.
-- `src/app/features/admin/gestion-eventos/editar-evento.component.ts`/`.html`: en modo edición (evento ya creado, mismo criterio que ya deshabilita `slug`/`sillasTotales` y habilita la subida de activos), agregar dos botones "Descargar QR (SVG)"/"Descargar QR (PNG)". Como es una descarga con autenticación, **no un `<a href>` plano** (no puede llevar el header `Authorization`) — usar `HttpClient` con `responseType: 'blob'`, más un `<a>` temporal + `URL.createObjectURL()` para disparar la descarga, mismo patrón que cualquier endpoint protegido que devuelve un archivo.
-- `src/app/core/api/eventos.service.ts` (+ `.spec.ts`): método nuevo `descargarQr(eventoId, formato)` que encapsula esa llamada `blob` + `Authorization` header (reutiliza `servicioAuth.obtenerIdToken()`, mismo patrón que el resto del servicio).
+**Archivos a crear/modificar:**
+- `serverless.yml`: certificado ACM (validado por DNS, en la región que corresponda a la opción elegida en el ADR-013), recurso de dominio personalizado y mapeo del `basePath` a la Lambda `ssr`.
+- Registro DNS en la zona de `letiende.co` (alias hacia CloudFront o hacia el dominio regional de API Gateway, según la opción elegida).
+- Configuración de SSR de Angular: `NG_ALLOWED_HOSTS` debe incluir `agora.letiende.co` **desde el mismo commit** que monta el dominio — nunca "montar primero, configurar después" (gotcha ya sufrido en Babel).
+- `docs/tech-specs.md` §7.2: actualizar la fila de `production` con la URL real ya aprovisionada.
 
 **Definition of done:**
-- [x] El QR codifica exactamente `https://agora.letiende.co/evento/{slug}` del evento real, leído de DynamoDB — nunca un slug recibido en la petición
-- [x] Ambos formatos (SVG y PNG) descargables desde `EditarEventoComponent` en modo edición
-- [x] Endpoint exclusivo de `administrador` (reutiliza `exigirRol`, sin nueva lógica de autorización)
-- [x] Sin almacenamiento persistente nuevo — ni tabla, ni atributo, ni bucket S3
-- [x] `npm run test:api` y `npm run test` en verde (68 pruebas backend + 102 frontend)
-- [x] `npm run build` sin errores
-- [x] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (implementación lista en `claude/tarea-1-mobile-feasibility-044k5v`, push hecho; PR pendiente de solicitud explícita del usuario)
+- [ ] `https://agora.letiende.co` sirve el SSR de producción con certificado TLS válido
+- [ ] `NG_ALLOWED_HOSTS` incluye el dominio desde el mismo despliegue que lo monta, no como fix posterior
+- [ ] Decisión CloudFront vs. dominio directo de API Gateway documentada como ADR-013 con cifra de costo verificada el mismo día
+- [ ] Ninguna zona de Route 53 nueva creada si ya existe una para `letiende.co` — a lo sumo un registro adicional
+- [ ] `npm run build` sin errores
+- [ ] Auditoría de costos sin coincidencias nuevas (`grep` del patrón de `CLAUDE.md` §5-bis)
+- [ ] Verificado por CLI tras desplegar, no solo el IaC (certificado en estado `ISSUED`, dominio resuelve, `GET /` responde 200 con TLS válido)
+- [ ] Revisión de costo real agendada a las 48 horas del despliegue (`CLAUDE.md` §5-bis, paso 4)
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
 
@@ -76,7 +78,6 @@ Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). N
 5. Validación en puerta
 6. Venta en efectivo
 7. Panel de control básico
-8. Dominio personalizado `agora.letiende.co`
 
 ---
 
