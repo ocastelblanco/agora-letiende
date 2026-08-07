@@ -273,4 +273,70 @@ describe('EventosService', () => {
       expect(await promesa).toEqual({ exito: true, key: 'eventos/e1/imagen-abc.png' });
     });
   });
+
+  describe('descargarQr', () => {
+    it('devuelve error sin llamar a la API cuando no hay ID Token', async () => {
+      const servicio = configurarPrueba(null);
+
+      const resultado = await servicio.descargarQr('e1', 'svg');
+
+      expect(resultado).toEqual({
+        exito: false,
+        error: 'No se pudo descargar el QR. Intenta de nuevo.',
+      });
+    });
+
+    it('pide el formato correcto y usa el nombre de archivo del header Content-Disposition', async () => {
+      const servicio = configurarPrueba('token-valido');
+      const contenidoSvg = new Blob(['<svg></svg>'], { type: 'image/svg+xml' });
+
+      const promesa = servicio.descargarQr('e1', 'svg');
+      await Promise.resolve();
+      const peticion = httpMock.expectOne(
+        (r) => r.url === '/api/eventos/e1/qr' && r.params.get('formato') === 'svg',
+      );
+      expect(peticion.request.headers.get('Authorization')).toBe('Bearer token-valido');
+      peticion.flush(contenidoSvg, {
+        headers: { 'Content-Disposition': 'attachment; filename="qr-concierto-jazz.svg"' },
+      });
+
+      const resultado = await promesa;
+      expect(resultado).toEqual({
+        exito: true,
+        blob: contenidoSvg,
+        nombreArchivo: 'qr-concierto-jazz.svg',
+      });
+    });
+
+    it('usa un nombre de archivo genérico si el backend no envía Content-Disposition', async () => {
+      const servicio = configurarPrueba('token-valido');
+      const contenidoPng = new Blob(['png'], { type: 'image/png' });
+
+      const promesa = servicio.descargarQr('e1', 'png');
+      await Promise.resolve();
+      httpMock
+        .expectOne((r) => r.url === '/api/eventos/e1/qr' && r.params.get('formato') === 'png')
+        .flush(contenidoPng);
+
+      const resultado = await promesa;
+      expect(resultado).toEqual({ exito: true, blob: contenidoPng, nombreArchivo: 'qr-evento.png' });
+    });
+
+    it('devuelve el mensaje de error por defecto cuando la API falla', async () => {
+      const servicio = configurarPrueba('token-valido');
+
+      const promesa = servicio.descargarQr('inexistente', 'svg');
+      await Promise.resolve();
+      httpMock
+        .expectOne(
+          (r) => r.url === '/api/eventos/inexistente/qr' && r.params.get('formato') === 'svg',
+        )
+        .flush(new Blob(), { status: 404, statusText: 'Not Found' });
+
+      expect(await promesa).toEqual({
+        exito: false,
+        error: 'No se pudo descargar el QR. Intenta de nuevo.',
+      });
+    });
+  });
 });

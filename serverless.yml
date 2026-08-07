@@ -129,9 +129,8 @@ functions:
     handler: dist-server-bundle/eventos.handler
     role: !GetAtt EventosLambdaRole.Arn
     description: >-
-      CRUD de agora-eventos (GET/POST /api/eventos, PUT/DELETE
-      /api/eventos/:eventoId, POST
-      /api/eventos/:eventoId/activos/url-carga), exclusivo de administrador
+      CRUD de agora-eventos, URL de carga de activos y QR de marketing
+      (GET /api/eventos/:eventoId/qr), exclusivo de administrador
       (TODO.md Tarea 1).
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
@@ -161,6 +160,9 @@ functions:
       - httpApi:
           path: /api/eventos/{eventoId}/activos/url-carga
           method: post
+      - httpApi:
+          path: /api/eventos/{eventoId}/qr
+          method: get
 
   eventosPublicos:
     handler: dist-server-bundle/eventos-publicos.handler
@@ -315,6 +317,8 @@ resources:
           # Mínimo privilegio (CLAUDE.md §5, A05): solo las acciones que
           # eventos.ts realmente usa, acotadas exclusivamente a
           # agora-eventos, sin comodines de Resource ni acceso a otra tabla.
+          # GetItem: generarQrEvento() lee el slug real del evento — el QR
+          # nunca codifica un slug recibido en la ruta o el payload (A08).
           - PolicyName: agora-eventos-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -322,6 +326,7 @@ resources:
                 - Effect: Allow
                   Action:
                     - dynamodb:Scan
+                    - dynamodb:GetItem
                     - dynamodb:PutItem
                     - dynamodb:UpdateItem
                     - dynamodb:DeleteItem

@@ -32,6 +32,7 @@ function configurarPrueba(opciones: {
   crearEventoMock?: ReturnType<typeof vi.fn>;
   actualizarEventoMock?: ReturnType<typeof vi.fn>;
   subirActivoMock?: ReturnType<typeof vi.fn>;
+  descargarQrMock?: ReturnType<typeof vi.fn>;
 }) {
   const cargarEventosMock = vi.fn().mockResolvedValue(undefined);
 
@@ -48,6 +49,7 @@ function configurarPrueba(opciones: {
           crearEvento: opciones.crearEventoMock ?? vi.fn(),
           actualizarEvento: opciones.actualizarEventoMock ?? vi.fn(),
           subirActivo: opciones.subirActivoMock ?? vi.fn(),
+          descargarQr: opciones.descargarQrMock ?? vi.fn(),
         },
       },
     ],
@@ -249,6 +251,56 @@ describe('EditarEventoComponent', () => {
         imagenKey: 'eventos/e1/imagen-abc.png',
       });
       expect(componente['imagenKey']()).toBe('eventos/e1/imagen-abc.png');
+    });
+
+    describe('descargarQr', () => {
+      it('descarga el archivo con el nombre que devuelve el servicio', async () => {
+        const blob = new Blob(['<svg></svg>'], { type: 'image/svg+xml' });
+        const descargarQrMock = vi
+          .fn()
+          .mockResolvedValue({ exito: true, blob, nombreArchivo: 'qr-concierto-jazz.svg' });
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente], descargarQrMock });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        const createObjectURLMock = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url');
+        const revokeObjectURLMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+        const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+        try {
+          await componente['descargarQr']('svg');
+
+          expect(descargarQrMock).toHaveBeenCalledWith('e1', 'svg');
+          expect(createObjectURLMock).toHaveBeenCalledWith(blob);
+          expect(clickMock).toHaveBeenCalledTimes(1);
+          expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url');
+        } finally {
+          createObjectURLMock.mockRestore();
+          revokeObjectURLMock.mockRestore();
+          clickMock.mockRestore();
+        }
+      });
+
+      it('muestra el mensaje de error del servicio cuando la descarga falla', async () => {
+        const descargarQrMock = vi.fn().mockResolvedValue({
+          exito: false,
+          error: 'No se pudo descargar el QR. Intenta de nuevo.',
+        });
+        const { fixture, snackBarOpenMock } = configurarPrueba({
+          eventos: [eventoExistente],
+          descargarQrMock,
+        });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        await componente['descargarQr']('png');
+
+        expect(snackBarOpenMock).toHaveBeenCalledWith(
+          'No se pudo descargar el QR. Intenta de nuevo.',
+          'Cerrar',
+          { duration: 6000 },
+        );
+      });
     });
   });
 });

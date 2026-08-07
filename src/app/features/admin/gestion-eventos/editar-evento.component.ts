@@ -90,6 +90,7 @@ export class EditarEventoComponent {
   protected readonly guardando = signal(false);
   protected readonly subiendoImagen = signal(false);
   protected readonly subiendoLogotipo = signal(false);
+  protected readonly descargandoQr = signal<'svg' | 'png' | null>(null);
 
   protected readonly imagenKey = signal<string | undefined>(undefined);
   protected readonly logotipoKey = signal<string | undefined>(undefined);
@@ -413,6 +414,37 @@ export class EditarEventoComponent {
       }
     } finally {
       señalCargando.set(false);
+    }
+  }
+
+  /**
+   * Descarga el QR de marketing del evento (SVG o PNG) — es una descarga
+   * autenticada, así que no puede ser un `<a href>` plano (no lleva el
+   * header `Authorization`): se pide como `Blob` y se dispara con un `<a>`
+   * temporal + `URL.createObjectURL()`.
+   */
+  protected async descargarQr(formato: 'svg' | 'png'): Promise<void> {
+    const eventoId = this.eventoId();
+    if (!eventoId) {
+      return;
+    }
+
+    this.descargandoQr.set(formato);
+    try {
+      const resultado = await this.eventosService.descargarQr(eventoId, formato);
+      if (!resultado.exito) {
+        this.snackBar.open(resultado.error, 'Cerrar', { duration: 6000 });
+        return;
+      }
+
+      const url = URL.createObjectURL(resultado.blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = resultado.nombreArchivo;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      this.descargandoQr.set(null);
     }
   }
 }
