@@ -36,3 +36,5 @@ Backend,07/08/2026 13:15,07/08/2026 20:50,1:15:00,AI,Sonnet 5,Pull de main e imp
 Backend,07/08/2026 20:50,07/08/2026 22:39,0:35:00,AI,Sonnet 5,Rebase para preservar commits sin fusionar del PR 11 cherry pick de la funcionalidad QR verificacion completa y push,Claude Code,cli,high
 Backend,07/08/2026 22:39,07/08/2026 22:50,0:11:00,AI,Sonnet 5,Apertura del PR 14 QR del evento contra main con detalle de pruebas y checklist,Claude Code,cli,low
 Specs definition,07/08/2026 23:00,07/08/2026 23:20,0:20:00,AI,Sonnet 5,Validacion en staging confirmada por el usuario cierre de Tarea 1 QR en TODO y nueva Tarea Dominio personalizado ADR-013 pendiente,Claude Code,cli,medium
+Workspace setting,07/08/2026 23:20,07/08/2026 23:26,0:06:00,AI,Sonnet 5,Fusion del PR 14 confirmada limpieza local vuelta a main y recreacion de la rama de trabajo,Claude Code,cli,low
+Backend,07/08/2026 23:26,07/08/2026 23:45,0:19:00,AI,Sonnet 5,Tarea 2 motor de aforo servicio aforo con las tres escrituras condicionales consumidor de streams liberar reservas rol IAM y 24 pruebas nuevas,Claude Code,cli,high

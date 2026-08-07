@@ -13,15 +13,15 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | Atributo | Valor |
 |---|---|
 | **Versión** | 0.1.0 — infraestructura base + autenticación desplegadas y validadas en vivo en staging |
-| **Fase** | Autenticación y roles (#4), Gestión de usuarios (#5), CRUD de eventos (#6), Cartelera pública (#7), Menú de navegación (#18) y QR del evento para afiches (#15) completas y validadas en vivo por el usuario (PR #9-#14, el #14 abierto a la espera de fusión — ver §9). Activa: Dominio personalizado `agora.letiende.co` (roadmap #17, Tarea 1, sin empezar). Motor de aforo (roadmap #8, Tarea 2) sigue sin empezar |
+| **Fase** | Autenticación y roles (#4), Gestión de usuarios (#5), CRUD de eventos (#6), Cartelera pública (#7), Menú de navegación (#18) y QR del evento para afiches (#15) completas, fusionadas y validadas en vivo (PR #9-#14). Activas: Dominio personalizado `agora.letiende.co` (roadmap #17, Tarea 1, sin empezar) y Motor de aforo (roadmap #8, Tarea 2, implementación lista, sin PR todavía — ver §9) |
 | **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada (roadmap #17, Tarea 1 activa de `TODO.md`) |
 | **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` — login con Google + `GET /api/usuarios/me` verificados de punta a punta (02/08/2026), Gestión de usuarios (PR #10), CRUD de eventos (PR #11), Cartelera pública (PR #12), el menú de navegación (PR #13) y el QR del evento (PR #14) **todos validados en vivo por el usuario**, cada uno tras corregir en la misma sesión los bugs reales que aparecieron (ver §7) |
 | **Rama principal** | `main` |
-| **Último commit en `main`** | `2a3f427` (merge del PR #13: Menú de navegación) — PR #14 (QR del evento) abierto, a la espera de aprobación y fusión |
+| **Último commit en `main`** | `97433b3` (merge del PR #14: QR del evento para afiches) |
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 07/08/2026 — QR del evento para afiches (Tarea 1) implementada, probada (68 pruebas backend + 102 frontend) y validada en vivo por el usuario en staging; PR #14 abierto, `TODO.md` recalculado (Dominio personalizado `agora.letiende.co`, roadmap #17, ocupa el slot de Tarea 1) — ver §9 |
+| **Última sesión** | 07/08/2026 (noche) — PR #14 fusionado, local limpiado, Motor de aforo (Tarea 2) implementado: `server/api/services/aforo.ts` (`reservarSillas`/`confirmarSillas`/`liberarSillas`, las tres escrituras condicionales de `tech-specs.md` §5.4), `server/api/handlers/liberar-reservas.ts` (consumidor de Streams de `agora-compras`), función `liberarReservas` + rol IAM propio en `serverless.yml`. 92 pruebas backend en verde. Sin PR todavía — ver §9 |
 
 ---
 
@@ -50,16 +50,15 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ### Pendiente (v1 — MVP)
 
-- [ ] Motor de aforo con reserva temporal y liberación por TTL
+- [ ] Motor de aforo con reserva temporal y liberación por TTL — implementación lista (07/08/2026, sin PR todavía, ver §9), pendiente de validar en staging y fusionar
 - [ ] Compra de boletas
 - [ ] Carga de comprobante por enlace mágico
 - [ ] Aprobación por el productor
 - [ ] Emisión de boletas digitales con QR firmado
 - [ ] Validación en puerta con cámara
 - [ ] Venta en efectivo
-- [ ] QR del evento para afiches
 - [ ] Panel de control básico
-- [ ] Dominio personalizado `agora.letiende.co`
+- [ ] Dominio personalizado `agora.letiende.co` — Tarea 1 activa de `TODO.md`
 
 ### Pendiente (v2)
 
@@ -684,3 +683,21 @@ El usuario confirmó "funciona bien" en staging y pidió actualizar documentaci�
 Se agregó el commit final de documentación al PR #14 y se empujó — el PR queda listo para que el usuario lo apruebe y fusione; el agente nunca fusiona un PR (`CLAUDE.md` §6).
 
 **Próxima tarea sugerida:** una vez el usuario fusione el PR #14, empezar Dominio personalizado (Tarea 1 de `TODO.md`) en una rama `feature/*` nueva desde `main` actualizado — verificar primero la zona de Route 53 existente y decidir/documentar el ADR-013 antes de tocar `serverless.yml`. Alternativamente, si el usuario prefiere, retomar Motor de aforo (Tarea 2, diseño ya completo en `tech-specs.md` §5.4) en su lugar — ambas tareas activas son independientes entre sí.
+
+**Sesión del 07/08/2026 (noche) — PR #14 fusionado, limpieza local, y Motor de aforo (Tarea 2) implementado**
+
+El usuario confirmó que el PR #14 (QR del evento) fue fusionado y pidió limpiar el local, volver a `main` y continuar con Motor de aforo. Limpieza estándar: `git checkout main && git pull` (36 commits detrás, fast-forward limpio a `97433b3`), rama `claude/tarea-1-mobile-feasibility-044k5v` local eliminada y recreada desde el `main` actualizado (mismo nombre de rama fijo del entorno de ejecución remota, ver nota de la sesión anterior).
+
+Se implementó Motor de aforo completo según la especificación de `TODO.md` (transcribiendo las `ConditionExpression` de `tech-specs.md` §5.4 tal cual, sin reinventarlas):
+
+- `server/api/services/aforo.ts`: `reservarSillas`/`confirmarSillas`/`liberarSillas`, cada una una única escritura condicional. Jerarquía de errores propia (`ErrorAforo` → `EventoNoPublicadoError`, `AforoInsuficienteError`, `SillasReservadasInsuficientesError`) para que el futuro `handlers/compras.ts` (roadmap #9) pueda responder con un 409 claro. **Decisión de diseño no explícita en la especificación original:** como la condición combinada de `reservarSillas` (`sillasDisponibles >= :n AND estado = 'publicado'`) no permite saber por sí sola cuál de las dos cláusulas falló, se agregó una lectura de **clasificación posterior al fallo** (nunca antes de decidir) que distingue ambos casos — documentado en el propio código y en el DoD de `TODO.md` como no-violación de la regla "nunca leer antes de escribir". Similarmente, `confirmarSillas` hace una segunda escritura condicional best-effort para transicionar `estado` a `agotado` cuando `sillasDisponibles = 0`, ya que DynamoDB no admite un `SET` condicional por atributo dentro de una sola expresión.
+- `server/api/handlers/liberar-reservas.ts`: consumidor de Streams de `agora-compras`, filtra `REMOVE` con estado que todavía retenía aforo, desmarshalla la imagen anterior con `@aws-sdk/util-dynamodb` (agregado como dependencia directa — antes solo transitiva de `lib-dynamodb`) y llama `liberarSillas`. Traga silenciosamente `SillasReservadasInsuficientesError` (registro de Stream duplicado, comportamiento esperado por diseño *at-least-once*), relanza cualquier otro error.
+- `serverless.yml`: función `liberarReservas` con evento `stream` sobre `AgoraCompras.StreamArn` (`batchSize: 10`, `startingPosition: LATEST`), rol IAM propio con `dynamodb:UpdateItem` exclusivo sobre `agora-eventos` más los permisos de lectura del propio Stream (`DescribeStream`/`GetRecords`/`GetShardIterator` acotados al `StreamArn`, `ListStreams` con `Resource: '*'` porque esa acción específica no admite scoping por recurso — verificado contra la documentación de IAM de DynamoDB, no asumido).
+- `server/bundle-lambdas.mjs`: `liberar-reservas.js` agregado a la lista de esbuild (depende de `documentoDynamoDB` y de `unmarshall`, mismo criterio que `eventosPublicos`) — verificado además con una invocación directa del bundle (`node -e`) para confirmar que arranca sin el 500 genérico de paquete incompleto, no solo revisando el código.
+- 24 pruebas nuevas (`aforo.spec.ts` + `liberar-reservas.spec.ts`), incluyendo la prueba explícita de idempotencia que exige el DoD (invocar `liberarSillas` dos veces con el mismo `eventoId`/`cantidad`, verificar que la segunda falla). 92 pruebas backend en verde en total.
+
+**Nota para `handlers/compras.ts` (roadmap #9, la siguiente pieza natural tras esta):** el modelo `Evento` no tiene un contador `sillasVendidas` separado — se agregó una nota explícita en `TODO.md` para que esa tarea futura no asuma que existe.
+
+Todo el trabajo vive en `claude/tarea-1-mobile-feasibility-044k5v` (recreada desde `main` tras el merge del PR #14, no acumula historia ya fusionada). Sin PR todavía — no se pidió abrirlo en esta sesión.
+
+**Próxima tarea sugerida:** si el usuario pide abrir el PR de Motor de aforo, hacerlo contra `main` con la plantilla ya usada en el PR #14. Una vez validado en staging y fusionado, retomar Dominio personalizado (Tarea 1, especificación completa ya en `TODO.md`) o promover la primera pieza del backlog que depende de Motor de aforo: Compra y reserva de sillas (roadmap #9, `handlers/compras.ts`).
