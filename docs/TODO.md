@@ -22,14 +22,14 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - `src/app/core/api/eventos.service.ts` (+ `.spec.ts`): método nuevo `descargarQr(eventoId, formato)` que encapsula esa llamada `blob` + `Authorization` header (reutiliza `servicioAuth.obtenerIdToken()`, mismo patrón que el resto del servicio).
 
 **Definition of done:**
-- [ ] El QR codifica exactamente `https://agora.letiende.co/evento/{slug}` del evento real, leído de DynamoDB — nunca un slug recibido en la petición
-- [ ] Ambos formatos (SVG y PNG) descargables desde `EditarEventoComponent` en modo edición
-- [ ] Endpoint exclusivo de `administrador` (reutiliza `exigirRol`, sin nueva lógica de autorización)
-- [ ] Sin almacenamiento persistente nuevo — ni tabla, ni atributo, ni bucket S3
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [x] El QR codifica exactamente `https://agora.letiende.co/evento/{slug}` del evento real, leído de DynamoDB — nunca un slug recibido en la petición
+- [x] Ambos formatos (SVG y PNG) descargables desde `EditarEventoComponent` en modo edición
+- [x] Endpoint exclusivo de `administrador` (reutiliza `exigirRol`, sin nueva lógica de autorización)
+- [x] Sin almacenamiento persistente nuevo — ni tabla, ni atributo, ni bucket S3
+- [x] `npm run test:api` y `npm run test` en verde (68 pruebas backend + 102 frontend)
+- [x] `npm run build` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (implementación lista en `claude/tarea-1-mobile-feasibility-044k5v`, push hecho; PR pendiente de solicitud explícita del usuario)
 
 ---
 
