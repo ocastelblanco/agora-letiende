@@ -1,0 +1,357 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { exigirRolMock, sendMock, clienteS3SendMock, getSignedUrlMock } = vi.hoisted(() => ({
+  exigirRolMock: vi.fn(),
+  sendMock: vi.fn(),
+  clienteS3SendMock: vi.fn(),
+  getSignedUrlMock: vi.fn(),
+}));
+
+vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
+vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
+vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
+
+const { handler } = await import('./eventos');
+
+class ConditionalCheckFailedException extends Error {
+  constructor() {
+    super('The conditional request failed');
+    this.name = 'ConditionalCheckFailedException';
+  }
+}
+
+const permisosAdmin = {
+  email: 'admin@letiende.co',
+  nombre: 'Admin',
+  rol: 'administrador' as const,
+  activo: true,
+};
+
+const etapaValida = {
+  nombre: 'Preventa',
+  precio: 45000,
+  cierraEn: '2026-09-01T00:00:00.000Z',
+  orden: 1,
+};
+
+const eventoValido = {
+  slug: 'concierto-jazz',
+  nombre: 'Concierto de jazz',
+  descripcion: 'Una noche de jazz en Le Tiende',
+  fechaHora: '2026-09-15T01:00:00.000Z',
+  sillasTotales: 100,
+  maxBoletasPorCompra: 4,
+  etapas: [etapaValida],
+  mediosPago: ['efectivo'],
+  productores: ['productor@letiende.co'],
+};
+
+function crearEvento(
+  metodo: string,
+  opciones: { rawPath?: string; eventoId?: string; cuerpo?: unknown } = {},
+): Parameters<typeof handler>[0] {
+  return {
+    requestContext: { http: { method: metodo } },
+    rawPath: opciones.rawPath ?? '/api/eventos',
+    pathParameters: opciones.eventoId ? { eventoId: opciones.eventoId } : undefined,
+    body: opciones.cuerpo !== undefined ? JSON.stringify(opciones.cuerpo) : undefined,
+    headers: {},
+  } as unknown as Parameters<typeof handler>[0];
+}
+
+async function invocar(
+  metodo: string,
+  opciones?: { rawPath?: string; eventoId?: string; cuerpo?: unknown },
+) {
+  const respuesta = await handler(crearEvento(metodo, opciones), {} as never, undefined as never);
+  return respuesta as { statusCode: number; body?: string };
+}
+
+describe('handler de /api/eventos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosAdmin });
+    clienteS3SendMock.mockResolvedValue({ Contents: [] });
+  });
+
+  it('devuelve la respuesta de exigirRol tal cual cuando no está autorizado', async () => {
+    exigirRolMock.mockResolvedValue({
+      autorizado: false,
+      respuesta: { statusCode: 403, body: JSON.stringify({ mensaje: 'No autorizado en Ágora' }) },
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(403);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  describe('GET /api/eventos', () => {
+    it('devuelve 200 con la lista de eventos', async () => {
+      sendMock.mockResolvedValue({ Items: [{ eventoId: 'e1' }] });
+
+      const respuesta = await invocar('GET');
+
+      expect(respuesta.statusCode).toBe(200);
+      expect(JSON.parse(respuesta.body!)).toEqual([{ eventoId: 'e1' }]);
+    });
+  });
+
+  describe('POST /api/eventos', () => {
+    it('crea el evento con eventoId generado en el backend y aforo inicializado', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+      expect(respuesta.statusCode).toBe(201);
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(typeof cuerpo.eventoId).toBe('string');
+      expect(cuerpo.eventoId.length).toBeGreaterThan(0);
+      expect(cuerpo.sillasDisponibles).toBe(100);
+      expect(cuerpo.sillasReservadas).toBe(0);
+      expect(cuerpo.estado).toBe('borrador');
+      expect(cuerpo.etapas[0].etapaId).toEqual(expect.any(String));
+    });
+
+    it('ignora un eventoId enviado por el cliente y genera el suyo propio', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, eventoId: 'id-falso-del-cliente' },
+      });
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.eventoId).not.toBe('id-falso-del-cliente');
+    });
+
+    it('ignora sillasDisponibles enviado por el cliente y lo inicializa desde sillasTotales', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, sillasDisponibles: 999999 },
+      });
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.sillasDisponibles).toBe(100);
+    });
+
+    it('responde 400 si falta un campo obligatorio', async () => {
+      const { nombre: _nombre, ...sinNombre } = eventoValido;
+      const respuesta = await invocar('POST', { cuerpo: sinNombre });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 si el slug tiene un formato inválido', async () => {
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, slug: 'Slug Inválido!' },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+    });
+
+    it('responde 400 si etapas está vacío', async () => {
+      const respuesta = await invocar('POST', { cuerpo: { ...eventoValido, etapas: [] } });
+
+      expect(respuesta.statusCode).toBe(400);
+    });
+
+    it('responde 400 si mediosPago trae un valor no reconocido', async () => {
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, mediosPago: ['bitcoin'] },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+    });
+
+    it('responde 409 si el eventoId colisiona (ConditionExpression falla)', async () => {
+      sendMock.mockRejectedValue(new ConditionalCheckFailedException());
+
+      const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+      expect(respuesta.statusCode).toBe(409);
+    });
+  });
+
+  describe('PUT /api/eventos/:eventoId', () => {
+    it('actualiza el evento y responde 200', async () => {
+      sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1', nombre: 'Nuevo nombre' } });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { nombre: 'Nuevo nombre' },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+    });
+
+    it('ignora sillasDisponibles y sillasTotales en el payload de edición', async () => {
+      sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+      await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { nombre: 'X', sillasDisponibles: 1, sillasTotales: 1 },
+      });
+
+      const comando = sendMock.mock.calls[0][0];
+      expect(comando.input.UpdateExpression).not.toContain('sillasDisponibles');
+      expect(comando.input.UpdateExpression).not.toContain('sillasTotales');
+    });
+
+    it('responde 400 si no hay campos para actualizar', async () => {
+      const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: {} });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 si imagenKey no pertenece al prefijo del evento', async () => {
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { imagenKey: 'eventos/otro-evento/foto.jpg' },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('acepta imagenKey cuando pertenece al prefijo del evento', async () => {
+      sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { imagenKey: 'eventos/e1/imagen-abc.jpg' },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+    });
+
+    it('responde 404 si el eventoId no existe (ConditionExpression falla)', async () => {
+      sendMock.mockRejectedValue(new ConditionalCheckFailedException());
+
+      const respuesta = await invocar('PUT', { eventoId: 'inexistente', cuerpo: { nombre: 'X' } });
+
+      expect(respuesta.statusCode).toBe(404);
+    });
+  });
+
+  describe('DELETE /api/eventos/:eventoId', () => {
+    it('elimina el evento y responde 204', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(respuesta.statusCode).toBe(204);
+    });
+
+    it('responde 404 si el eventoId no existe (ConditionExpression falla)', async () => {
+      sendMock.mockRejectedValue(new ConditionalCheckFailedException());
+
+      const respuesta = await invocar('DELETE', { eventoId: 'inexistente' });
+
+      expect(respuesta.statusCode).toBe(404);
+    });
+
+    it('responde 400 si falta el eventoId en la ruta', async () => {
+      const respuesta = await invocar('DELETE', {});
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('lista y borra los activos de S3 bajo el prefijo del evento', async () => {
+      sendMock.mockResolvedValue({});
+      clienteS3SendMock
+        .mockResolvedValueOnce({
+          Contents: [{ Key: 'eventos/e1/imagen-abc.png' }, { Key: 'eventos/e1/logotipo-def.png' }],
+        })
+        .mockResolvedValueOnce({});
+
+      await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(clienteS3SendMock).toHaveBeenCalledTimes(2);
+      const comandoListar = clienteS3SendMock.mock.calls[0][0];
+      expect(comandoListar.input.Prefix).toBe('eventos/e1/');
+      const comandoBorrar = clienteS3SendMock.mock.calls[1][0];
+      expect(comandoBorrar.input.Delete.Objects).toEqual([
+        { Key: 'eventos/e1/imagen-abc.png' },
+        { Key: 'eventos/e1/logotipo-def.png' },
+      ]);
+    });
+
+    it('no intenta borrar objetos de S3 si el evento no tenía ninguno', async () => {
+      sendMock.mockResolvedValue({});
+      clienteS3SendMock.mockResolvedValue({ Contents: [] });
+
+      await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(clienteS3SendMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('responde 204 aunque falle la limpieza de S3 (best-effort)', async () => {
+      sendMock.mockResolvedValue({});
+      clienteS3SendMock.mockRejectedValue(new Error('S3 no disponible'));
+
+      const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+      expect(respuesta.statusCode).toBe(204);
+    });
+  });
+
+  describe('POST /api/eventos/:eventoId/activos/url-carga', () => {
+    it('devuelve una URL prefirmada y una key bajo el prefijo del evento', async () => {
+      getSignedUrlMock.mockResolvedValue('https://s3.example.com/presignada');
+
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/eventos/e1/activos/url-carga',
+        eventoId: 'e1',
+        cuerpo: { tipo: 'imagen', tipoMime: 'image/png', tamano: 1024 },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.url).toBe('https://s3.example.com/presignada');
+      expect(cuerpo.key.startsWith('eventos/e1/imagen-')).toBe(true);
+    });
+
+    it('responde 400 si el tipoMime es SVG', async () => {
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/eventos/e1/activos/url-carga',
+        eventoId: 'e1',
+        cuerpo: { tipo: 'imagen', tipoMime: 'image/svg+xml', tamano: 1024 },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(getSignedUrlMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 si el tamaño excede el máximo permitido', async () => {
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/eventos/e1/activos/url-carga',
+        eventoId: 'e1',
+        cuerpo: { tipo: 'imagen', tipoMime: 'image/png', tamano: 999999999 },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(getSignedUrlMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 si tipo no es imagen ni logotipo', async () => {
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/eventos/e1/activos/url-carga',
+        eventoId: 'e1',
+        cuerpo: { tipo: 'video', tipoMime: 'image/png', tamano: 1024 },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+    });
+  });
+
+  it('responde 405 para un método no soportado', async () => {
+    const respuesta = await invocar('PATCH');
+
+    expect(respuesta.statusCode).toBe(405);
+  });
+});
