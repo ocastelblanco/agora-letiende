@@ -19,6 +19,18 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 
 ---
 
+## 1-bis. Registro de tiempos (tracking) — obligatorio, sin excepción
+
+**Toda tarea realizada por un agente IA (o un humano) en este proyecto se registra como una fila en `docs/tracking.csv`, siguiendo el formato exacto de `docs/instrucciones-tracking.md`.** Es obligatorio y no opcional — ya lo exige `tech-specs.md` §10, se repite aquí, al inicio del documento que todo agente lee primero, precisamente porque es la regla que más fácil se olvida a mitad de una tarea.
+
+**Sin importar el tipo de tarea.** No es solo para código. Se registra igual una sesión de diagnóstico de CI/infraestructura, una limpieza de ramas de git, una pregunta puntual sobre por qué el código se comporta de cierta forma (sin tocar ni una línea), una sesión de planeación que termina en un plan aprobado pero sin implementar, o una actualización de esta misma documentación. Si un agente hizo algo en esta sesión — así no haya generado ni un commit — esa cosa se registra.
+
+**Cuándo registrar:** al cerrar cada tarea o bloque de trabajo delimitado (un cambio de tema, no necesariamente cada mensaje), no solo una vez al final de toda la sesión. Una sesión que cubrió tres asuntos distintos (ej. un incidente de CI, una pregunta de producto y el diseño de una feature nueva) son **tres filas**, cada una con su propio `start`/`finish`, no una sola fila que las resuma todas.
+
+**Antes de dar una tarea por cerrada o de despedirse de la sesión, verificar explícitamente que quedó su fila en `docs/tracking.csv`.** Si no está claro cómo llenar alguna columna, `docs/instrucciones-tracking.md` tiene el detalle completo de cada una (`stage`, `start`, `finish`, `time`, `role`, `model`, `milestone`, `tool`, `device`, `effort`).
+
+---
+
 ## 2. Stack Tecnológico y Versiones
 
 - **Frontend Framework:** Angular 22.x (Standalone components, Signals, Router, SSR con `@angular/ssr`)

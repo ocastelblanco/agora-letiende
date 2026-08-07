@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (06/08/2026):** la Tarea 1 (CRUD de eventos) se completó — ver `MEMORY.md` §2, §4, §7 y §9. Con eso cerrado, los ítems #7 (Cartelera pública) y #8 (Motor de aforo) del roadmap técnico (`tech-specs.md` §11) dejan de depender de nada más y son **independientes entre sí** — ambos ocupan los dos slots activos.
+**Prioridad de selección aplicada (06/08/2026, actualizada la misma noche):** la Tarea 1 (CRUD de eventos) se completó — ver `MEMORY.md` §2, §4, §7 y §9. Con eso cerrado, los ítems #7 (Cartelera pública) y #8 (Motor de aforo) del roadmap técnico (`tech-specs.md` §11) dejaron de depender de nada más y son independientes entre sí, así que ocuparon los dos slots activos. **Esa misma noche**, el usuario reportó que navegar la app es complicado (no existe ningún menú) y pidió priorizarlo — se agregó como ítem #18 del roadmap técnico (`tech-specs.md` §11, depende solo de #4 Autenticación y roles, ya completo) y **reemplaza a Motor de aforo como Tarea 2 activa**: alcance pequeño (100% frontend, sin tocar backend/infraestructura), bloqueador de usabilidad inmediato, y Motor de aforo no bloquea nada mientras no exista el flujo de compra real (roadmap #9). Motor de aforo vuelve al tope del backlog, con su diseño ya completo y sin cambios en `tech-specs.md` §5.4 — se retoma como próxima tarea en cuanto se libere un slot.
 
 ---
 
@@ -42,33 +42,36 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Motor de aforo (reserva condicional, TTL, liberación por Streams)
+## Tarea 2 — [FEATURE]: Menú de navegación para usuarios autenticados
 
-**Origen:** `PRD.md` (control de sobreventa) · `tech-specs.md` §11 ítem 8, §5.2 (`agora-compras`), §5.4 (ciclo de vida completo, ya documentado paso a paso) · `CLAUDE.md` §5 (A04 — riesgo central de Ágora)
+**Origen:** Reporte directo del usuario (06/08/2026 noche): "es un poco complicado navegar" — hoy `app.html` es solo `<router-outlet />`, sin ningún header/nav/shell en toda la app, y la única forma de moverse entre `/admin/eventos` y `/admin/usuarios` es escribir la URL a mano · `tech-specs.md` §11 ítem 18 · `CLAUDE.md` §5 (A01 — jerarquía de roles vía `cumpleRolMinimo`, nunca comparaciones ad hoc) · `PRD.md` (navegación por teclado y etiquetas semánticas)
 
-**Alcance de esta tarea:** solo las primitivas de aforo y su limpieza automática — **no** el flujo de compra en sí (`handlers/compras.ts`, roadmap #9, todavía no existe). `agora-compras` ya existe en `serverless.yml` con `TimeToLiveSpecification` en `expiraEn` y `StreamSpecification: NEW_AND_OLD_IMAGES` (creada en la Tarea de infraestructura base) — esta tarea no la vuelve a crear, solo la consume.
+**Decisión de diseño clave (corrección explícita del usuario sobre el primer borrador de este plan):** la barra **siempre es visible**, con o sin sesión — nunca se oculta según `usuarioActual()` — porque debe ofrecer siempre una forma de llegar a `/login`. Ya autenticado, aparecen las secciones según rol, **incluyendo "Cartelera" (→ `/`)**, para que el personal autenticado también pueda saltar a ver la interfaz pública desde el mismo menú, no solo las secciones administrativas. Ver detalle completo de la decisión en `MEMORY.md` (sesión del 06/08/2026, noche).
 
 **Archivos a crear:**
-- `server/api/services/aforo.ts` (+ `.spec.ts`) — `reservarSillas(eventoId, cantidad)`, `confirmarSillas(eventoId, cantidad)`, `liberarSillas(eventoId, cantidad)`
-- `server/api/handlers/liberar-reservas.ts` (+ `.spec.ts`) — consumidor de DynamoDB Streams de `agora-compras`
+- `src/app/shared/navegacion/secciones-navegacion.ts` — interfaz `SeccionNavegacion { etiqueta, ruta, rolMinimo: Rol }` + constante `SECCIONES_NAVEGACION`, única fuente de verdad consumida tanto por la barra (qué enlaces mostrar) como por `app.routes.ts` (qué `rolMinimo` exige cada guard). 3 secciones: `Cartelera` → `/` rol `portero` (el más bajo — visible para cualquier rol autenticado); `Eventos` → `/admin/eventos` rol `administrador`; `Usuarios` → `/admin/usuarios` rol `administrador`. `/` todavía no existe como ruta (Tarea del backlog "Cartelera pública", roadmap #7) — el enlace queda visible pero no funcional hasta que esa tarea se implemente; decisión explícita del usuario, sin stub.
+- `src/app/shared/navegacion/barra-navegacion.component.ts` (+ `.html`, `.spec.ts`) — standalone, sin `@Input()`, todo el estado sale de `ServicioAuth` inyectado.
+- `src/app/core/guardias/guardia-invitado.ts` (+ `.spec.ts`) — guard de `/login` que redirige a una sección accesible si ya hay sesión autorizada.
 
 **Qué hacer:**
 
-1. `aforo.ts`, las tres funciones son envolturas delgadas sobre exactamente los tres `UpdateCommand` condicionales que documenta `tech-specs.md` §5.4 (pasos 1-3) — **transcribir esas `ConditionExpression` tal cual, no reinventarlas**:
-   - `reservarSillas`: `SET sillasDisponibles = sillasDisponibles - :n, sillasReservadas = sillasReservadas + :n` con `ConditionExpression: sillasDisponibles >= :n AND estado = 'publicado'`. Si falla, propaga un error distinguible (aforo insuficiente vs. evento no publicado) para que el futuro `handlers/compras.ts` (roadmap #9) pueda responder 409 con un mensaje claro — no acá, pero la forma del error debe ya soportarlo.
-   - `confirmarSillas`: `SET sillasReservadas = sillasReservadas - :n` con `ConditionExpression: sillasReservadas >= :n`. Si el aforo llega a 0, además transiciona `estado` a `agotado` en la misma escritura.
-   - `liberarSillas`: `SET sillasDisponibles = sillasDisponibles + :n, sillasReservadas = sillasReservadas - :n` con `ConditionExpression: sillasReservadas >= :n` — la condición sobre `sillasReservadas` (no un simple "siempre sumar") es lo que hace la operación segura ante un evento de Stream entregado dos veces (*at-least-once*, nunca *exactly-once*).
-2. `liberar-reservas.ts`: Lambda con `streamEnabled` sobre el Stream de `agora-compras`, filtra únicamente eventos `REMOVE` (borrado por TTL) cuyo `OLD image` tenía un estado que todavía retenía aforo reservado (`iniciada`, `esperando_comprobante`, `en_revision` — no `aprobada`/`rechazada`/`expirada`, que ya liberaron o confirmaron su aforo por otro camino), y llama `liberarSillas(eventoId, cantidad)`. Idempotente por diseño gracias a la `ConditionExpression` de `liberarSillas` — un reintento del mismo registro de Stream no vuelve a restar de `sillasReservadas` por debajo de lo real porque la condición fallaría.
-3. `serverless.yml`: función `liberarReservas` con evento `stream` apuntando al `StreamArn` de `AgoraCompras` (`BatchSize` pequeño, ej. 10, y `StartingPosition: LATEST`), rol IAM propio (`dynamodb:UpdateItem` sobre `agora-eventos` exclusivamente — sin acceso a `agora-compras` más allá de lo que el trigger de Streams ya provee, sin `agora-usuarios`, sin `exigirRol`: esta Lambda nunca la invoca un humano). Agregar a `server/bundle-lambdas.mjs` **solo si** termina dependiendo de algo con árbol de dependencias pesado — de lo contrario, empaquetar como `salud` (patrón simple, sin bundle).
+1. `BarraNavegacionComponent`: sin Angular Material nuevo (`MatToolbar`/`MatSidenav`/`MatMenu`/`MatIcon`) — la app solo usa `button`/`dialog`/`form-field`/`select`/`snack-bar`/`table` hoy, y `App` carga *eager* (no `loadComponent`), así que un módulo Material nuevo aquí pesaría en el bundle inicial de toda página, incluida la futura cartelera pública para visitantes anónimos. El drawer móvil (`< 768px`) se hace con `signal(false)` + `@if` + Tailwind, mismo patrón que `formularioVisible` de `GestionUsuariosComponent` — primer breakpoint `md:` real del proyecto.
+2. `secciones = computed(...)`: filtra `SECCIONES_NAVEGACION` con `cumpleRolMinimo(rol(), seccion.rolMinimo)`; `[]` si no hay rol.
+3. Sin sesión: logo (enlaza a `/`) + enlace "Ingresar" a `/login`, sin secciones ni avatar. Con sesión: logo + `secciones()` (con `routerLinkActive`/`ariaCurrentWhenActive="page"`) + avatar (`photoURL` con `referrerpolicy="no-referrer"`, fallback de inicial) + botón "Cerrar sesión" (`servicioAuth.cerrarSesion()` + `router.navigateByUrl('/login')` — primer consumidor real de `cerrarSesion()` en la app).
+4. `guardia-invitado.ts`: usa **`findLast`** (no `find`) sobre `SECCIONES_NAVEGACION` para elegir a dónde redirigir a un usuario ya autenticado que visita `/login` — con `find` normal, "Cartelera" (primera del arreglo, accesible para cualquier rol) siempre ganaría, rebotando incluso a un administrador hacia `/`, que todavía no existe. `findLast` prioriza la sección más específica que el rol cumple (administrador → `/admin/usuarios`).
+5. `app.routes.ts`: agregar `canActivate: [guardiaInvitado]` a `/login`; derivar `data.rolMinimo` de las 3 rutas `admin/*` desde `SECCIONES_NAVEGACION` (evita declarar el mismo rol dos veces).
+6. `app.html`/`app.ts`: `<app-barra-navegacion />` antes de `<router-outlet />`. `app.spec.ts` necesita los mismos `vi.mock('firebase/app'|'firebase/auth')` + `{ provide: ServicioAuth, useValue: {...} }` que ya usa `login.component.spec.ts`, porque `App` pasa a inyectar `ServicioAuth` transitivamente.
 
 **Definition of done:**
-- [ ] Las tres funciones de `aforo.ts` nunca leen el ítem del evento antes de escribir — toda modificación de aforo es una única escritura condicional
-- [ ] `liberarSillas` es segura ante un mismo registro de Stream entregado más de una vez (probado explícitamente con una prueba que invoca la función dos veces con el mismo `eventoId`/`cantidad` y verifica que la segunda falla o no duplica el efecto)
-- [ ] `liberar-reservas.ts` ignora eventos de Stream que no sean `REMOVE`, y los `REMOVE` cuyo estado previo ya no retenía aforo (`aprobada`/`rechazada`/`expirada`)
-- [ ] Rol IAM de `liberarReservas` limitado a `dynamodb:UpdateItem` sobre `agora-eventos`, sin comodines
-- [ ] `npm run test:api` en verde (con los registros de Stream simulados vía mocks, sin depender de Streams reales)
-- [ ] `npm run build:api` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
+- [ ] La barra se renderiza siempre (con y sin sesión), nunca condicionada a `usuarioActual()` a nivel de `@if` de todo el componente
+- [ ] Sin sesión: solo logo + "Ingresar"; con sesión: secciones filtradas por rol + avatar + "Cerrar sesión"
+- [ ] `administrador` ve "Cartelera", "Eventos" y "Usuarios"; `productor`/`portero` ven únicamente "Cartelera"
+- [ ] Ningún componente compara roles a mano — todo pasa por `cumpleRolMinimo`
+- [ ] `<img>` de `photoURL` lleva `referrerpolicy="no-referrer"`, con fallback de inicial si no hay foto
+- [ ] Sección activa marcada con `aria-current="page"`, foco visible con teclado (Tab)
+- [ ] `guardia-invitado.spec.ts` cubre: sin sesión → `true`; administrador → `createUrlTree(['/admin/usuarios'])`; portero → `createUrlTree(['/'])`
+- [ ] `npm test` en verde (incluye `app.spec.ts`, `barra-navegacion.component.spec.ts`, `guardia-invitado.spec.ts`)
+- [ ] `npm run build` sin errores (presupuesto de bundle y SSR)
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
@@ -77,15 +80,16 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
 
-1. Compra y reserva de sillas (depende de Motor de aforo)
-2. Carga de comprobante por enlace mágico
-3. Aprobación del productor
-4. Emisión de boletas con QR firmado
-5. Validación en puerta
-6. Venta en efectivo
-7. QR del evento para afiches (depende de CRUD de eventos, ya cerrado — puede promoverse antes si conviene agruparlo con otra tarea de `eventos.ts`)
-8. Panel de control básico
-9. Dominio personalizado `agora.letiende.co`
+1. **Motor de aforo** (reserva condicional, TTL, liberación por Streams) — bumped de Tarea 2 activa la noche del 06/08/2026 para priorizar el Menú de navegación (ver nota de prioridad arriba). Diseño ya completo y sin cambios en `tech-specs.md` §5.4 (los tres `UpdateCommand` condicionales) y §11 ítem 8 — al promoverla de nuevo, retomar el bloque "Qué hacer"/"Definition of done" que tenía como Tarea 2 (recuperable del historial de git de este archivo, commit previo a esta sesión).
+2. Compra y reserva de sillas (depende de Motor de aforo)
+3. Carga de comprobante por enlace mágico
+4. Aprobación del productor
+5. Emisión de boletas con QR firmado
+6. Validación en puerta
+7. Venta en efectivo
+8. QR del evento para afiches (depende de CRUD de eventos, ya cerrado — puede promoverse antes si conviene agruparlo con otra tarea de `eventos.ts`)
+9. Panel de control básico
+10. Dominio personalizado `agora.letiende.co`
 
 ---
 
