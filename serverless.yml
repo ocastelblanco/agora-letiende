@@ -163,7 +163,7 @@ functions:
           method: post
 
   eventosPublicos:
-    handler: dist-server/api/handlers/eventos-publicos.handler
+    handler: dist-server-bundle/eventos-publicos.handler
     role: !GetAtt EventosPublicosLambdaRole.Arn
     description: >-
       Cartelera pública (GET /api/eventos-publicos,
@@ -173,12 +173,17 @@ functions:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
     package:
-      # A diferencia de eventos/usuarios/usuariosMe, no depende de
-      # firebase-admin (nunca usa exigirRol) — empaquetado simple, igual que
-      # salud, sin bundle de esbuild.
+      # No depende de firebase-admin (nunca usa exigirRol), pero SÍ de
+      # documentoDynamoDB (@aws-sdk/lib-dynamodb) — suficiente para el mismo
+      # fallo de arranque que ya documentó usuariosMe (MEMORY.md §7): un
+      # 500 genérico de API Gateway porque el paquete no traía node_modules
+      # y el runtime de Lambda no garantiza el SDK v3 preinstalado. Bug
+      # real encontrado en staging tras el primer despliegue de esta
+      # función — corregido empaquetando con esbuild, igual que
+      # eventos/usuarios/usuariosMe (server/bundle-lambdas.mjs).
       patterns:
         - '!**'
-        - 'dist-server/api/handlers/eventos-publicos.js'
+        - 'dist-server-bundle/eventos-publicos.js'
     events:
       - httpApi:
           path: /api/eventos-publicos
