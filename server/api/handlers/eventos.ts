@@ -4,13 +4,25 @@ import type {
   APIGatewayProxyHandlerV2,
   APIGatewayProxyResultV2,
 } from 'aws-lambda';
-import { DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  ScanCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
+import { generarQrPng, generarQrSvg } from '../services/qr';
 import { exigirRol } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
+
+// URL de producción fija (no por stage): el QR es un activo de marketing
+// impreso, pensado para el dominio final del evento (tech-specs.md §11
+// ítem 15), no para la URL de staging vigente en el momento de generarlo.
+const URL_BASE_PRODUCCION = 'https://agora.letiende.co';
 
 export type EstadoEvento = 'borrador' | 'publicado' | 'agotado' | 'finalizado' | 'cancelado';
 export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
@@ -470,9 +482,66 @@ async function eliminarEvento(eventoId: string | undefined): Promise<APIGatewayP
 }
 
 /**
+ * `GET /api/eventos/:eventoId/qr?formato=svg|png` — QR de marketing con la
+ * URL pública del evento, para imprimir en afiches (TODO.md Tarea 1,
+ * `PRD.md` línea 104). Bajo demanda, sin almacenarse en DynamoDB ni S3. El
+ * `slug` codificado se lee siempre de la base de datos — nunca de la ruta
+ * ni de un payload (`CLAUDE.md` §5, A08). No confundir con el QR firmado de
+ * la boleta digital (roadmap #12, todavía no existe).
+ */
+async function generarQrEvento(
+  eventoId: string | undefined,
+  evento: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  if (!eventoId) {
+    return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
+  }
+
+  const formatoParam = evento.queryStringParameters?.['formato'];
+  if (formatoParam !== undefined && formatoParam !== 'svg' && formatoParam !== 'png') {
+    return respuestaJson(400, { mensaje: "formato debe ser 'svg' o 'png'" });
+  }
+  const formato = formatoParam === 'png' ? 'png' : 'svg';
+
+  const resultado = await documentoDynamoDB.send(
+    new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
+  );
+  const slug = resultado.Item?.['slug'];
+  if (typeof slug !== 'string') {
+    return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+  }
+
+  const url = `${URL_BASE_PRODUCCION}/evento/${slug}`;
+
+  if (formato === 'png') {
+    const png = await generarQrPng(url);
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': `attachment; filename="qr-${slug}.png"`,
+      },
+      body: png.toString('base64'),
+      isBase64Encoded: true,
+    };
+  }
+
+  const svg = await generarQrSvg(url);
+  return {
+    statusCode: 200,
+    headers: {
+      'Content-Type': 'image/svg+xml',
+      'Content-Disposition': `attachment; filename="qr-${slug}.svg"`,
+    },
+    body: svg,
+  };
+}
+
+/**
  * `GET/POST /api/eventos`, `PUT/DELETE /api/eventos/:eventoId`,
- * `POST /api/eventos/:eventoId/activos/url-carga` — CRUD de `agora-eventos`,
- * exclusivo de `administrador` (tech-specs.md §5.1, TODO.md Tarea 1).
+ * `POST /api/eventos/:eventoId/activos/url-carga`,
+ * `GET /api/eventos/:eventoId/qr` — CRUD de `agora-eventos`, exclusivo de
+ * `administrador` (tech-specs.md §5.1, TODO.md Tarea 1).
  */
 export const handler: APIGatewayProxyHandlerV2 = async (
   evento: APIGatewayProxyEventV2,
@@ -484,10 +553,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (
 
   const eventoId = evento.pathParameters?.['eventoId'];
   const esCargaDeActivo = (evento.rawPath ?? '').endsWith('/activos/url-carga');
+  const esQr = (evento.rawPath ?? '').endsWith('/qr');
 
   try {
     if (esCargaDeActivo && evento.requestContext.http.method === 'POST') {
       return await generarUrlCargaActivo(eventoId, evento);
+    }
+    if (esQr && evento.requestContext.http.method === 'GET') {
+      return await generarQrEvento(eventoId, evento);
     }
 
     switch (evento.requestContext.http.method) {

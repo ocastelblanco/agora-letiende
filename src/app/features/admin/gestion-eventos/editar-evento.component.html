@@ -265,6 +265,33 @@
           }
         </div>
 
+        @if (puedeSubirActivos()) {
+          <div class="flex flex-col gap-3">
+            <h2 class="text-sm font-semibold text-primary">Código QR para afiches</h2>
+            <p class="text-xs text-primary/60">
+              Enlaza a la página pública del evento. Ideal para imprimir en afiches y volantes.
+            </p>
+            <div class="flex gap-2">
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="descargandoQr() === 'svg'"
+                (click)="descargarQr('svg')"
+              >
+                {{ descargandoQr() === 'svg' ? 'Descargando…' : 'Descargar QR (SVG)' }}
+              </button>
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="descargandoQr() === 'png'"
+                (click)="descargarQr('png')"
+              >
+                {{ descargandoQr() === 'png' ? 'Descargando…' : 'Descargar QR (PNG)' }}
+              </button>
+            </div>
+          </div>
+        }
+
         <button
           type="submit"
           [disabled]="guardando()"

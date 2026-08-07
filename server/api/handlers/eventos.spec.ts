@@ -49,12 +49,18 @@ const eventoValido = {
 
 function crearEvento(
   metodo: string,
-  opciones: { rawPath?: string; eventoId?: string; cuerpo?: unknown } = {},
+  opciones: {
+    rawPath?: string;
+    eventoId?: string;
+    cuerpo?: unknown;
+    queryStringParameters?: Record<string, string>;
+  } = {},
 ): Parameters<typeof handler>[0] {
   return {
     requestContext: { http: { method: metodo } },
     rawPath: opciones.rawPath ?? '/api/eventos',
     pathParameters: opciones.eventoId ? { eventoId: opciones.eventoId } : undefined,
+    queryStringParameters: opciones.queryStringParameters,
     body: opciones.cuerpo !== undefined ? JSON.stringify(opciones.cuerpo) : undefined,
     headers: {},
   } as unknown as Parameters<typeof handler>[0];
@@ -62,10 +68,20 @@ function crearEvento(
 
 async function invocar(
   metodo: string,
-  opciones?: { rawPath?: string; eventoId?: string; cuerpo?: unknown },
+  opciones?: {
+    rawPath?: string;
+    eventoId?: string;
+    cuerpo?: unknown;
+    queryStringParameters?: Record<string, string>;
+  },
 ) {
   const respuesta = await handler(crearEvento(metodo, opciones), {} as never, undefined as never);
-  return respuesta as { statusCode: number; body?: string };
+  return respuesta as {
+    statusCode: number;
+    body?: string;
+    headers?: Record<string, string>;
+    isBase64Encoded?: boolean;
+  };
 }
 
 describe('handler de /api/eventos', () => {
@@ -346,6 +362,65 @@ describe('handler de /api/eventos', () => {
       });
 
       expect(respuesta.statusCode).toBe(400);
+    });
+  });
+
+  describe('GET /api/eventos/:eventoId/qr', () => {
+    it('devuelve un SVG que codifica la URL pública del slug real leído de DynamoDB', async () => {
+      sendMock.mockResolvedValue({ Item: { eventoId: 'e1', slug: 'concierto-jazz' } });
+
+      const respuesta = await invocar('GET', { rawPath: '/api/eventos/e1/qr', eventoId: 'e1' });
+
+      expect(respuesta.statusCode).toBe(200);
+      expect(respuesta.headers?.['Content-Type']).toBe('image/svg+xml');
+      expect(respuesta.headers?.['Content-Disposition']).toContain('qr-concierto-jazz.svg');
+      expect(respuesta.body).toContain('<svg');
+    });
+
+    it('devuelve PNG en base64 cuando formato=png', async () => {
+      sendMock.mockResolvedValue({ Item: { eventoId: 'e1', slug: 'concierto-jazz' } });
+
+      const respuesta = await invocar('GET', {
+        rawPath: '/api/eventos/e1/qr',
+        eventoId: 'e1',
+        queryStringParameters: { formato: 'png' },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+      expect(respuesta.headers?.['Content-Type']).toBe('image/png');
+      expect(respuesta.headers?.['Content-Disposition']).toContain('qr-concierto-jazz.png');
+      expect(respuesta.isBase64Encoded).toBe(true);
+      const primerosBytes = Buffer.from(respuesta.body!, 'base64').subarray(0, 4);
+      expect(primerosBytes).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+
+    it('nunca usa un slug de la ruta o el payload — solo el que lee de DynamoDB', async () => {
+      sendMock.mockResolvedValue({ Item: { eventoId: 'e1', slug: 'slug-real-en-bd' } });
+
+      const respuesta = await invocar('GET', { rawPath: '/api/eventos/e1/qr', eventoId: 'e1' });
+
+      expect(respuesta.body).toContain('<svg');
+      const comandoGet = sendMock.mock.calls[0][0];
+      expect(comandoGet.input.Key).toEqual({ eventoId: 'e1' });
+    });
+
+    it('responde 404 si el evento no existe', async () => {
+      sendMock.mockResolvedValue({ Item: undefined });
+
+      const respuesta = await invocar('GET', { rawPath: '/api/eventos/inexistente/qr', eventoId: 'inexistente' });
+
+      expect(respuesta.statusCode).toBe(404);
+    });
+
+    it('responde 400 si formato no es svg ni png', async () => {
+      const respuesta = await invocar('GET', {
+        rawPath: '/api/eventos/e1/qr',
+        eventoId: 'e1',
+        queryStringParameters: { formato: 'jpg' },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
     });
   });
 

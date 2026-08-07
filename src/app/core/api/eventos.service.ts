@@ -7,6 +7,9 @@ import { DatosEditarEvento, DatosNuevoEvento, Evento } from '../models/evento.mo
 export type ResultadoOperacionEvento = { exito: true; evento: Evento } | { exito: false; error: string };
 export type ResultadoSubidaActivo = { exito: true; key: string } | { exito: false; error: string };
 export type ResultadoEliminarEvento = { exito: true } | { exito: false; error: string };
+export type ResultadoDescargaQr =
+  | { exito: true; blob: Blob; nombreArchivo: string }
+  | { exito: false; error: string };
 
 /**
  * Cliente de `/api/eventos` (tech-specs.md §5.1, TODO.md Tarea 1) — CRUD
@@ -172,5 +175,49 @@ export class EventosService {
         error: this.mensajeError(error, 'No se pudo subir el archivo. Intenta de nuevo.'),
       };
     }
+  }
+
+  /**
+   * Descarga el QR de marketing del evento (`GET /api/eventos/:eventoId/qr`)
+   * — un archivo, no JSON, así que se pide como `Blob` con
+   * `observe: 'response'` para leer el nombre real (con el slug) del header
+   * `Content-Disposition` que ya arma el backend, en vez de reconstruirlo
+   * en el cliente.
+   */
+  async descargarQr(eventoId: string, formato: 'svg' | 'png'): Promise<ResultadoDescargaQr> {
+    const idToken = await this.servicioAuth.obtenerIdToken();
+    if (!idToken) {
+      return { exito: false, error: 'No se pudo descargar el QR. Intenta de nuevo.' };
+    }
+
+    try {
+      const respuesta = await firstValueFrom(
+        this.http.get(`/api/eventos/${eventoId}/qr`, {
+          params: { formato },
+          headers: { Authorization: `Bearer ${idToken}` },
+          responseType: 'blob',
+          observe: 'response',
+        }),
+      );
+
+      const blob = respuesta.body ?? new Blob();
+      const nombreArchivo =
+        this.extraerNombreArchivo(respuesta.headers.get('Content-Disposition')) ??
+        `qr-evento.${formato}`;
+      return { exito: true, blob, nombreArchivo };
+    } catch (error) {
+      return {
+        exito: false,
+        error: this.mensajeError(error, 'No se pudo descargar el QR. Intenta de nuevo.'),
+      };
+    }
+  }
+
+  private extraerNombreArchivo(contentDisposition: string | null): string | null {
+    if (!contentDisposition) {
+      return null;
+    }
+    const coincidencia = /filename="([^"]+)"/.exec(contentDisposition);
+    return coincidencia ? coincidencia[1] : null;
   }
 }
