@@ -1,5 +1,22 @@
 import { Routes } from '@angular/router';
+import { guardiaInvitado } from './core/guardias/guardia-invitado';
 import { guardiaRol } from './core/guardias/guardia-rol';
+import { SECCIONES_NAVEGACION } from './shared/navegacion/secciones-navegacion';
+
+/**
+ * `rolMinimo` de las rutas `admin/*` se deriva de `SECCIONES_NAVEGACION`
+ * (única fuente de verdad, `TODO.md` Tarea 1) en vez de declararse dos
+ * veces. Lanza en tiempo de carga del módulo si la sección esperada no
+ * existe — un error de configuración así debe fallar ruidosamente, no
+ * silenciarse detrás de un `undefined`.
+ */
+function rolMinimoDe(ruta: string): string {
+  const seccion = SECCIONES_NAVEGACION.find((s) => s.ruta === ruta);
+  if (!seccion) {
+    throw new Error(`No hay una sección de navegación para la ruta "${ruta}".`);
+  }
+  return seccion.rolMinimo;
+}
 
 export const routes: Routes = [
   {
@@ -19,6 +36,7 @@ export const routes: Routes = [
   {
     path: 'login',
     loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent),
+    canActivate: [guardiaInvitado],
     title: 'Ingresar — Ágora',
   },
   {
@@ -28,7 +46,7 @@ export const routes: Routes = [
         (m) => m.GestionUsuariosComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: 'administrador' },
+    data: { rolMinimo: rolMinimoDe('/admin/usuarios') },
     title: 'Usuarios — Ágora',
   },
   {
@@ -38,7 +56,7 @@ export const routes: Routes = [
         (m) => m.GestionEventosComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: 'administrador' },
+    data: { rolMinimo: rolMinimoDe('/admin/eventos') },
     title: 'Eventos — Ágora',
   },
   {
@@ -48,7 +66,7 @@ export const routes: Routes = [
         (m) => m.EditarEventoComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: 'administrador' },
+    data: { rolMinimo: rolMinimoDe('/admin/eventos') },
     title: 'Editar evento — Ágora',
   },
 ];
