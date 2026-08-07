@@ -22,3 +22,5 @@ Workspace setting,06/08/2026 20:03,06/08/2026 20:06,0:03:00,AI,Sonnet 5,Vuelta a
 Specs definition,06/08/2026 20:06,06/08/2026 20:13,0:07:00,AI,Sonnet 5,Explicacion de por que un evento nuevo queda en borrador diseño intencional sin codigo,Claude Code,cli,low
 Frontend,06/08/2026 20:13,06/08/2026 20:53,0:40:00,AI,Sonnet 5,Investigacion de roadmap y diseño de plan de menu de navegacion sin implementar todavia,Claude Code,cli,high
 Specs definition,06/08/2026 20:53,06/08/2026 21:07,0:14:00,AI,Sonnet 5,Registro de menu de navegacion en tech-specs TODO y MEMORY refuerzo de regla de tracking,Claude Code,cli,medium
+Backend,06/08/2026 21:07,06/08/2026 21:40,0:33:00,AI,Sonnet 5,Tarea 1 cartelera publica rama nueva commit de docs y delegacion de implementacion PR 12,Claude Code,cli,high
+Backend,07/08/2026 08:15,07/08/2026 08:44,0:29:00,AI,Sonnet 5,Diagnostico y fix de bug real en staging empaquetado de eventosPublicos sin aws-sdk incluido,Claude Code,cli,high
