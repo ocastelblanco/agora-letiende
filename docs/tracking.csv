@@ -27,3 +27,4 @@ Backend,07/08/2026 08:15,07/08/2026 08:44,0:29:00,AI,Sonnet 5,Diagnostico y fix 
 Specs definition,07/08/2026 08:44,07/08/2026 08:52,0:08:00,AI,Sonnet 5,Recalculo del motor JIT cierre de Tarea 1 cartelera y restauracion de motor de aforo,Claude Code,cli,medium
 Frontend,07/08/2026 08:52,07/08/2026 10:01,1:09:00,AI,Sonnet 5,Limpieza de main tras merge del PR 12 y delegacion del menu de navegacion,Claude Code,cli,high
 Frontend,07/08/2026 11:47,07/08/2026 12:17,0:30:00,AI,Sonnet 5,Fix del CSS base de overlays de CDK que rompia el mat-select de rol,Claude Code,cli,medium
+Frontend,07/08/2026 12:17,07/08/2026 12:43,0:26:00,AI,Sonnet 5,Diagnostico en vivo con DevTools y fix real de tokens de superficie de MDC,Claude Code,cli,high
