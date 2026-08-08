@@ -265,10 +265,17 @@ async function confirmarComprobante(token: string | undefined): Promise<APIGatew
           ),
       );
     }
-  } catch {
+  } catch (error) {
     // Best-effort (mismo criterio que compras.ts): la compra ya pasó a
-    // en_revision aunque la notificación falle. Nunca se registran datos
-    // personales del cliente en logs (CLAUDE.md §5, A09).
+    // en_revision aunque la notificación falle. Se registra el compraId y
+    // el nombre del error para poder diagnosticar (mismo motivo que
+    // compras.ts — MEMORY.md §7) — nunca el mensaje completo del error ni
+    // los correos de los productores.
+    const nombreError = error instanceof Error ? error.name : 'error desconocido';
+    console.error('No se pudo notificar el comprobante a los productores', {
+      compraId: compra.compraId,
+      nombreError,
+    });
   }
 
   return respuestaJson(200, { estado: 'en_revision' });

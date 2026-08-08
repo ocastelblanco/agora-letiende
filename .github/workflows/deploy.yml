@@ -117,6 +117,16 @@ jobs:
           # ejecutarse, GET /api/usuarios/me responde 500 en vez de 200/403
           # (verificado en vivo en staging — MEMORY.md §7).
           FIREBASE_SERVICE_ACCOUNT_AGORA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AGORA }}
+          # Mismo gotcha que FIREBASE_SERVICE_ACCOUNT_AGORA arriba, esta vez
+          # con las Lambdas compras/comprobantes (TODO.md Tarea 2): sin
+          # estas tres variables, `correo-ses.ts` intenta enviar con
+          # `Source: ''`, SES lo rechaza, y el `catch` best-effort de
+          # `compras.ts`/`comprobantes.ts` lo traga en silencio — el enlace
+          # de comprobante nunca llega, sin ningún error visible
+          # (encontrado en vivo en staging el 08/08/2026, MEMORY.md §7).
+          SES_REMITENTE: ${{ secrets.SES_REMITENTE }}
+          URL_BASE_APP: ${{ secrets.URL_BASE_APP }}
+          SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}
 
       - name: Smoke test contra staging recién desplegado
         run: |
@@ -177,3 +187,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           FIREBASE_SERVICE_ACCOUNT_AGORA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AGORA }}
+          # Mismo motivo que en desplegar-staging arriba.
+          SES_REMITENTE: ${{ secrets.SES_REMITENTE }}
+          URL_BASE_APP: ${{ secrets.URL_BASE_APP }}
+          SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}

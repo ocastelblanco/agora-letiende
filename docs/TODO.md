@@ -97,7 +97,7 @@ Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 
 - ✅ Remitente `taquilla@letiende.co` en SES probado — llegó a bandeja de entrada en Gmail (sección 5). Queda una verificación opcional de cabeceras SPF/DKIM/DMARC, no bloqueante.
 - ✅ Cuenta de servicio de Firebase creada y cargada (sección 4.3, ADR-002). **No se registra app web propia** — Ágora reutiliza el `firebaseConfig` de Comandante, igual que Babel (ADR-010). El dominio `agora.letiende.co` ya está en Authorized domains; falta el de staging, que se agrega cuando se monte el dominio personalizado (roadmap #11 del backlog).
-- 🟡 Secretos de negocio y dominio `agora.letiende.co` (secciones 6 y 7). `SECRETO_FIRMA_BOLETAS` y `SECRETO_ENLACES_MAGICOS` se necesitan más adelante (emisión de boletas y enlaces mágicos), no para las tareas activas.
+- 🔴 **Bloqueando en vivo desde el 08/08/2026:** `SES_REMITENTE`, `URL_BASE_APP` y `SECRETO_ENLACES_MAGICOS` deben existir como secretos de GitHub en los entornos `staging` y `production` (Settings → Environments) — `.github/workflows/deploy.yml` ya los pasa a `serverless deploy` (fix aplicado en el PR de Carga de comprobante), pero si el valor del secreto no existe en GitHub, sigue resolviendo a cadena vacía igual que antes del fix. Verificado en staging: sin esto, el correo con el enlace de comprobante nunca llega (SES rechaza `Source: ''`), sin ningún error visible al usuario — ver `MEMORY.md` §7. `SECRETO_FIRMA_BOLETAS` sigue pendiente para más adelante (emisión de boletas, roadmap #12, todavía no implementada).
 
 Fase 2, conviene arrancarlo pronto porque la Verificación de Negocio de Meta es lenta:
 

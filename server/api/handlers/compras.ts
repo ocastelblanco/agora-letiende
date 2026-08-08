@@ -248,11 +248,18 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
         plazoComprobanteMinutos: eventoEncontrado.plazoComprobanteMinutos,
       },
     );
-  } catch {
+  } catch (error) {
     // Best-effort (mismo criterio que eliminarActivosDelEvento en
     // eventos.ts): la reserva y la compra ya son válidas aunque el correo
-    // falle. Nunca se registra el correo ni el teléfono del cliente en logs
+    // falle. Se registra el compraId y el nombre del error para poder
+    // diagnosticar (bug real: este catch tragaba el fallo en silencio, sin
+    // ningún rastro en CloudWatch — MEMORY.md §7) — nunca el mensaje
+    // completo del error ni el objeto original, porque un error de SES
+    // sobre una dirección inválida puede incluir esa misma dirección en su
+    // texto, y nunca se registra el correo ni el teléfono del cliente
     // (CLAUDE.md §5, A09).
+    const nombreError = error instanceof Error ? error.name : 'error desconocido';
+    console.error('No se pudo enviar el enlace de comprobante', { compraId, nombreError });
   }
 
   return respuestaJson(201, {
