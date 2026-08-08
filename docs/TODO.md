@@ -54,16 +54,18 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 2. `liberar-reservas.ts`: Lambda con `streamEnabled` sobre el Stream de `agora-compras`, filtra únicamente eventos `REMOVE` (borrado por TTL) cuyo `OLD image` tenía un estado que todavía retenía aforo reservado (`iniciada`, `esperando_comprobante`, `en_revision` — no `aprobada`/`rechazada`/`expirada`, que ya liberaron o confirmaron su aforo por otro camino), y llama `liberarSillas(eventoId, cantidad)`. Idempotente por diseño gracias a la `ConditionExpression` de `liberarSillas` — un reintento del mismo registro de Stream no vuelve a restar de `sillasReservadas` por debajo de lo real porque la condición fallaría.
 3. `serverless.yml`: función `liberarReservas` con evento `stream` apuntando al `StreamArn` de `AgoraCompras` (`BatchSize` pequeño, ej. 10, y `StartingPosition: LATEST`), rol IAM propio (`dynamodb:UpdateItem` sobre `agora-eventos` exclusivamente — sin acceso a `agora-compras` más allá de lo que el trigger de Streams ya provee, sin `agora-usuarios`, sin `exigirRol`: esta Lambda nunca la invoca un humano). **Empaquetar siempre con esbuild (`server/bundle-lambdas.mjs`), nunca "simple" como `salud`** — `aforo.ts` importa `documentoDynamoDB` (`@aws-sdk/lib-dynamodb`), y eso ya es suficiente para que la Lambda se caiga al arrancar si el paquete excluye `node_modules` (bug real encontrado en staging el 07/08/2026 con `eventosPublicos`, mismo motivo exacto — ver `MEMORY.md` §7). El criterio nunca fue "¿usa `firebase-admin`?", es "¿importa algo de `node_modules` en tiempo de ejecución?".
 
+**Nota para `handlers/compras.ts` (roadmap #9, todavía no existe):** el modelo `Evento` no tiene un campo `sillasVendidas` separado — la fórmula `sillasTotales = sillasDisponibles + sillasReservadas + sillasVendidas` de `tech-specs.md` §5.4 es conceptual, no un contador persistido. `confirmarSillas` solo decrementa `sillasReservadas` (tal como especifica el paso 2), sin escribir ningún contador de "vendidas" — las sillas vendidas se derivan como `sillasTotales - sillasDisponibles - sillasReservadas`, o se cuentan a partir de las boletas emitidas en `agora-boletas` (roadmap #12). Si `compras.ts` necesita un contador explícito de vendidas, es una decisión de esa tarea, no de esta.
+
 **Definition of done:**
-- [ ] Las tres funciones de `aforo.ts` nunca leen el ítem del evento antes de escribir — toda modificación de aforo es una única escritura condicional
-- [ ] `liberarSillas` es segura ante un mismo registro de Stream entregado más de una vez (probado explícitamente con una prueba que invoca la función dos veces con el mismo `eventoId`/`cantidad` y verifica que la segunda falla o no duplica el efecto)
-- [ ] `liberar-reservas.ts` ignora eventos de Stream que no sean `REMOVE`, y los `REMOVE` cuyo estado previo ya no retenía aforo (`aprobada`/`rechazada`/`expirada`)
-- [ ] Rol IAM de `liberarReservas` limitado a `dynamodb:UpdateItem` sobre `agora-eventos`, sin comodines
-- [ ] `liberarReservas` empaquetada con esbuild (`server/bundle-lambdas.mjs`), no con `package.patterns` manual
-- [ ] `npm run test:api` en verde (con los registros de Stream simulados vía mocks, sin depender de Streams reales)
-- [ ] `npm run build:api` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [x] Las tres funciones de `aforo.ts` nunca leen el ítem del evento antes de escribir — toda modificación de aforo es una única escritura condicional (la lectura de `reservarSillas` solo ocurre **después** de que la escritura ya falló, para clasificar el error, nunca para decidir)
+- [x] `liberarSillas` es segura ante un mismo registro de Stream entregado más de una vez (probado explícitamente en `aforo.spec.ts` invocándola dos veces con el mismo `eventoId`/`cantidad`: la segunda lanza `SillasReservadasInsuficientesError`)
+- [x] `liberar-reservas.ts` ignora eventos de Stream que no sean `REMOVE`, y los `REMOVE` cuyo estado previo ya no retenía aforo (`aprobada`/`rechazada`/`expirada`)
+- [x] Rol IAM de `liberarReservas` limitado a `dynamodb:UpdateItem` sobre `agora-eventos`, sin comodines (más los permisos de lectura del propio Stream que el trigger exige — `dynamodb:ListStreams` no admite scoping por recurso, documentado en el comentario del `serverless.yml`)
+- [x] `liberarReservas` empaquetada con esbuild (`server/bundle-lambdas.mjs`), no con `package.patterns` manual — verificado además con una invocación directa del bundle (`node -e`) para confirmar que arranca sin el 500 genérico de paquete incompleto
+- [x] `npm run test:api` en verde (92 pruebas, incluyendo los registros de Stream simulados vía mocks, sin depender de Streams reales)
+- [x] `npm run build:api` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (implementación lista en `claude/tarea-1-mobile-feasibility-044k5v`; PR pendiente de solicitud explícita del usuario)
 
 ---
 

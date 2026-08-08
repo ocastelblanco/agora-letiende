@@ -197,6 +197,28 @@ functions:
           path: /sitemap.xml
           method: get
 
+  liberarReservas:
+    handler: dist-server-bundle/liberar-reservas.handler
+    role: !GetAtt LiberarReservasLambdaRole.Arn
+    description: >-
+      Consumidor de Streams de agora-compras: libera el aforo reservado
+      cuando el TTL borra una reserva vencida (TODO.md Tarea 2).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+    package:
+      # Depende de documentoDynamoDB y de @aws-sdk/util-dynamodb
+      # (unmarshall) — mismo motivo de bundle que eventos-publicos.ts
+      # (server/bundle-lambdas.mjs, MEMORY.md §7).
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/liberar-reservas.js'
+    events:
+      - stream:
+          type: dynamodb
+          arn: !GetAtt AgoraCompras.StreamArn
+          batchSize: 10
+          startingPosition: LATEST
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -395,6 +417,55 @@ resources:
                   Resource:
                     - !GetAtt AgoraEventos.Arn
                     - !Sub '${AgoraEventos.Arn}/index/*'
+
+    LiberarReservasLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-liberar-reservas-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): esta Lambda nunca la
+          # invoca un humano (dispara solo por Streams), así que no necesita
+          # exigirRol ni acceso a agora-usuarios. Sobre agora-eventos, solo
+          # dynamodb:UpdateItem — liberarSillas() nunca lee, solo escribe
+          # condicionalmente (tech-specs.md §5.4 punto 3).
+          - PolicyName: agora-liberar-reservas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # Permisos de lectura del propio Stream de agora-compras — no dan
+          # acceso a los ítems de la tabla (ni Query ni Scan ni GetItem
+          # aquí), solo a leer los registros de cambio que el trigger ya
+          # entrega como payload. dynamodb:ListStreams no admite permisos a
+          # nivel de recurso (documentación de IAM de DynamoDB): Resource
+          # debe ser "*" para esa acción específica, no es un comodín
+          # evitable.
+          - PolicyName: agora-liberar-reservas-streams-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:DescribeStream
+                    - dynamodb:GetRecords
+                    - dynamodb:GetShardIterator
+                  Resource: !GetAtt AgoraCompras.StreamArn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:ListStreams
+                  Resource: '*'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role

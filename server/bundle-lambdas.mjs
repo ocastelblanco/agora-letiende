@@ -44,6 +44,10 @@ const entradas = [
   // (@aws-sdk/lib-dynamodb), suficiente para el mismo fallo de arranque.
   // Bug real encontrado en staging por el usuario (docs/MEMORY.md §7).
   { entrada: 'dist-server/api/handlers/eventos-publicos.js', salida: `${OUT_DIR}/eventos-publicos.js` },
+  // liberar-reservas.ts (consumidor de Streams, TODO.md Tarea 2) depende de
+  // documentoDynamoDB y de @aws-sdk/util-dynamodb (unmarshall) — mismo
+  // motivo de bundle que eventos-publicos.ts.
+  { entrada: 'dist-server/api/handlers/liberar-reservas.js', salida: `${OUT_DIR}/liberar-reservas.js` },
 ];
 
 for (const { entrada, salida } of entradas) {
