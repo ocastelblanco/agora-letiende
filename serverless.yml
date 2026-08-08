@@ -11,6 +11,19 @@ provider:
   timeout: 10
   httpApi:
     cors: true
+    # GAP DOCUMENTADO A PROPÓSITO, no silenciado (TODO.md Tarea 2,
+    # CLAUDE.md §5 A07: "la creación de compras es la superficie más barata
+    # de abusar de toda la aplicación"): `POST /api/compras` NO tiene
+    # límite de tasa todavía. Se investigó `provider.httpApi.throttle`
+    # (nativo de Serverless Framework para REST API vía `usagePlan`, pero
+    # NO existe para HTTP API — verificado, no asumido) y `routeSettings`
+    # por ruta (requiere el plugin `serverless-apigateway-route-settings`,
+    # no evaluado todavía contra Serverless Framework 4, o un
+    # `resources.extensions` de CloudFormation a mano sobre el Stage
+    # autogenerado, no verificable sin desplegar en este entorno). Cerrar
+    # esto es la primera mejora de seguridad a agregar antes de tráfico
+    # real — sin él, un script puede agotar el aforo de un evento con
+    # reservas que nunca se pagan.
   deploymentBucket:
     # Sin este tope, cada despliegue deja su artefacto en S3 para siempre
     # (docs/advertencia-urgente-costos-aws.md §3). Se conservan 5, el resto
@@ -218,6 +231,34 @@ functions:
           arn: !GetAtt AgoraCompras.StreamArn
           batchSize: 10
           startingPosition: LATEST
+
+  compras:
+    handler: dist-server-bundle/compras.handler
+    role: !GetAtt ComprasLambdaRole.Arn
+    description: >-
+      POST /api/compras, GET /api/compras/:compraId/estado — inicia una
+      compra, reserva sillas y envía el enlace de comprobante. Público, sin
+      exigirRol (TODO.md Tarea 2).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
+      SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
+    package:
+      # Depende de documentoDynamoDB y de @aws-sdk/client-ses — mismo
+      # motivo de bundle que eventos-publicos.ts/liberar-reservas.ts
+      # (server/bundle-lambdas.mjs, MEMORY.md §7).
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/compras.js'
+    events:
+      - httpApi:
+          path: /api/compras
+          method: post
+      - httpApi:
+          path: /api/compras/{compraId}/estado
+          method: get
 
   ssr:
     handler: server/ssr/handler.handler
@@ -467,6 +508,66 @@ resources:
                     - dynamodb:ListStreams
                   Resource: '*'
 
+    ComprasLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-compras-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): compras.ts nunca usa
+          # exigirRol (endpoint público), así que sin acceso a
+          # agora-usuarios. Sobre agora-eventos: Query (resolver el slug por
+          # su GSI, nunca Scan), GetItem (clasificarFalloReserva en
+          # aforo.ts, solo después de que una reserva ya falló) y
+          # UpdateItem (reservarSillas).
+          - PolicyName: agora-compras-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraEventos.Arn
+                    - !Sub '${AgoraEventos.Arn}/index/*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # Sobre agora-compras: PutItem para crear la compra, GetItem para
+          # el endpoint de estado — sin Scan ni Query, esta función nunca
+          # lista compras.
+          - PolicyName: agora-compras-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraCompras.Arn
+          # ses:SendEmail (no ses:*), acotado a la identidad verificada de
+          # letiende.co — el enlace de comprobante es el único correo que
+          # esta función envía (services/notificaciones.ts).
+          - PolicyName: agora-compras-ses-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ses:SendEmail
+                    - ses:SendRawEmail
+                  Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+
     SsrLambdaRole:
       Type: AWS::IAM::Role
       Properties:
@@ -549,6 +650,8 @@ resources:
             AttributeType: S
           - AttributeName: tokenAprobacionHash
             AttributeType: S
+          - AttributeName: tokenComprobanteHash
+            AttributeType: S
         KeySchema:
           - AttributeName: compraId
             KeyType: HASH
@@ -567,6 +670,17 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
+          # Usado por handlers/compras.ts para generar el enlace de
+          # comprobante (TODO.md Tarea 2) y, más adelante, por
+          # handlers/comprobantes.ts (roadmap #10) para consumirlo. El hash
+          # se deriva con server/api/lib/enlaces-magicos.ts — nunca se
+          # guarda el token en claro (CLAUDE.md §5, A07).
+          - IndexName: tokenComprobanteHash-index
+            KeySchema:
+              - AttributeName: tokenComprobanteHash
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         # TTL: el reloj de limpieza y devolución de aforo, NO el reloj de
         # negocio — toda lectura debe tratar como expirada una reserva con
         # expiraEn pasado, exista o no todavía el ítem (tech-specs.md §5.4
@@ -574,11 +688,10 @@ resources:
         TimeToLiveSpecification:
           AttributeName: expiraEn
           Enabled: true
-        # Streams: consumidos por la futura Lambda `liberarReservas`
-        # (tech-specs.md §5.3, roadmap #8) para devolver el aforo cuando el
-        # TTL borra una reserva vencida. NEW_AND_OLD_IMAGES porque el evento
-        # de borrado por TTL necesita la imagen anterior para saber cuántas
-        # sillas devolver.
+        # Streams: consumidos por la Lambda `liberarReservas` para devolver
+        # el aforo cuando el TTL borra una reserva vencida.
+        # NEW_AND_OLD_IMAGES porque el evento de borrado por TTL necesita la
+        # imagen anterior para saber cuántas sillas devolver.
         StreamSpecification:
           StreamViewType: NEW_AND_OLD_IMAGES
 

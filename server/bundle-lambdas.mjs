@@ -48,6 +48,9 @@ const entradas = [
   // documentoDynamoDB y de @aws-sdk/util-dynamodb (unmarshall) — mismo
   // motivo de bundle que eventos-publicos.ts.
   { entrada: 'dist-server/api/handlers/liberar-reservas.js', salida: `${OUT_DIR}/liberar-reservas.js` },
+  // compras.ts (TODO.md Tarea 2) depende de documentoDynamoDB y de
+  // @aws-sdk/client-ses — mismo motivo de bundle que el resto.
+  { entrada: 'dist-server/api/handlers/compras.js', salida: `${OUT_DIR}/compras.js` },
 ];
 
 for (const { entrada, salida } of entradas) {

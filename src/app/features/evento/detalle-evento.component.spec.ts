@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Meta, Title } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
 import type { EventoPublico } from '../../core/models/evento.model';
 import { DetalleEventoComponent } from './detalle-evento.component';
@@ -26,6 +27,7 @@ const eventoEjemplo: EventoPublico = {
 function configurarPrueba(cargarEventoPorSlugMock: ReturnType<typeof vi.fn>) {
   TestBed.configureTestingModule({
     providers: [
+      provideRouter([]),
       {
         provide: EventosPublicosService,
         useValue: { cargarEventoPorSlug: cargarEventoPorSlugMock },
@@ -62,6 +64,30 @@ describe('DetalleEventoComponent', () => {
     expect(componente['noEncontrado']()).toBe(false);
     expect(componente['evento']()).toEqual(eventoEjemplo);
     expect(fixture.nativeElement.textContent).toContain('Concierto de jazz');
+  });
+
+  it('muestra el botón "Comprar boletas" cuando el evento está publicado y tiene sillas disponibles', async () => {
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const enlace: HTMLAnchorElement | null = fixture.nativeElement.querySelector(
+      'a[href="/evento/concierto-jazz/comprar"]',
+    );
+    expect(enlace).not.toBeNull();
+    expect(enlace?.textContent).toContain('Comprar boletas');
+  });
+
+  it('no muestra el botón "Comprar boletas" si el evento está agotado', async () => {
+    const cargarEventoPorSlugMock = vi
+      .fn()
+      .mockResolvedValue({ exito: true, evento: { ...eventoEjemplo, estado: 'agotado', sillasDisponibles: 0 } });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    expect(fixture.nativeElement.textContent).not.toContain('Comprar boletas');
   });
 
   it('marca noEncontrado cuando el servicio responde sin éxito (404)', async () => {

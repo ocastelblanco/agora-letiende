@@ -25,7 +25,7 @@
 
           @if (detalleEvento.etapas.length > 0) {
             <h2 class="mb-2 text-lg font-semibold text-primary">Etapas de boletería</h2>
-            <ul class="divide-y divide-primary/10">
+            <ul class="mb-6 divide-y divide-primary/10">
               @for (etapa of detalleEvento.etapas; track etapa.etapaId) {
                 <li class="flex items-center justify-between py-2">
                   <span class="text-primary">{{ etapa.nombre }}</span>
@@ -33,6 +33,15 @@
                 </li>
               }
             </ul>
+          }
+
+          @if (detalleEvento.estado === 'publicado' && detalleEvento.sillasDisponibles > 0) {
+            <a
+              [routerLink]="['/evento', detalleEvento.slug, 'comprar']"
+              class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90"
+            >
+              Comprar boletas
+            </a>
           }
         </div>
       </div>

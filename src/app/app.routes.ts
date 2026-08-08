@@ -34,6 +34,14 @@ export const routes: Routes = [
     // con `Title.setTitle()` en cuanto carga el evento (ver su docstring).
   },
   {
+    path: 'evento/:slug/comprar',
+    loadComponent: () =>
+      import('./features/evento/comprar/comprar.component').then((m) => m.ComprarComponent),
+    // RenderMode.Client (app.routes.server.ts): formulario interactivo sin
+    // valor de SEO, mismo criterio que /admin/* (TODO.md Tarea 2).
+    title: 'Comprar boletas — Ágora',
+  },
+  {
     path: 'login',
     loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent),
     canActivate: [guardiaInvitado],

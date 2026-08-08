@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (07/08/2026, noche):** la Tarea 1 (QR del evento para afiches) se completó y se probó de punta a punta (68 pruebas backend + 102 frontend), PR #14 abierto contra `main` — ver `MEMORY.md` §2 y §9. Motor de aforo (Tarea 2, roadmap #8) sigue activa sin cambios, todavía sin empezar. El slot que deja libre QR lo ocupa **Dominio personalizado `agora.letiende.co`** (roadmap #17) — es el único ítem del roadmap v1 que no depende de Motor de aforo (depende solo de #2, infraestructura base, ya completa desde el andamiaje inicial).
+**Prioridad de selección aplicada (07/08/2026, noche):** Motor de aforo (Tarea 2, roadmap #8) se completó, se probó (92 pruebas) y se fusionó (PR #15) — ver `MEMORY.md` §2 y §9. Dominio personalizado (Tarea 1, roadmap #17) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Motor de aforo lo ocupa **Compra y reserva de sillas** (roadmap #9) — es el único ítem del backlog que dependía de Motor de aforo y ahora queda desbloqueado; el resto del backlog (comprobante, aprobación, emisión, puerta, efectivo) depende en cadena de esta tarea.
 
 ---
 
@@ -35,35 +35,49 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Motor de aforo (reserva condicional, TTL, liberación por Streams)
+## Tarea 2 — [FEATURE]: Compra y reserva de sillas
 
-**Origen:** `PRD.md` (control de sobreventa) · `tech-specs.md` §11 ítem 8, §5.2 (`agora-compras`), §5.4 (ciclo de vida completo, ya documentado paso a paso) · `CLAUDE.md` §5 (A04 — riesgo central de Ágora)
+**Origen:** `PRD.md` §5.3 (flujo completo), CU-04/CU-06/CU-17 · `tech-specs.md` §11 ítem 9, §5.1 (`POST /api/compras`, `GET /api/compras/:compraId/estado`), §5.4 (usa `services/aforo.ts`, ya completo), §5.6 (`services/notificaciones.ts`), §8.2 (enlaces mágicos), §8.3 (superficie pública) · `CLAUDE.md` §5 (A04, A07, A08, Habeas Data)
 
-**Alcance de esta tarea:** solo las primitivas de aforo y su limpieza automática — **no** el flujo de compra en sí (`handlers/compras.ts`, roadmap #9, todavía no existe). `agora-compras` ya existe en `serverless.yml` con `TimeToLiveSpecification` en `expiraEn` y `StreamSpecification: NEW_AND_OLD_IMAGES` (creada en la Tarea de infraestructura base) — esta tarea no la vuelve a crear, solo la consume.
+**Alcance de esta tarea — solo el camino de evento PAGO:** crear la compra, reservar el aforo con `aforo.ts` (ya completo) y enviarle al cliente un enlace mágico para cargar el comprobante. **No incluye**: la página que consume ese enlace (`handlers/comprobantes.ts`, roadmap #10), la aprobación (roadmap #11), ni la emisión de boletas (roadmap #12). **Decisión de alcance explícita:** el camino de boleta gratuita (CU-07, `precio = 0`) responde `501` con un mensaje claro en vez de simularse a medias — emitir una boleta sin comprobante es responsabilidad de la tarea de emisión (roadmap #12), que todavía no existe; falsear el flujo aquí produciría una compra "confirmada" sin boleta real, el tipo exacto de implementación a medias que el proyecto evita.
+
+**Gaps documentados a propósito (no silenciados):**
+- **Rate limiting: todavía sin implementar.** Se investigó `provider.httpApi.throttle` — **verificado que no existe** para HTTP API en Serverless Framework (solo aplica a REST API vía `usagePlan`; hay un issue abierto pidiéndolo desde hace tiempo, `serverless/serverless#8589`, sin resolver). La única vía real es el plugin `serverless-apigateway-route-settings` (no evaluado todavía contra Serverless Framework 4) o un `resources.extensions` de CloudFormation escrito a mano sobre el Stage autogenerado (`RouteSettings`/`DefaultRouteSettings`), no verificable sin desplegar en este entorno. `POST /api/compras` queda **sin límite de tasa real** hasta que se resuelva — es la primera mejora de seguridad a cerrar antes de tráfico real.
+- **CORS:** se mantiene `httpApi.cors: true` global (mismo que el resto de la API) — restringirlo al origen exacto de la app (`tech-specs.md` §8.3) es un cambio transversal que afecta todos los endpoints ya en producción/staging, fuera del radio de esta tarea atómica.
+- **Texto legal:** el checkbox de aceptación usa un texto honesto basado en lo ya documentado en `CLAUDE.md` (Habeas Data), **no es texto legal revisado por un humano** — debe reemplazarse antes de vender boletas reales.
 
 **Archivos a crear:**
-- `server/api/services/aforo.ts` (+ `.spec.ts`) — `reservarSillas(eventoId, cantidad)`, `confirmarSillas(eventoId, cantidad)`, `liberarSillas(eventoId, cantidad)`
-- `server/api/handlers/liberar-reservas.ts` (+ `.spec.ts`) — consumidor de DynamoDB Streams de `agora-compras`
+- `server/api/lib/enlaces-magicos.ts` (+ `.spec.ts`) — `generarTokenEnlace()` (token aleatorio ≥128 bits + su hash HMAC-SHA256 con `SECRETO_ENLACES_MAGICOS`) y `hashearToken(token)` (misma derivación, para que la tarea de comprobante — roadmap #10 — pueda consumirlo sin reimplementar el hashing). **Nota de propiedad de archivo:** el roadmap técnico (`tech-specs.md` §11 ítem 10) asigna este archivo a la tarea de comprobante, pero como esta tarea ya necesita *generar* el token, se adelanta aquí; la tarea 10 lo reutiliza para *consumirlo*, no lo recrea.
+- `server/api/services/correo-ses.ts` (+ `.spec.ts`) — envoltura mínima de `@aws-sdk/client-ses` (`SendEmailCommand`), nueva dependencia.
+- `server/api/services/notificaciones.ts` (+ `.spec.ts`) — interfaz `CanalNotificacion` (`tech-specs.md` §5.6) e implementación `CanalCorreoSes`. Solo se implementa la plantilla que esta tarea usa (enlace de comprobante); las otras cuatro plantillas listadas en `tech-specs.md` §5.6 se agregan en las tareas que las necesitan, no como stubs vacíos ahora.
+- `server/api/handlers/compras.ts` (+ `.spec.ts`) — `POST /api/compras`, `GET /api/compras/:compraId/estado`.
+- `src/app/core/api/compras.service.ts` (+ `.spec.ts`) — cliente público (sin `Authorization`, mismo criterio que `EventosPublicosService`).
+- `src/app/features/evento/comprar/comprar.component.ts` (+ `.html`, `.spec.ts`) — formulario de compra en `/evento/:slug/comprar`.
+
+**Archivos a modificar:**
+- `serverless.yml`: nuevo GSI `tokenComprobanteHash-index` en `AgoraCompras` (mismo patrón que el `tokenAprobacionHash-index` ya existente); función `compras` nueva con rol IAM propio (`dynamodb:Query`+`GetItem` en `agora-eventos` para resolver el `slug` y clasificar fallos de `aforo.ts`, `dynamodb:UpdateItem` en `agora-eventos` para `reservarSillas`, `dynamodb:PutItem`+`GetItem` en `agora-compras`, `ses:SendEmail`); `provider.httpApi.throttle` global nuevo.
+- `server/bundle-lambdas.mjs`: agregar `compras.js` (depende de `documentoDynamoDB` y de `@aws-sdk/client-ses`).
+- `src/app/features/evento/detalle-evento.component.ts`/`.html`: botón "Comprar boletas" hacia `/evento/:slug/comprar`, visible solo si `estado === 'publicado'` y `sillasDisponibles > 0`.
+- `src/app/app.routes.ts`: ruta `evento/:slug/comprar` (`RenderMode.Client`, mismo criterio que `/admin/*` — es un formulario interactivo, no una página que deba indexarse).
 
 **Qué hacer:**
 
-1. `aforo.ts`, las tres funciones son envolturas delgadas sobre exactamente los tres `UpdateCommand` condicionales que documenta `tech-specs.md` §5.4 (pasos 1-3) — **transcribir esas `ConditionExpression` tal cual, no reinventarlas**:
-   - `reservarSillas`: `SET sillasDisponibles = sillasDisponibles - :n, sillasReservadas = sillasReservadas + :n` con `ConditionExpression: sillasDisponibles >= :n AND estado = 'publicado'`. Si falla, propaga un error distinguible (aforo insuficiente vs. evento no publicado) para que el futuro `handlers/compras.ts` (roadmap #9) pueda responder 409 con un mensaje claro — no acá, pero la forma del error debe ya soportarlo.
-   - `confirmarSillas`: `SET sillasReservadas = sillasReservadas - :n` con `ConditionExpression: sillasReservadas >= :n`. Si el aforo llega a 0, además transiciona `estado` a `agotado` en la misma escritura.
-   - `liberarSillas`: `SET sillasDisponibles = sillasDisponibles + :n, sillasReservadas = sillasReservadas - :n` con `ConditionExpression: sillasReservadas >= :n` — la condición sobre `sillasReservadas` (no un simple "siempre sumar") es lo que hace la operación segura ante un evento de Stream entregado dos veces (*at-least-once*, nunca *exactly-once*).
-2. `liberar-reservas.ts`: Lambda con `streamEnabled` sobre el Stream de `agora-compras`, filtra únicamente eventos `REMOVE` (borrado por TTL) cuyo `OLD image` tenía un estado que todavía retenía aforo reservado (`iniciada`, `esperando_comprobante`, `en_revision` — no `aprobada`/`rechazada`/`expirada`, que ya liberaron o confirmaron su aforo por otro camino), y llama `liberarSillas(eventoId, cantidad)`. Idempotente por diseño gracias a la `ConditionExpression` de `liberarSillas` — un reintento del mismo registro de Stream no vuelve a restar de `sillasReservadas` por debajo de lo real porque la condición fallaría.
-3. `serverless.yml`: función `liberarReservas` con evento `stream` apuntando al `StreamArn` de `AgoraCompras` (`BatchSize` pequeño, ej. 10, y `StartingPosition: LATEST`), rol IAM propio (`dynamodb:UpdateItem` sobre `agora-eventos` exclusivamente — sin acceso a `agora-compras` más allá de lo que el trigger de Streams ya provee, sin `agora-usuarios`, sin `exigirRol`: esta Lambda nunca la invoca un humano). **Empaquetar siempre con esbuild (`server/bundle-lambdas.mjs`), nunca "simple" como `salud`** — `aforo.ts` importa `documentoDynamoDB` (`@aws-sdk/lib-dynamodb`), y eso ya es suficiente para que la Lambda se caiga al arrancar si el paquete excluye `node_modules` (bug real encontrado en staging el 07/08/2026 con `eventosPublicos`, mismo motivo exacto — ver `MEMORY.md` §7). El criterio nunca fue "¿usa `firebase-admin`?", es "¿importa algo de `node_modules` en tiempo de ejecución?".
-
-**Nota para `handlers/compras.ts` (roadmap #9, todavía no existe):** el modelo `Evento` no tiene un campo `sillasVendidas` separado — la fórmula `sillasTotales = sillasDisponibles + sillasReservadas + sillasVendidas` de `tech-specs.md` §5.4 es conceptual, no un contador persistido. `confirmarSillas` solo decrementa `sillasReservadas` (tal como especifica el paso 2), sin escribir ningún contador de "vendidas" — las sillas vendidas se derivan como `sillasTotales - sillasDisponibles - sillasReservadas`, o se cuentan a partir de las boletas emitidas en `agora-boletas` (roadmap #12). Si `compras.ts` necesita un contador explícito de vendidas, es una decisión de esa tarea, no de esta.
+1. **Precio siempre calculado en el backend** (`CLAUDE.md` §5, A08): la "etapa vigente" es, entre las `etapas` del evento ordenadas por `orden`, la primera cuyo `cierraEn` todavía no pasó. Si ninguna aplica, `409` ("no hay una etapa de boletería vigente"). El total nunca llega ni se acepta desde el cliente.
+2. **`expiraEn` en `agora-compras` se guarda en epoch-segundos (`Number`), no en ISO 8601** — excepción explícita a la regla general de `CLAUDE.md` §4: es el atributo de TTL de DynamoDB (`serverless.yml`, `TimeToLiveSpecification`), y TTL exige un `Number` de epoch-segundos, nunca un string. Documentar esto en el propio código y en `MEMORY.md` §7 para que ninguna sesión futura lo "corrija" a ISO y rompa el TTL en silencio.
+3. `POST /api/compras`: valida `slug`/`cantidad` (entero positivo, ≤ `maxBoletasPorCompra`)/`cliente.{nombre,telefono,correo}` (mismo criterio hostil-por-defecto que el nombre de evento, `CLAUDE.md` §5 A03)/`autorizacionDatos === true`. Resuelve el evento por `slug` (Query sobre `slug-index`, nunca `Scan`), calcula la etapa vigente y el total, llama `reservarSillas` — sus errores (`AforoInsuficienteError`/`EventoNoPublicadoError`) se traducen a `409` con mensaje claro (CU-17). Genera el token de comprobante, persiste la compra (`estado: 'esperando_comprobante'`, `expiraEn` = ahora + `plazoComprobanteMinutos`) y envía el correo con el enlace — el envío de correo es best-effort (no revierte la reserva si SES falla; se registra el fallo sin datos personales).
+4. `GET /api/compras/:compraId/estado`: público, sin datos del cliente. Si `expiraEn` ya pasó pero el ítem todavía existe (el TTL de DynamoDB no es puntual, `tech-specs.md` §5.4 punto 4), responde `estado: 'expirada'` igual — nunca confía en que el borrado físico ya ocurrió.
+5. Frontend: el total mostrado en pantalla es solo para UX (se recalcula localmente con la etapa vigente que ya trae `EventoPublico.etapas`); el backend nunca lo recibe ni lo valida contra lo que el cliente vio.
 
 **Definition of done:**
-- [x] Las tres funciones de `aforo.ts` nunca leen el ítem del evento antes de escribir — toda modificación de aforo es una única escritura condicional (la lectura de `reservarSillas` solo ocurre **después** de que la escritura ya falló, para clasificar el error, nunca para decidir)
-- [x] `liberarSillas` es segura ante un mismo registro de Stream entregado más de una vez (probado explícitamente en `aforo.spec.ts` invocándola dos veces con el mismo `eventoId`/`cantidad`: la segunda lanza `SillasReservadasInsuficientesError`)
-- [x] `liberar-reservas.ts` ignora eventos de Stream que no sean `REMOVE`, y los `REMOVE` cuyo estado previo ya no retenía aforo (`aprobada`/`rechazada`/`expirada`)
-- [x] Rol IAM de `liberarReservas` limitado a `dynamodb:UpdateItem` sobre `agora-eventos`, sin comodines (más los permisos de lectura del propio Stream que el trigger exige — `dynamodb:ListStreams` no admite scoping por recurso, documentado en el comentario del `serverless.yml`)
-- [x] `liberarReservas` empaquetada con esbuild (`server/bundle-lambdas.mjs`), no con `package.patterns` manual — verificado además con una invocación directa del bundle (`node -e`) para confirmar que arranca sin el 500 genérico de paquete incompleto
-- [x] `npm run test:api` en verde (92 pruebas, incluyendo los registros de Stream simulados vía mocks, sin depender de Streams reales)
-- [x] `npm run build:api` sin errores
+- [x] El precio/total nunca se acepta desde el cliente — se calcula siempre en `compras.ts` a partir de la etapa vigente real (`etapaVigente()`, primera etapa por `orden` cuyo `cierraEn` no ha pasado)
+- [x] `POST /api/compras` reserva aforo con `aforo.ts` (nunca duplica su lógica) y traduce sus errores a respuestas 409 claras (CU-17, incluye `sillasDisponibles` reales)
+- [x] El token de comprobante tiene ≥128 bits de entropía (`randomBytes(32)`), se guarda hasheado con HMAC-SHA256 (nunca en claro) y expira con el plazo del evento (`CLAUDE.md` §5, A07)
+- [x] `expiraEn` se guarda en epoch-segundos, documentado como excepción a la regla ISO 8601 general (código + `MEMORY.md` §7)
+- [x] `GET /api/compras/:compraId/estado` no expone `cliente` ni ningún dato personal
+- [x] Boletas gratuitas (`precio = 0`) responden `501` explícito, no una emisión simulada
+- [x] Rol IAM de `compras` sin comodines, acotado exactamente a lo que `compras.ts`/`aforo.ts` usan (SES acotado a la identidad `letiende.co`, no `ses:*`)
+- [x] `npm run test:api` y `npm run test` en verde (118 pruebas backend + 115 frontend)
+- [x] `npm run build` sin errores
 - [x] Auditoría de costos sin coincidencias nuevas
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (implementación lista en `claude/tarea-1-mobile-feasibility-044k5v`; PR pendiente de solicitud explícita del usuario)
 
@@ -73,13 +87,12 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
 
-1. Compra y reserva de sillas (depende de Motor de aforo)
-2. Carga de comprobante por enlace mágico
-3. Aprobación del productor
-4. Emisión de boletas con QR firmado
-5. Validación en puerta
-6. Venta en efectivo
-7. Panel de control básico
+1. Carga de comprobante por enlace mágico (depende de Compra y reserva de sillas)
+2. Aprobación del productor
+3. Emisión de boletas con QR firmado
+4. Validación en puerta
+5. Venta en efectivo
+6. Panel de control básico
 
 ---
 

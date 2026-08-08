@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { Component, effect, inject, input, signal } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
+import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
 import type { EventoPublico } from '../../core/models/evento.model';
 import { PrecioPipe } from '../../shared/pipes/precio.pipe';
@@ -30,7 +31,7 @@ const ID_SCRIPT_JSON_LD = 'app-json-ld-evento';
  */
 @Component({
   selector: 'app-detalle-evento',
-  imports: [PrecioPipe],
+  imports: [PrecioPipe, RouterLink],
   templateUrl: './detalle-evento.component.html',
 })
 export class DetalleEventoComponent {

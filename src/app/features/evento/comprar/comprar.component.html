@@ -1,0 +1,122 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-2xl">
+    @if (cargando()) {
+      <p class="rounded-2xl bg-white p-4 text-sm text-primary/70 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        Cargando evento…
+      </p>
+    } @else if (noEncontrado()) {
+      <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <h1 class="mb-2 text-xl font-bold text-primary">Evento no encontrado</h1>
+        <p class="text-sm text-primary/70">Este evento no existe o ya no está disponible.</p>
+      </div>
+    } @else if (evento(); as detalleEvento) {
+      <h1 class="mb-1 text-2xl font-bold text-primary">Comprar boletas</h1>
+      <p class="mb-6 text-sm text-primary/70">{{ detalleEvento.nombre }}</p>
+
+      @if (compraCreada(); as compra) {
+        <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <h2 class="mb-2 text-lg font-semibold text-primary">¡Ya casi! Revisa tu correo</h2>
+          <p class="mb-4 text-sm text-primary">
+            Te enviamos un enlace para cargar tu comprobante de pago. Debes hacerlo antes de las
+            <strong>{{ fechaLimiteLegible(compra.expiraEn) }}</strong> (hora de Bogotá) o la reserva
+            se cancela.
+          </p>
+          <dl class="flex flex-col gap-1 text-sm text-primary/80">
+            <div class="flex justify-between">
+              <dt>Cantidad de boletas</dt>
+              <dd>{{ compra.cantidad }}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt>Total</dt>
+              <dd class="font-semibold">{{ compra.montoTotal | precio }}</dd>
+            </div>
+          </dl>
+        </div>
+      } @else if (!puedeComprar()) {
+        <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="text-sm text-primary/70">
+            Este evento no tiene boletas disponibles en este momento.
+          </p>
+        </div>
+      } @else {
+        <form
+          [formGroup]="formulario"
+          (ngSubmit)="comprar()"
+          class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
+        >
+          <div>
+            <label for="cantidad" class="mb-1 block text-sm font-semibold text-primary">
+              Cantidad de boletas
+            </label>
+            <input
+              id="cantidad"
+              type="number"
+              formControlName="cantidad"
+              [max]="detalleEvento.maxBoletasPorCompra"
+              min="1"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+            <p class="mt-1 text-xs text-primary/60">
+              Máximo {{ detalleEvento.maxBoletasPorCompra }} por compra.
+            </p>
+          </div>
+
+          <div>
+            <label for="nombre" class="mb-1 block text-sm font-semibold text-primary">Nombre completo</label>
+            <input
+              id="nombre"
+              type="text"
+              formControlName="nombre"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+          </div>
+
+          <div>
+            <label for="telefono" class="mb-1 block text-sm font-semibold text-primary">Teléfono</label>
+            <input
+              id="telefono"
+              type="tel"
+              formControlName="telefono"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+          </div>
+
+          <div>
+            <label for="correo" class="mb-1 block text-sm font-semibold text-primary">Correo</label>
+            <input
+              id="correo"
+              type="email"
+              formControlName="correo"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+            @if (formulario.controls.correo.invalid && formulario.controls.correo.touched) {
+              <p class="mt-1 text-xs text-danger">Ingresa un correo válido — ahí te enviaremos el enlace.</p>
+            }
+          </div>
+
+          <div class="flex items-center justify-between rounded-xl border border-primary/10 px-3 py-2">
+            <span class="text-sm font-semibold text-primary">Total estimado</span>
+            <span class="text-lg font-bold text-primary">{{ totalEstimado() | precio }}</span>
+          </div>
+
+          <label class="flex items-start gap-2 text-xs text-primary/80">
+            <input type="checkbox" formControlName="autorizacionDatos" class="mt-0.5" />
+            <span>
+              Acepto los términos y condiciones y autorizo el tratamiento de mis datos personales
+              (nombre, teléfono y correo) para emitir y validar mi boleta de este evento, según la
+              Ley 1581 de 2012. No se usan para ningún otro fin sin mi autorización separada.
+            </span>
+          </label>
+
+          <button
+            type="submit"
+            [disabled]="enviando()"
+            class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {{ enviando() ? 'Procesando…' : 'Comprar' }}
+          </button>
+        </form>
+      }
+    }
+  </div>
+</div>
