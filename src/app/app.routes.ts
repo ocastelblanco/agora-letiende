@@ -51,6 +51,15 @@ export const routes: Routes = [
     title: 'Cargar comprobante — Ágora',
   },
   {
+    path: 'aprobaciones/:token',
+    loadComponent: () =>
+      import('./features/aprobaciones/revisar-aprobacion.component').then(
+        (m) => m.RevisarAprobacionComponent,
+      ),
+    // RenderMode.Client, mismo criterio que /comprobante/:token.
+    title: 'Revisar compra — Ágora',
+  },
+  {
     path: 'login',
     loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent),
     canActivate: [guardiaInvitado],
@@ -65,6 +74,16 @@ export const routes: Routes = [
     canActivate: [guardiaRol],
     data: { rolMinimo: rolMinimoDe('/admin/usuarios') },
     title: 'Usuarios — Ágora',
+  },
+  {
+    path: 'admin/aprobaciones',
+    loadComponent: () =>
+      import('./features/aprobaciones/lista-aprobaciones.component').then(
+        (m) => m.ListaAprobacionesComponent,
+      ),
+    canActivate: [guardiaRol],
+    data: { rolMinimo: rolMinimoDe('/admin/aprobaciones') },
+    title: 'Aprobaciones — Ágora',
   },
   {
     path: 'admin/eventos',

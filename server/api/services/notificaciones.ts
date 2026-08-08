@@ -7,12 +7,12 @@ export interface Destinatario {
 
 /**
  * Plantillas de v1 (`tech-specs.md` §5.6). Implementadas hasta ahora:
- * `enlace_comprobante` (Compra y reserva de sillas) y `aviso_comprobante`
- * (Carga de comprobante) — el resto se agrega en las tareas que las usan
- * (aprobación, emisión de boletas, liberación de reserva), no como stubs
- * vacíos por adelantado.
+ * `enlace_comprobante` (Compra y reserva de sillas), `aviso_comprobante`
+ * (Carga de comprobante) y `compra_rechazada` (Aprobación del productor) —
+ * el resto se agrega en las tareas que las usan (emisión de boletas,
+ * liberación de reserva), no como stubs vacíos por adelantado.
  */
-export type Plantilla = 'enlace_comprobante' | 'aviso_comprobante';
+export type Plantilla = 'enlace_comprobante' | 'aviso_comprobante' | 'compra_rechazada';
 
 export interface DatosEnlaceComprobante {
   nombreEvento: string;
@@ -25,6 +25,13 @@ export interface DatosEnlaceComprobante {
 export interface DatosAvisoComprobante {
   nombreEvento: string;
   cantidad: number;
+  urlAprobacion: string;
+}
+
+export interface DatosCompraRechazada {
+  nombreEvento: string;
+  cantidad: number;
+  motivo?: string;
 }
 
 /**
@@ -73,7 +80,22 @@ function renderizarAvisoComprobante(datos: DatosAvisoComprobante): { asunto: str
     asunto: `Comprobante por revisar — ${nombreEvento}`,
     html: `
       <p>Un cliente cargó el comprobante de una compra de ${datos.cantidad} boleta(s) para <strong>${nombreEvento}</strong>.</p>
-      <p>Todavía no existe una página de aprobación en Ágora (llega en una tarea posterior, roadmap #11) — por ahora, coordina la revisión por el canal habitual del equipo.</p>
+      <p>Revísalo y apruébalo o recházalo aquí:</p>
+      <p><a href="${datos.urlAprobacion}">${datos.urlAprobacion}</a></p>
+      <p>Si otro productor del evento ya lo resolvió, este enlace lo va a indicar.</p>
+    `.trim(),
+  };
+}
+
+function renderizarCompraRechazada(datos: DatosCompraRechazada): { asunto: string; html: string } {
+  const nombreEvento = escaparHtml(datos.nombreEvento);
+  const motivo = datos.motivo ? escaparHtml(datos.motivo) : undefined;
+  return {
+    asunto: `Tu compra no fue aprobada — ${nombreEvento}`,
+    html: `
+      <p>Tu compra de ${datos.cantidad} boleta(s) para <strong>${nombreEvento}</strong> no fue aprobada.</p>
+      ${motivo ? `<p>Motivo: ${motivo}</p>` : ''}
+      <p>Las sillas ya se liberaron. Si crees que fue un error, puedes volver a intentar la compra.</p>
     `.trim(),
   };
 }
@@ -88,6 +110,11 @@ export class CanalCorreoSes implements CanalNotificacion {
       }
       case 'aviso_comprobante': {
         const { asunto, html } = renderizarAvisoComprobante(datos as DatosAvisoComprobante);
+        await enviarCorreo({ destinatario: destinatario.correo, asunto, html });
+        return;
+      }
+      case 'compra_rechazada': {
+        const { asunto, html } = renderizarCompraRechazada(datos as DatosCompraRechazada);
         await enviarCorreo({ destinatario: destinatario.correo, asunto, html });
         return;
       }

@@ -272,6 +272,12 @@ functions:
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
       BUCKET_COMPROBANTES: ${self:custom.nombresBuckets.comprobantes}
       SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      # Necesaria desde TODO.md Tarea 2 (Aprobación del productor):
+      # confirmarComprobante() ahora arma la URL del enlace de aprobación
+      # que le llega al productor por correo. Agregada de una vez en este
+      # mismo cambio, no como fix posterior — mismo gotcha ya sufrido con
+      # SES_REMITENTE/SECRETO_ENLACES_MAGICOS en compras (MEMORY.md §7).
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
       SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
     package:
       # Depende de documentoDynamoDB y de @aws-sdk/client-ses — mismo
@@ -285,6 +291,41 @@ functions:
           method: post
       - httpApi:
           path: /api/comprobantes/{token}/confirmar
+          method: post
+
+  aprobaciones:
+    handler: dist-server-bundle/aprobaciones.handler
+    role: !GetAtt AprobacionesLambdaRole.Arn
+    description: >-
+      GET /api/aprobaciones (productor), GET/POST /api/aprobaciones/:token
+      (enlace mágico) — revisión, aprobación y rechazo de compras
+      en_revision (TODO.md Tarea 2).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      BUCKET_COMPROBANTES: ${self:custom.nombresBuckets.comprobantes}
+      SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+    package:
+      # Depende de firebase-admin (vía exigirRol), documentoDynamoDB y
+      # @aws-sdk/client-ses — mismo motivo de bundle que el resto.
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/aprobaciones.js'
+    events:
+      - httpApi:
+          path: /api/aprobaciones
+          method: get
+      - httpApi:
+          path: /api/aprobaciones/{token}
+          method: get
+      - httpApi:
+          path: /api/aprobaciones/{token}/aprobar
+          method: post
+      - httpApi:
+          path: /api/aprobaciones/{token}/rechazar
           method: post
 
   ssr:
@@ -657,6 +698,88 @@ resources:
           # letiende.co — el aviso de comprobante por revisar es el único
           # correo que esta función envía.
           - PolicyName: agora-comprobantes-ses-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ses:SendEmail
+                    - ses:SendRawEmail
+                  Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+
+    AprobacionesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-aprobaciones-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # GetItem sobre agora-usuarios: exigirRol() resuelve el rol del
+          # propio solicitante para GET /api/aprobaciones — mismo patrón
+          # exacto que usuarios.ts/eventos.ts, sin Query/Scan/otra acción.
+          - PolicyName: agora-aprobaciones-usuarios-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
+          # Sobre agora-eventos: Scan (resolver qué eventos tienen a este
+          # productor en `productores` — sin GSI para "contiene" un
+          # elemento de array, mismo criterio ya aceptado en eventos.ts
+          # para listados de bajo volumen) + GetItem (nombre del evento al
+          # rechazar y al notificar comprobante).
+          - PolicyName: agora-aprobaciones-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Scan
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # Sobre agora-compras: Query acotado a los dos GSIs que esta
+          # función usa (eventoId-creadaEn-index para el listado,
+          # tokenAprobacionHash-index para validar el enlace) +
+          # UpdateItem condicional (aprobar/rechazar) — sin PutItem, esta
+          # función nunca crea compras.
+          - PolicyName: agora-aprobaciones-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraCompras.Arn
+                    - !Sub '${AgoraCompras.Arn}/index/*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraCompras.Arn
+          # S3 acotado al prefijo compras/*: solo GetObject, para mostrarle
+          # el comprobante ya subido al productor — esta función nunca
+          # sube ni borra objetos.
+          - PolicyName: agora-aprobaciones-s3-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                  Resource: !Sub '${BucketComprobantes.Arn}/compras/*'
+          # ses:SendEmail (no ses:*), acotado a la identidad verificada de
+          # letiende.co — la notificación de compra rechazada es el único
+          # correo que esta función envía.
+          - PolicyName: agora-aprobaciones-ses-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
               Statement:

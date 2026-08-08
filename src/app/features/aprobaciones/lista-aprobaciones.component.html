@@ -1,0 +1,42 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-5xl">
+    <h1 class="mb-1 text-2xl font-bold text-primary">Aprobaciones pendientes</h1>
+    <p class="mb-6 text-sm text-primary/70">
+      Compras en revisión de tus eventos. Apruébalas o recházalas desde el enlace que llegó al
+      correo del equipo, no desde aquí.
+    </p>
+
+    <div class="overflow-x-auto rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+      @if (error()) {
+        <p class="p-4 text-sm text-danger">No se pudieron cargar las aprobaciones pendientes.</p>
+      } @else if (pendientes().length === 0) {
+        <p class="p-4 text-sm text-primary/70">No hay compras pendientes de aprobación.</p>
+      } @else {
+        <table mat-table [dataSource]="pendientes()" class="w-full">
+          <ng-container matColumnDef="nombreEvento">
+            <th mat-header-cell *matHeaderCellDef>Evento</th>
+            <td mat-cell *matCellDef="let compra">{{ compra.nombreEvento }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="cantidad">
+            <th mat-header-cell *matHeaderCellDef>Boletas</th>
+            <td mat-cell *matCellDef="let compra">{{ compra.cantidad }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="montoTotal">
+            <th mat-header-cell *matHeaderCellDef>Total</th>
+            <td mat-cell *matCellDef="let compra">{{ compra.montoTotal | precio }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="creadaEn">
+            <th mat-header-cell *matHeaderCellDef>Creada (Bogotá)</th>
+            <td mat-cell *matCellDef="let compra">{{ fechaLegible(compra.creadaEn) }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="columnas"></tr>
+          <tr mat-row *matRowDef="let fila; columns: columnas"></tr>
+        </table>
+      }
+    </div>
+  </div>
+</div>

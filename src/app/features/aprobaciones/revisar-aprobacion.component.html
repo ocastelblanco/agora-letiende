@@ -1,0 +1,93 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-lg">
+    <h1 class="mb-1 text-2xl font-bold text-primary">Revisar compra</h1>
+    <p class="mb-6 text-sm text-primary/70">Verifica el comprobante y aprueba o rechaza la compra.</p>
+
+    @if (cargando()) {
+      <p class="text-sm text-primary/70">Cargando…</p>
+    } @else if (errorCarga(); as error) {
+      <div class="rounded-2xl bg-white p-6 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <p class="text-sm text-danger">{{ error }}</p>
+      </div>
+    } @else if (resolucion(); as resultado) {
+      <div class="rounded-2xl bg-white p-6 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <h2 class="mb-2 text-lg font-semibold text-primary">
+          {{ resultado === 'aprobada' ? 'Compra aprobada' : 'Compra rechazada' }}
+        </h2>
+        <p class="text-sm text-primary/70">
+          {{
+            resultado === 'aprobada'
+              ? 'Las sillas quedaron confirmadas.'
+              : 'Las sillas se liberaron y se avisó al cliente.'
+          }}
+        </p>
+      </div>
+    } @else if (detalle(); as compra) {
+      <div class="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <dl class="grid grid-cols-2 gap-2 text-sm">
+          <dt class="text-primary/60">Boletas</dt>
+          <dd class="text-primary">{{ compra.cantidad }}</dd>
+
+          <dt class="text-primary/60">Total</dt>
+          <dd class="text-primary">{{ compra.montoTotal | precio }}</dd>
+
+          @if (compra.cliente; as cliente) {
+            <dt class="text-primary/60">Cliente</dt>
+            <dd class="text-primary">{{ cliente.nombre }}</dd>
+
+            <dt class="text-primary/60">Teléfono</dt>
+            <dd class="text-primary">{{ cliente.telefono }}</dd>
+
+            <dt class="text-primary/60">Correo</dt>
+            <dd class="text-primary">{{ cliente.correo }}</dd>
+          }
+        </dl>
+
+        @if (compra.urlComprobante; as url) {
+          <a
+            [href]="url"
+            target="_blank"
+            rel="noopener"
+            class="text-sm font-semibold text-secondary underline"
+          >
+            Ver comprobante
+          </a>
+        } @else {
+          <p class="text-xs text-primary/60">Esta compra no tiene comprobante cargado.</p>
+        }
+
+        @if (errorAccion(); as error) {
+          <p class="text-sm text-danger">{{ error }}</p>
+        }
+
+        <button
+          type="button"
+          [disabled]="enviando()"
+          (click)="aprobar()"
+          class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {{ enviando() ? 'Enviando…' : 'Aprobar compra' }}
+        </button>
+
+        <form [formGroup]="formularioRechazo" class="flex flex-col gap-2">
+          <textarea
+            formControlName="motivo"
+            rows="2"
+            maxlength="500"
+            placeholder="Motivo del rechazo (opcional)"
+            class="rounded-xl border border-primary/20 p-2 text-sm"
+          ></textarea>
+          <button
+            mat-stroked-button
+            type="button"
+            color="warn"
+            [disabled]="enviando()"
+            (click)="rechazar()"
+          >
+            {{ enviando() ? 'Enviando…' : 'Rechazar compra' }}
+          </button>
+        </form>
+      </div>
+    }
+  </div>
+</div>
