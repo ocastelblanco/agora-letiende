@@ -9,9 +9,14 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sd
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
-import { hashearToken } from '../lib/enlaces-magicos';
+import { generarTokenEnlace, hashearToken } from '../lib/enlaces-magicos';
 import { CanalCorreoSes } from '../services/notificaciones';
 import { respuestaJson } from '../lib/http';
+
+// El token de aprobación expira a las 24 horas (tech-specs.md §8.2),
+// distinto del plazo de comprobante (que depende de plazoComprobanteMinutos
+// del evento).
+const SEGUNDOS_EXPIRACION_TOKEN_APROBACION = 24 * 60 * 60;
 
 const canalNotificacion = new CanalCorreoSes();
 
@@ -230,14 +235,23 @@ async function confirmarComprobante(token: string | undefined): Promise<APIGatew
     });
   }
 
+  const { token: tokenAprobacion, hash: tokenAprobacionHash } = generarTokenEnlace();
+  const tokenAprobacionExpiraEn = Math.floor(Date.now() / 1000) + SEGUNDOS_EXPIRACION_TOKEN_APROBACION;
+
   try {
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :enRevision',
+        UpdateExpression:
+          'SET estado = :enRevision, tokenAprobacionHash = :tokenHash, tokenAprobacionExpiraEn = :tokenExpira',
         ConditionExpression: 'estado = :esperando',
-        ExpressionAttributeValues: { ':enRevision': 'en_revision', ':esperando': 'esperando_comprobante' },
+        ExpressionAttributeValues: {
+          ':enRevision': 'en_revision',
+          ':esperando': 'esperando_comprobante',
+          ':tokenHash': tokenAprobacionHash,
+          ':tokenExpira': tokenAprobacionExpiraEn,
+        },
       }),
     );
   } catch (error) {
@@ -253,6 +267,7 @@ async function confirmarComprobante(token: string | undefined): Promise<APIGatew
     );
     const nombreEvento = resultadoEvento.Item?.['nombre'];
     const productores = resultadoEvento.Item?.['productores'];
+    const urlAprobacion = `${process.env['URL_BASE_APP'] ?? ''}/aprobaciones/${tokenAprobacion}`;
     if (typeof nombreEvento === 'string' && Array.isArray(productores)) {
       await Promise.all(
         productores
@@ -261,6 +276,7 @@ async function confirmarComprobante(token: string | undefined): Promise<APIGatew
             canalNotificacion.enviar({ correo, nombre: correo }, 'aviso_comprobante', {
               nombreEvento,
               cantidad: compra.cantidad,
+              urlAprobacion,
             }),
           ),
       );

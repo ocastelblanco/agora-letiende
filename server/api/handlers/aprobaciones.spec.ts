@@ -1,0 +1,334 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  sendMock,
+  clienteS3SendMock,
+  getSignedUrlMock,
+  hashearTokenMock,
+  exigirRolMock,
+  confirmarSillasMock,
+  liberarSillasMock,
+  enviarMock,
+} = vi.hoisted(() => ({
+  sendMock: vi.fn(),
+  clienteS3SendMock: vi.fn(),
+  getSignedUrlMock: vi.fn(),
+  hashearTokenMock: vi.fn(),
+  exigirRolMock: vi.fn(),
+  confirmarSillasMock: vi.fn(),
+  liberarSillasMock: vi.fn(),
+  enviarMock: vi.fn(),
+}));
+
+vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
+vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
+vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
+vi.mock('../lib/enlaces-magicos', () => ({ hashearToken: hashearTokenMock }));
+vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+vi.mock('../services/notificaciones', () => ({
+  CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
+    this.enviar = enviarMock;
+  }),
+}));
+vi.mock('../services/aforo', async () => {
+  const real = await vi.importActual<typeof import('../services/aforo')>('../services/aforo');
+  return { ...real, confirmarSillas: confirmarSillasMock, liberarSillas: liberarSillasMock };
+});
+
+const { handler } = await import('./aprobaciones');
+const { ErrorAforo } = await import('../services/aforo');
+
+class ConditionalCheckFailedException extends Error {
+  constructor() {
+    super('The conditional request failed');
+    this.name = 'ConditionalCheckFailedException';
+  }
+}
+
+const AHORA_EPOCH = Math.floor(new Date('2026-08-09T00:00:00.000Z').getTime() / 1000);
+
+const compraEnRevision = {
+  compraId: 'compra-1',
+  eventoId: 'evt-1',
+  cantidad: 2,
+  cliente: { nombre: 'Ana Pérez', telefono: '3001234567', correo: 'ana@correo.com' },
+  montoTotal: 90000,
+  estado: 'en_revision',
+  comprobanteKey: 'compras/compra-1/comprobante-x.png',
+  tokenAprobacionExpiraEn: AHORA_EPOCH + 3600,
+};
+
+const permisosProductor = {
+  email: 'productor@letiende.co',
+  nombre: 'Productor',
+  rol: 'productor' as const,
+  activo: true,
+};
+
+function crearPeticion(
+  metodo: string,
+  opciones: { rawPath?: string; token?: string; cuerpo?: unknown; headers?: Record<string, string> } = {},
+): Parameters<typeof handler>[0] {
+  return {
+    requestContext: { http: { method: metodo } },
+    rawPath: opciones.rawPath ?? '/api/aprobaciones',
+    pathParameters: opciones.token ? { token: opciones.token } : undefined,
+    body: opciones.cuerpo !== undefined ? JSON.stringify(opciones.cuerpo) : undefined,
+    headers: opciones.headers ?? {},
+  } as unknown as Parameters<typeof handler>[0];
+}
+
+async function invocar(metodo: string, opciones?: Parameters<typeof crearPeticion>[1]) {
+  const respuesta = await handler(crearPeticion(metodo, opciones), {} as never, undefined as never);
+  return respuesta as { statusCode: number; body?: string };
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(AHORA_EPOCH * 1000));
+  sendMock.mockReset();
+  clienteS3SendMock.mockReset();
+  getSignedUrlMock.mockReset();
+  hashearTokenMock.mockReset();
+  exigirRolMock.mockReset();
+  confirmarSillasMock.mockReset();
+  liberarSillasMock.mockReset();
+  enviarMock.mockReset();
+  hashearTokenMock.mockReturnValue('hash-derivado');
+  getSignedUrlMock.mockResolvedValue('https://s3.amazonaws.com/presignada');
+  enviarMock.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('GET /api/aprobaciones (autenticado)', () => {
+  it('responde con la respuesta de exigirRol si no está autorizado', async () => {
+    exigirRolMock.mockResolvedValueOnce({
+      autorizado: false,
+      respuesta: { statusCode: 403, body: '{"mensaje":"No autorizado en Ágora"}' },
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(403);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('solo lista compras en_revision de eventos donde el productor está asignado', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock.mockResolvedValueOnce({
+      Items: [
+        { eventoId: 'evt-propio', nombre: 'Concierto de jazz', productores: ['productor@letiende.co'] },
+        { eventoId: 'evt-ajeno', nombre: 'Otro evento', productores: ['otro@letiende.co'] },
+      ],
+    });
+    sendMock.mockResolvedValueOnce({
+      Items: [{ compraId: 'compra-1', cantidad: 2, montoTotal: 90000, creadaEn: '2026-08-08T00:00:00.000Z' }],
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '[]');
+    expect(cuerpo).toEqual([
+      {
+        compraId: 'compra-1',
+        nombreEvento: 'Concierto de jazz',
+        cantidad: 2,
+        montoTotal: 90000,
+        creadaEn: '2026-08-08T00:00:00.000Z',
+      },
+    ]);
+    // Solo se hizo Query sobre el evento propio, no sobre el ajeno.
+    expect(sendMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('devuelve una lista vacía si el productor no tiene eventos asignados', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock.mockResolvedValueOnce({ Items: [] });
+
+    const respuesta = await invocar('GET');
+
+    expect(JSON.parse(respuesta.body ?? 'null')).toEqual([]);
+  });
+});
+
+describe('validación del token (compartida por los tres endpoints de enlace mágico)', () => {
+  it('responde 404 si el token no corresponde a ninguna compra', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [] });
+
+    const respuesta = await invocar('GET', { token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(404);
+  });
+
+  it('responde 410 si el token de aprobación ya venció', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [{ ...compraEnRevision, tokenAprobacionExpiraEn: AHORA_EPOCH - 60 }] });
+
+    const respuesta = await invocar('GET', { token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(410);
+  });
+
+  it('responde 409 con quién la resolvió si la compra ya no está en_revision (CU-10)', async () => {
+    sendMock.mockResolvedValueOnce({
+      Items: [{ ...compraEnRevision, estado: 'aprobada', resueltoPor: 'un productor del equipo (enlace de aprobación)' }],
+    });
+
+    const respuesta = await invocar('GET', { token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(409);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.mensaje).toContain('ya fue resuelta por');
+  });
+
+  it('responde 409 genérico si ya no está en_revision y no hay resueltoPor', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [{ ...compraEnRevision, estado: 'aprobada' }] });
+
+    const respuesta = await invocar('GET', { token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(409);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.mensaje).not.toContain('undefined');
+  });
+});
+
+describe('GET /api/aprobaciones/:token', () => {
+  it('devuelve los datos de la compra (incluye cliente) y la URL del comprobante', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+
+    const respuesta = await invocar('GET', { token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.cliente).toEqual(compraEnRevision.cliente);
+    expect(cuerpo.urlComprobante).toBe('https://s3.amazonaws.com/presignada');
+  });
+
+  it('no incluye urlComprobante si todavía no hay comprobanteKey', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [{ ...compraEnRevision, comprobanteKey: undefined }] });
+
+    const respuesta = await invocar('GET', { token: 'token-x' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.urlComprobante).toBeUndefined();
+    expect(clienteS3SendMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/aprobaciones/:token/aprobar', () => {
+  it('transiciona a aprobada y confirma el aforo', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    confirmarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    const comandoUpdate = sendMock.mock.calls[1]?.[0];
+    expect(comandoUpdate.input).toMatchObject({
+      UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+      ConditionExpression: 'estado = :enRevision',
+    });
+  });
+
+  it('responde 409 si otro productor ya la resolvió (condición fallida)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(confirmarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 200 igual si confirmarSillas lanza ErrorAforo (no debería pasar, pero no revierte la aprobación)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    confirmarSillasMock.mockRejectedValueOnce(new ErrorAforo('inesperado'));
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+  });
+
+  it('responde 410 si el token ya venció, sin llegar a escribir', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [{ ...compraEnRevision, tokenAprobacionExpiraEn: AHORA_EPOCH - 1 }] });
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(410);
+    expect(confirmarSillasMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/aprobaciones/:token/rechazar', () => {
+  it('transiciona a rechazada, libera el aforo y notifica al cliente con el motivo', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/aprobaciones/token-x/rechazar',
+      token: 'token-x',
+      cuerpo: { motivo: 'El comprobante no corresponde al monto' },
+    });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(enviarMock).toHaveBeenCalledWith(
+      { correo: 'ana@correo.com', nombre: 'Ana Pérez' },
+      'compra_rechazada',
+      { nombreEvento: 'Concierto de jazz', cantidad: 2, motivo: 'El comprobante no corresponde al monto' },
+    );
+  });
+
+  it('funciona sin motivo', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/rechazar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+    const llamada = enviarMock.mock.calls[0]?.[2];
+    expect(llamada.motivo).toBeUndefined();
+  });
+
+  it('responde 409 si ya fue resuelta (condición fallida)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/rechazar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(liberarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 200 aunque liberarSillas lance ErrorAforo', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockRejectedValueOnce(new ErrorAforo('inesperado'));
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/rechazar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+  });
+
+  it('responde 200 aunque la notificación al cliente falle (best-effort)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockRejectedValueOnce(new Error('DynamoDB no disponible'));
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/rechazar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+  });
+});

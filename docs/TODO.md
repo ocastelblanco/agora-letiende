@@ -72,15 +72,15 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 5. **Auditoría** (`CLAUDE.md` §5, A09): tanto aprobar como rechazar son transiciones con consecuencia económica — `resueltoPor` y `resueltoEn` son append-only, nunca se sobrescriben tras la primera escritura (la propia `ConditionExpression` ya lo garantiza).
 
 **Definition of done:**
-- [ ] Un productor solo ve/resuelve compras de eventos donde está en `productores` — nunca por rol a secas
-- [ ] La aprobación/rechazo es una única escritura condicional sobre `estado = 'en_revision'` — el segundo productor que intenta resolver la misma compra recibe "ya fue resuelta por {nombre}", no un error genérico (CU-10)
-- [ ] `aprobar` llama `confirmarSillas`, `rechazar` llama `liberarSillas` — ninguna reimplementa la lógica de `aforo.ts`
-- [ ] Explícito en código y en `MEMORY.md`: `aprobar` no emite boletas todavía (roadmap #12)
-- [ ] El cliente recibe la notificación de compra rechazada, con el motivo si el productor lo dio
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [x] Un productor solo ve/resuelve compras de eventos donde está en `productores` — nunca por rol a secas
+- [x] La aprobación/rechazo es una única escritura condicional sobre `estado = 'en_revision'` — el segundo productor que intenta resolver la misma compra recibe "ya fue resuelta por {nombre}", no un error genérico (CU-10)
+- [x] `aprobar` llama `confirmarSillas`, `rechazar` llama `liberarSillas` — ninguna reimplementa la lógica de `aforo.ts`
+- [x] Explícito en código y en `MEMORY.md`: `aprobar` no emite boletas todavía (roadmap #12)
+- [x] El cliente recibe la notificación de compra rechazada, con el motivo si el productor lo dio
+- [x] `npm run test:api` y `npm run test` en verde (158 backend + 143 frontend)
+- [x] `npm run build` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (pendiente: abrir PR cuando el usuario lo pida)
 
 ---
 

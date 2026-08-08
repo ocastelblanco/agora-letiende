@@ -20,6 +20,7 @@ export interface SeccionNavegacion {
  */
 export const SECCIONES_NAVEGACION: SeccionNavegacion[] = [
   { etiqueta: 'Cartelera', ruta: '/', rolMinimo: 'portero' },
+  { etiqueta: 'Aprobaciones', ruta: '/admin/aprobaciones', rolMinimo: 'productor' },
   { etiqueta: 'Eventos', ruta: '/admin/eventos', rolMinimo: 'administrador' },
   { etiqueta: 'Usuarios', ruta: '/admin/usuarios', rolMinimo: 'administrador' },
 ];
