@@ -15,6 +15,15 @@ export const serverRoutes: ServerRoute[] = [
     path: 'evento/:slug',
     renderMode: RenderMode.Server,
   },
+  // El formulario de compra no tiene valor de SEO (no es lo que un
+  // rastreador de Open Graph debe indexar) y su contenido depende del
+  // aforo en el instante exacto de la visita — RenderMode.Client, mismo
+  // criterio que /admin/* aunque el motivo sea otro (acá no hay sesión de
+  // Firebase de por medio, TODO.md Tarea 2).
+  {
+    path: 'evento/:slug/comprar',
+    renderMode: RenderMode.Client,
+  },
   // La sesión de Firebase vive solo en el navegador (IndexedDB del SDK
   // cliente, sin cookie de sesión) — cualquier ruta protegida por
   // GuardiaAuth/GuardiaRol debe ser RenderMode.Client, nunca Server ni
