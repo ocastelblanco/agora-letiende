@@ -13,15 +13,15 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | Atributo | Valor |
 |---|---|
 | **Versión** | 0.1.0 — infraestructura base + autenticación desplegadas y validadas en vivo en staging |
-| **Fase** | Autenticación y roles (#4), Gestión de usuarios (#5), CRUD de eventos (#6), Cartelera pública (#7), Menú de navegación (#18), QR del evento para afiches (#15), Motor de aforo (#8), Compra y reserva de sillas (#9), Carga de comprobante por enlace mágico (#10) y Aprobación del productor (#11) completas — PR #9-#17 fusionados y validados en vivo; Aprobación del productor implementada y probada (158 backend + 143 frontend) pero **sin PR todavía**. Activa: Dominio personalizado `agora.letiende.co` (roadmap #17 del roadmap técnico, Tarea 1, sin empezar) |
+| **Fase** | Autenticación y roles (#4), Gestión de usuarios (#5), CRUD de eventos (#6), Cartelera pública (#7), Menú de navegación (#18), QR del evento para afiches (#15), Motor de aforo (#8), Compra y reserva de sillas (#9), Carga de comprobante por enlace mágico (#10) y Aprobación del productor (#11) completas — PR #9-#17 fusionados y validados en vivo; Aprobación del productor implementada y probada (158 backend + 143 frontend), **PR #18 abierto, a la espera de validación en staging y fusión**. Activa: Dominio personalizado `agora.letiende.co` (roadmap #17 del roadmap técnico, Tarea 1, sin empezar) |
 | **URL de producción** | `https://agora.letiende.co` — ⬜ no aprovisionada (roadmap #17, Tarea 1 activa de `TODO.md`) |
-| **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` — login con Google + `GET /api/usuarios/me` verificados de punta a punta (02/08/2026), Gestión de usuarios (PR #10), CRUD de eventos (PR #11), Cartelera pública (PR #12), el menú de navegación (PR #13), el QR del evento (PR #14), Motor de aforo (PR #15), Compra y reserva de sillas (PR #16) y Carga de comprobante (PR #17) **todos validados en vivo por el usuario**, cada uno tras corregir en la misma sesión los bugs reales que aparecieron (ver §7). Aprobación del productor todavía sin desplegar/validar en staging |
+| **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` — login con Google + `GET /api/usuarios/me` verificados de punta a punta (02/08/2026), Gestión de usuarios (PR #10), CRUD de eventos (PR #11), Cartelera pública (PR #12), el menú de navegación (PR #13), el QR del evento (PR #14), Motor de aforo (PR #15), Compra y reserva de sillas (PR #16) y Carga de comprobante (PR #17) **todos validados en vivo por el usuario**, cada uno tras corregir en la misma sesión los bugs reales que aparecieron (ver §7). Aprobación del productor (PR #18) todavía sin desplegar/validar en staging |
 | **Rama principal** | `main` |
-| **Último commit en `main`** | merge del PR #17 (Carga de comprobante por enlace mágico) — Aprobación del productor implementada sobre `claude/tarea-1-mobile-feasibility-044k5v`, todavía sin PR |
+| **Último commit en `main`** | merge del PR #17 (Carga de comprobante por enlace mágico) — Aprobación del productor sobre `claude/tarea-1-mobile-feasibility-044k5v`, PR #18 abierto contra `main`, sin fusionar |
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 08/08/2026 (noche, continuación) — PR #17 fusionado, limpieza local, y Aprobación del productor (Tarea 2) implementada de punta a punta (backend + frontend), sin PR todavía — ver §9 |
+| **Última sesión** | 08/08/2026 (noche, continuación) — PR #17 fusionado, limpieza local, Aprobación del productor (Tarea 2) implementada de punta a punta y PR #18 abierto — ver §9 |
 
 ---
 
@@ -796,4 +796,6 @@ Verificación completa: `npm run test:api` (158 backend), `npm run test` (143 fr
 
 Todo el trabajo vive en `claude/tarea-1-mobile-feasibility-044k5v`. Sin PR todavía — no se pidió abrirlo en esta sesión, ni desplegar/validar en staging.
 
-**Próxima tarea sugerida:** si el usuario pide abrir el PR de Aprobación del productor, hacerlo contra `main` con la plantilla ya usada en los PRs anteriores, dejando explícito en la descripción la decisión de alcance de `RESUELTO_POR_ENLACE` (identidad genérica, no un nombre real) y que `aprobar` no emite boletas todavía. Una vez validado en staging y fusionado, recalcular `TODO.md`: el slot libre lo ocupa naturalmente Emisión de boletas con QR firmado (roadmap #12, primer ítem del backlog, ahora desbloqueado). Dominio personalizado (Tarea 1) sigue disponible en paralelo, independiente.
+**Cierre de la sesión — el usuario pidió abrir la PR.** Se abrió el **PR #18** (`claude/tarea-1-mobile-feasibility-044k5v` → `main`), sin plantilla en el repo (se verificó que no existe `.github/pull_request_template.md` ni variantes), con la misma estructura de las PRs anteriores (Cambios realizados / Cómo probar / Checklist), dejando explícita en la descripción la decisión de `RESUELTO_POR_ENLACE` y que `aprobar` no emite boletas todavía.
+
+**Próxima tarea sugerida:** una vez el usuario valide el PR #18 en staging y lo fusione, recalcular `TODO.md`: el slot libre lo ocupa naturalmente Emisión de boletas con QR firmado (roadmap #12, primer ítem del backlog, ahora desbloqueado). Dominio personalizado (Tarea 1) sigue disponible en paralelo, independiente.
