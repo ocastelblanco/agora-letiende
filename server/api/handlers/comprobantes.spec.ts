@@ -1,17 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendMock, clienteS3SendMock, getSignedUrlMock, hashearTokenMock, enviarMock } = vi.hoisted(() => ({
-  sendMock: vi.fn(),
-  clienteS3SendMock: vi.fn(),
-  getSignedUrlMock: vi.fn(),
-  hashearTokenMock: vi.fn(),
-  enviarMock: vi.fn(),
-}));
+const { sendMock, clienteS3SendMock, getSignedUrlMock, hashearTokenMock, generarTokenEnlaceMock, enviarMock } =
+  vi.hoisted(() => ({
+    sendMock: vi.fn(),
+    clienteS3SendMock: vi.fn(),
+    getSignedUrlMock: vi.fn(),
+    hashearTokenMock: vi.fn(),
+    generarTokenEnlaceMock: vi.fn(),
+    enviarMock: vi.fn(),
+  }));
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
-vi.mock('../lib/enlaces-magicos', () => ({ hashearToken: hashearTokenMock }));
+vi.mock('../lib/enlaces-magicos', () => ({
+  hashearToken: hashearTokenMock,
+  generarTokenEnlace: generarTokenEnlaceMock,
+}));
 vi.mock('../services/notificaciones', () => ({
   CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
     this.enviar = enviarMock;
@@ -62,8 +67,10 @@ beforeEach(() => {
   clienteS3SendMock.mockReset();
   getSignedUrlMock.mockReset();
   hashearTokenMock.mockReset();
+  generarTokenEnlaceMock.mockReset();
   enviarMock.mockReset();
   hashearTokenMock.mockReturnValue('hash-derivado');
+  generarTokenEnlaceMock.mockReturnValue({ token: 'token-aprobacion-en-claro', hash: 'hash-aprobacion-derivado' });
   getSignedUrlMock.mockResolvedValue('https://s3.amazonaws.com/presignada');
   enviarMock.mockResolvedValue(undefined);
 });
@@ -176,14 +183,17 @@ describe('POST /api/comprobantes/:token/confirmar', () => {
     expect(respuesta.statusCode).toBe(200);
     const comandoUpdate = sendMock.mock.calls[1]?.[0];
     expect(comandoUpdate.input).toMatchObject({
-      UpdateExpression: 'SET estado = :enRevision',
+      UpdateExpression:
+        'SET estado = :enRevision, tokenAprobacionHash = :tokenHash, tokenAprobacionExpiraEn = :tokenExpira',
       ConditionExpression: 'estado = :esperando',
     });
+    expect(typeof comandoUpdate.input.ExpressionAttributeValues[':tokenHash']).toBe('string');
+    expect(typeof comandoUpdate.input.ExpressionAttributeValues[':tokenExpira']).toBe('number');
     expect(enviarMock).toHaveBeenCalledTimes(2);
     expect(enviarMock).toHaveBeenCalledWith(
       { correo: 'p1@letiende.co', nombre: 'p1@letiende.co' },
       'aviso_comprobante',
-      { nombreEvento: 'Concierto de jazz', cantidad: 2 },
+      { nombreEvento: 'Concierto de jazz', cantidad: 2, urlAprobacion: expect.stringContaining('/aprobaciones/') },
     );
   });
 
