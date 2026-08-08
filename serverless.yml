@@ -736,7 +736,13 @@ resources:
           # productor en `productores` — sin GSI para "contiene" un
           # elemento de array, mismo criterio ya aceptado en eventos.ts
           # para listados de bajo volumen) + GetItem (nombre del evento al
-          # rechazar y al notificar comprobante).
+          # rechazar y al notificar comprobante) + UpdateItem
+          # (confirmarSillas/liberarSillas de aforo.ts, que esta función
+          # invoca desde aprobar/rechazar — sin este permiso, la escritura
+          # condicional sobre agora-eventos falla con AccessDeniedException,
+          # no con ConditionalCheckFailedException, así que no la clasifica
+          # ErrorAforo y termina como 500 genérico: bug real encontrado en
+          # staging, ver MEMORY.md §7).
           - PolicyName: agora-aprobaciones-eventos-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -745,6 +751,7 @@ resources:
                   Action:
                     - dynamodb:Scan
                     - dynamodb:GetItem
+                    - dynamodb:UpdateItem
                   Resource: !GetAtt AgoraEventos.Arn
           # Sobre agora-compras: Query acotado a los dos GSIs que esta
           # función usa (eventoId-creadaEn-index para el listado,
