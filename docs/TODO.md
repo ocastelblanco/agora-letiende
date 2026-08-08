@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (07/08/2026, noche):** Motor de aforo (Tarea 2, roadmap #8) se completó, se probó (92 pruebas) y se fusionó (PR #15) — ver `MEMORY.md` §2 y §9. Dominio personalizado (Tarea 1, roadmap #17) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Motor de aforo lo ocupa **Compra y reserva de sillas** (roadmap #9) — es el único ítem del backlog que dependía de Motor de aforo y ahora queda desbloqueado; el resto del backlog (comprobante, aprobación, emisión, puerta, efectivo) depende en cadena de esta tarea.
+**Prioridad de selección aplicada (08/08/2026):** Compra y reserva de sillas (Tarea 2, roadmap #9) se completó, se probó (118 pruebas backend + 115 frontend) y se fusionó (PR #16) — ver `MEMORY.md` §2 y §9. Dominio personalizado (Tarea 1, roadmap #17) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Compra y reserva lo ocupa **Carga de comprobante por enlace mágico** (roadmap #10) — es el único ítem del backlog que dependía de esa tarea y ahora queda desbloqueado; el resto del backlog (aprobación, emisión, puerta, efectivo) depende en cadena de esta.
 
 ---
 
@@ -35,51 +35,45 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Compra y reserva de sillas
+## Tarea 2 — [FEATURE]: Carga de comprobante por enlace mágico
 
-**Origen:** `PRD.md` §5.3 (flujo completo), CU-04/CU-06/CU-17 · `tech-specs.md` §11 ítem 9, §5.1 (`POST /api/compras`, `GET /api/compras/:compraId/estado`), §5.4 (usa `services/aforo.ts`, ya completo), §5.6 (`services/notificaciones.ts`), §8.2 (enlaces mágicos), §8.3 (superficie pública) · `CLAUDE.md` §5 (A04, A07, A08, Habeas Data)
+**Origen:** `PRD.md` §5.3 (flujo completo), CU-05/CU-06 · `tech-specs.md` §11 ítem 10, §5.1 (`POST /api/comprobantes/:token/url-carga`, `POST /api/comprobantes/:token/confirmar`), §5.6 (`services/notificaciones.ts`, ya existe), §8.2 (enlaces mágicos, ya existe) · `CLAUDE.md` §5 (A02 S3 privado, A07 enlaces mágicos, A08 magic bytes)
 
-**Alcance de esta tarea — solo el camino de evento PAGO:** crear la compra, reservar el aforo con `aforo.ts` (ya completo) y enviarle al cliente un enlace mágico para cargar el comprobante. **No incluye**: la página que consume ese enlace (`handlers/comprobantes.ts`, roadmap #10), la aprobación (roadmap #11), ni la emisión de boletas (roadmap #12). **Decisión de alcance explícita:** el camino de boleta gratuita (CU-07, `precio = 0`) responde `501` con un mensaje claro en vez de simularse a medias — emitir una boleta sin comprobante es responsabilidad de la tarea de emisión (roadmap #12), que todavía no existe; falsear el flujo aquí produciría una compra "confirmada" sin boleta real, el tipo exacto de implementación a medias que el proyecto evita.
+**Alcance:** la página que el cliente abre desde el correo de "Compra y reserva de sillas" (roadmap #9, ya completo) para subir su comprobante de pago, y el consumo del token que transiciona la compra a `en_revision` y avisa al productor. **No incluye** la aprobación en sí (`handlers/aprobaciones.ts`, roadmap #11) — esta tarea termina cuando el comprobante queda cargado y la compra en revisión, sin decidir si se aprueba o se rechaza.
 
-**Gaps documentados a propósito (no silenciados):**
-- **Rate limiting: todavía sin implementar.** Se investigó `provider.httpApi.throttle` — **verificado que no existe** para HTTP API en Serverless Framework (solo aplica a REST API vía `usagePlan`; hay un issue abierto pidiéndolo desde hace tiempo, `serverless/serverless#8589`, sin resolver). La única vía real es el plugin `serverless-apigateway-route-settings` (no evaluado todavía contra Serverless Framework 4) o un `resources.extensions` de CloudFormation escrito a mano sobre el Stage autogenerado (`RouteSettings`/`DefaultRouteSettings`), no verificable sin desplegar en este entorno. `POST /api/compras` queda **sin límite de tasa real** hasta que se resuelva — es la primera mejora de seguridad a cerrar antes de tráfico real.
-- **CORS:** se mantiene `httpApi.cors: true` global (mismo que el resto de la API) — restringirlo al origen exacto de la app (`tech-specs.md` §8.3) es un cambio transversal que afecta todos los endpoints ya en producción/staging, fuera del radio de esta tarea atómica.
-- **Texto legal:** el checkbox de aceptación usa un texto honesto basado en lo ya documentado en `CLAUDE.md` (Habeas Data), **no es texto legal revisado por un humano** — debe reemplazarse antes de vender boletas reales.
+**Ya existe, se reutiliza sin recrear:**
+- `server/api/lib/enlaces-magicos.ts`: `hashearToken(token)` — esta tarea lo usa para *consumir* el token (buscarlo por `tokenComprobanteHash-index`), no lo recrea (se adelantó en la Tarea 2 anterior, ver `MEMORY.md` §9).
+- `server/api/services/notificaciones.ts`/`correo-ses.ts`: agregar la plantilla `aviso_comprobante` (productor) — la interfaz `CanalNotificacion` y `CanalCorreoSes` ya existen, solo se suma un caso al `switch` de plantillas.
+- `BucketComprobantes` en `serverless.yml`: ya existe, privado con Block Public Access + SSE-S3 — **le falta `CorsConfiguration`** (mismo gotcha ya resuelto para `BucketActivos`, `MEMORY.md` §7: sin CORS, el navegador bloquea el `PUT` directo a la URL prefirmada con un preflight fallido) — agregarlo es parte de esta tarea, no un descubrimiento nuevo.
 
 **Archivos a crear:**
-- `server/api/lib/enlaces-magicos.ts` (+ `.spec.ts`) — `generarTokenEnlace()` (token aleatorio ≥128 bits + su hash HMAC-SHA256 con `SECRETO_ENLACES_MAGICOS`) y `hashearToken(token)` (misma derivación, para que la tarea de comprobante — roadmap #10 — pueda consumirlo sin reimplementar el hashing). **Nota de propiedad de archivo:** el roadmap técnico (`tech-specs.md` §11 ítem 10) asigna este archivo a la tarea de comprobante, pero como esta tarea ya necesita *generar* el token, se adelanta aquí; la tarea 10 lo reutiliza para *consumirlo*, no lo recrea.
-- `server/api/services/correo-ses.ts` (+ `.spec.ts`) — envoltura mínima de `@aws-sdk/client-ses` (`SendEmailCommand`), nueva dependencia.
-- `server/api/services/notificaciones.ts` (+ `.spec.ts`) — interfaz `CanalNotificacion` (`tech-specs.md` §5.6) e implementación `CanalCorreoSes`. Solo se implementa la plantilla que esta tarea usa (enlace de comprobante); las otras cuatro plantillas listadas en `tech-specs.md` §5.6 se agregan en las tareas que las necesitan, no como stubs vacíos ahora.
-- `server/api/handlers/compras.ts` (+ `.spec.ts`) — `POST /api/compras`, `GET /api/compras/:compraId/estado`.
-- `src/app/core/api/compras.service.ts` (+ `.spec.ts`) — cliente público (sin `Authorization`, mismo criterio que `EventosPublicosService`).
-- `src/app/features/evento/comprar/comprar.component.ts` (+ `.html`, `.spec.ts`) — formulario de compra en `/evento/:slug/comprar`.
+- `server/api/handlers/comprobantes.ts` (+ `.spec.ts`) — `POST /api/comprobantes/:token/url-carga`, `POST /api/comprobantes/:token/confirmar`.
+- `src/app/core/api/comprobantes.service.ts` (+ `.spec.ts`) — cliente público (sin `Authorization`, el token en la URL es la única credencial).
+- `src/app/features/evento/comprobante/comprobante.component.ts` (+ `.html`, `.spec.ts`) — página en `/comprobante/:token` con el selector de archivo.
 
 **Archivos a modificar:**
-- `serverless.yml`: nuevo GSI `tokenComprobanteHash-index` en `AgoraCompras` (mismo patrón que el `tokenAprobacionHash-index` ya existente); función `compras` nueva con rol IAM propio (`dynamodb:Query`+`GetItem` en `agora-eventos` para resolver el `slug` y clasificar fallos de `aforo.ts`, `dynamodb:UpdateItem` en `agora-eventos` para `reservarSillas`, `dynamodb:PutItem`+`GetItem` en `agora-compras`, `ses:SendEmail`); `provider.httpApi.throttle` global nuevo.
-- `server/bundle-lambdas.mjs`: agregar `compras.js` (depende de `documentoDynamoDB` y de `@aws-sdk/client-ses`).
-- `src/app/features/evento/detalle-evento.component.ts`/`.html`: botón "Comprar boletas" hacia `/evento/:slug/comprar`, visible solo si `estado === 'publicado'` y `sillasDisponibles > 0`.
-- `src/app/app.routes.ts`: ruta `evento/:slug/comprar` (`RenderMode.Client`, mismo criterio que `/admin/*` — es un formulario interactivo, no una página que deba indexarse).
+- `serverless.yml`: `CorsConfiguration` en `BucketComprobantes`; función `comprobantes` nueva con rol IAM propio (`dynamodb:Query` en `agora-compras` vía `tokenComprobanteHash-index`, `dynamodb:UpdateItem` condicional en `agora-compras` para la transición de estado, `dynamodb:GetItem` en `agora-eventos` para resolver los `productores` a notificar, `s3:PutObject`/`s3:GetObject` acotados al prefijo del comprobante, `ses:SendEmail` acotado a la identidad `letiende.co`).
+- `server/bundle-lambdas.mjs`: agregar `comprobantes.js`.
+- `src/app/app.routes.ts`/`app.routes.server.ts`: ruta `comprobante/:token` (`RenderMode.Client`, mismo criterio que `/evento/:slug/comprar`).
 
 **Qué hacer:**
 
-1. **Precio siempre calculado en el backend** (`CLAUDE.md` §5, A08): la "etapa vigente" es, entre las `etapas` del evento ordenadas por `orden`, la primera cuyo `cierraEn` todavía no pasó. Si ninguna aplica, `409` ("no hay una etapa de boletería vigente"). El total nunca llega ni se acepta desde el cliente.
-2. **`expiraEn` en `agora-compras` se guarda en epoch-segundos (`Number`), no en ISO 8601** — excepción explícita a la regla general de `CLAUDE.md` §4: es el atributo de TTL de DynamoDB (`serverless.yml`, `TimeToLiveSpecification`), y TTL exige un `Number` de epoch-segundos, nunca un string. Documentar esto en el propio código y en `MEMORY.md` §7 para que ninguna sesión futura lo "corrija" a ISO y rompa el TTL en silencio.
-3. `POST /api/compras`: valida `slug`/`cantidad` (entero positivo, ≤ `maxBoletasPorCompra`)/`cliente.{nombre,telefono,correo}` (mismo criterio hostil-por-defecto que el nombre de evento, `CLAUDE.md` §5 A03)/`autorizacionDatos === true`. Resuelve el evento por `slug` (Query sobre `slug-index`, nunca `Scan`), calcula la etapa vigente y el total, llama `reservarSillas` — sus errores (`AforoInsuficienteError`/`EventoNoPublicadoError`) se traducen a `409` con mensaje claro (CU-17). Genera el token de comprobante, persiste la compra (`estado: 'esperando_comprobante'`, `expiraEn` = ahora + `plazoComprobanteMinutos`) y envía el correo con el enlace — el envío de correo es best-effort (no revierte la reserva si SES falla; se registra el fallo sin datos personales).
-4. `GET /api/compras/:compraId/estado`: público, sin datos del cliente. Si `expiraEn` ya pasó pero el ítem todavía existe (el TTL de DynamoDB no es puntual, `tech-specs.md` §5.4 punto 4), responde `estado: 'expirada'` igual — nunca confía en que el borrado físico ya ocurrió.
-5. Frontend: el total mostrado en pantalla es solo para UX (se recalcula localmente con la etapa vigente que ya trae `EventoPublico.etapas`); el backend nunca lo recibe ni lo valida contra lo que el cliente vio.
+1. **Validar el token antes de cualquier operación** (`CLAUDE.md` §5, A07): hashear el `token` de la ruta con `hashearToken()`, buscarlo por `tokenComprobanteHash-index`. Si no existe, si `expiraEn` ya pasó (tratar como expirado aunque el TTL no haya borrado el ítem, mismo criterio que `compras.ts`), o si `estado !== 'esperando_comprobante'` (ya se consumió — un enlace mágico es de un solo uso), responder con un mensaje distinguible en cada caso — no un 404 genérico que deje al cliente sin saber si su enlace ya venció o si ya lo usó.
+2. `POST /api/comprobantes/:token/url-carga`: valida `tipoMime` (`image/jpeg`/`image/png`/`image/webp`/`application/pdf` — **nunca SVG**, `CLAUDE.md` §5 A08) y `tamano` (≤ 10 MB, mismo tope que activos de evento). Devuelve una URL prefirmada de `PutObject` sobre `BucketComprobantes`, key `compras/{compraId}/comprobante-{uuid}.{ext}`, `expiresIn` corto (900s, mismo criterio que activos de evento). El cliente sube directo a S3 con esa URL — el backend nunca descarga el archivo (A10).
+3. `POST /api/comprobantes/:token/confirmar`: **el tipo real del archivo se verifica leyendo sus magic bytes desde S3** (`GetObjectCommand`, primeros bytes), nunca confiando en el `Content-Type` que el cliente declaró en el paso anterior (`CLAUDE.md` §5, A08 — "el tipo se verifica en el backend por los magic bytes del archivo, no por la extensión ni por el Content-Type declarado"). Si no coincide con ninguna firma válida (JPEG `FF D8 FF`, PNG `89 50 4E 47`, WEBP `RIFF....WEBP`, PDF `%PDF`), se borra el objeto de S3 y se responde 400 sin transicionar la compra. Si coincide, transiciona `estado: 'esperando_comprobante' → 'en_revision'` con `ConditionExpression` (consumo de un solo uso del enlace, `CLAUDE.md` §5 A07) y notifica a cada correo en `evento.productores` con la plantilla `aviso_comprobante` — best-effort, mismo criterio que el correo de `compras.ts`.
+4. Frontend: página mínima — selector de archivo, subida con progreso simple, confirmación. Sin mostrar datos de la compra más allá de lo que el propio flujo ya expone (`tech-specs.md` §5.1 no define un `GET` para este token — no inventar uno fuera de lo especificado).
 
 **Definition of done:**
-- [x] El precio/total nunca se acepta desde el cliente — se calcula siempre en `compras.ts` a partir de la etapa vigente real (`etapaVigente()`, primera etapa por `orden` cuyo `cierraEn` no ha pasado)
-- [x] `POST /api/compras` reserva aforo con `aforo.ts` (nunca duplica su lógica) y traduce sus errores a respuestas 409 claras (CU-17, incluye `sillasDisponibles` reales)
-- [x] El token de comprobante tiene ≥128 bits de entropía (`randomBytes(32)`), se guarda hasheado con HMAC-SHA256 (nunca en claro) y expira con el plazo del evento (`CLAUDE.md` §5, A07)
-- [x] `expiraEn` se guarda en epoch-segundos, documentado como excepción a la regla ISO 8601 general (código + `MEMORY.md` §7)
-- [x] `GET /api/compras/:compraId/estado` no expone `cliente` ni ningún dato personal
-- [x] Boletas gratuitas (`precio = 0`) responden `501` explícito, no una emisión simulada
-- [x] Rol IAM de `compras` sin comodines, acotado exactamente a lo que `compras.ts`/`aforo.ts` usan (SES acotado a la identidad `letiende.co`, no `ses:*`)
-- [x] `npm run test:api` y `npm run test` en verde (118 pruebas backend + 115 frontend)
-- [x] `npm run build` sin errores
-- [x] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (implementación lista en `claude/tarea-1-mobile-feasibility-044k5v`; PR pendiente de solicitud explícita del usuario)
+- [ ] El token se hashea con la misma derivación que `compras.ts` generó (`hashearToken`, reutilizado, no reimplementado)
+- [ ] Un token ya usado, vencido o inexistente responde con un mensaje distinguible en cada caso, no un 404 genérico
+- [ ] El tipo de archivo se verifica por magic bytes leídos de S3, nunca por `Content-Type` declarado ni por extensión — SVG rechazado siempre
+- [ ] La transición `esperando_comprobante → en_revision` es una única escritura condicional (consumo de un solo uso), nunca lectura-luego-escritura
+- [ ] `BucketComprobantes` tiene `CorsConfiguration` para el `PUT` directo del navegador
+- [ ] El productor (o cada productor, si son varios) recibe la notificación de comprobante por revisar
+- [ ] `npm run test:api` y `npm run test` en verde
+- [ ] `npm run build` sin errores
+- [ ] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
 
@@ -87,12 +81,11 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
 
-1. Carga de comprobante por enlace mágico (depende de Compra y reserva de sillas)
-2. Aprobación del productor
-3. Emisión de boletas con QR firmado
-4. Validación en puerta
-5. Venta en efectivo
-6. Panel de control básico
+1. Aprobación del productor (depende de Carga de comprobante)
+2. Emisión de boletas con QR firmado
+3. Validación en puerta
+4. Venta en efectivo
+5. Panel de control básico
 
 ---
 
