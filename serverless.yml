@@ -260,6 +260,33 @@ functions:
           path: /api/compras/{compraId}/estado
           method: get
 
+  comprobantes:
+    handler: dist-server-bundle/comprobantes.handler
+    role: !GetAtt ComprobantesLambdaRole.Arn
+    description: >-
+      POST /api/comprobantes/:token/url-carga y /confirmar — carga del
+      comprobante de pago vía enlace mágico, sin exigirRol (TODO.md
+      Tarea 2).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      BUCKET_COMPROBANTES: ${self:custom.nombresBuckets.comprobantes}
+      SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
+    package:
+      # Depende de documentoDynamoDB y de @aws-sdk/client-ses — mismo
+      # motivo de bundle que compras.ts (server/bundle-lambdas.mjs).
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/comprobantes.js'
+    events:
+      - httpApi:
+          path: /api/comprobantes/{token}/url-carga
+          method: post
+      - httpApi:
+          path: /api/comprobantes/{token}/confirmar
+          method: post
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -568,6 +595,77 @@ resources:
                     - ses:SendRawEmail
                   Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
 
+    ComprobantesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-comprobantes-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): comprobantes.ts nunca usa
+          # exigirRol (el token del enlace mágico es la única credencial),
+          # sin acceso a agora-usuarios. Sobre agora-compras: Query acotado
+          # al GSI de token (validarToken), UpdateItem condicional (guardar
+          # la key subida y transicionar a en_revision) — sin PutItem, esta
+          # función nunca crea compras, solo las actualiza.
+          - PolicyName: agora-comprobantes-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraCompras.Arn
+                    - !Sub '${AgoraCompras.Arn}/index/*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraCompras.Arn
+          # GetItem sobre agora-eventos: resolver el nombre y los
+          # productores del evento para la notificación de comprobante
+          # cargado — sin Query ni Scan, esta función nunca lista eventos.
+          - PolicyName: agora-comprobantes-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # S3 acotado al prefijo compras/* de BucketComprobantes: PutObject
+          # (URL prefirmada de subida), GetObject (verificar magic bytes),
+          # DeleteObject (limpiar un archivo que no pasó la verificación).
+          - PolicyName: agora-comprobantes-s3-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                    - s3:GetObject
+                    - s3:DeleteObject
+                  Resource: !Sub '${BucketComprobantes.Arn}/compras/*'
+          # ses:SendEmail (no ses:*), acotado a la identidad verificada de
+          # letiende.co — el aviso de comprobante por revisar es el único
+          # correo que esta función envía.
+          - PolicyName: agora-comprobantes-ses-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ses:SendEmail
+                    - ses:SendRawEmail
+                  Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+
     SsrLambdaRole:
       Type: AWS::IAM::Role
       Properties:
@@ -763,6 +861,19 @@ resources:
           ServerSideEncryptionConfiguration:
             - ServerSideEncryptionByDefault:
                 SSEAlgorithm: AES256
+        # Sin esto, la subida directa del navegador con la URL prefirmada
+        # (comprobantes.ts, generarUrlCargaComprobante) falla en el
+        # preflight (OPTIONS) del propio navegador antes de llegar a S3 —
+        # mismo gotcha ya resuelto para BucketActivos (MEMORY.md §7).
+        # `AllowedOrigins: '*'` es aceptable por el mismo motivo que ahí:
+        # la autorización real la da la firma de la URL prefirmada, no el
+        # origen — el bucket sigue privado (Block Public Access arriba).
+        CorsConfiguration:
+          CorsRules:
+            - AllowedMethods: [PUT]
+              AllowedOrigins: ['*']
+              AllowedHeaders: ['*']
+              MaxAge: 3000
 
     BucketActivos:
       Type: AWS::S3::Bucket

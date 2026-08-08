@@ -24,6 +24,12 @@ export const serverRoutes: ServerRoute[] = [
     path: 'evento/:slug/comprar',
     renderMode: RenderMode.Client,
   },
+  // Mismo motivo que /evento/:slug/comprar: formulario sin valor de SEO
+  // (TODO.md Tarea 2).
+  {
+    path: 'comprobante/:token',
+    renderMode: RenderMode.Client,
+  },
   // La sesión de Firebase vive solo en el navegador (IndexedDB del SDK
   // cliente, sin cookie de sesión) — cualquier ruta protegida por
   // GuardiaAuth/GuardiaRol debe ser RenderMode.Client, nunca Server ni

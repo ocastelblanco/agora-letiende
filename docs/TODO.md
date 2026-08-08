@@ -64,16 +64,16 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 4. Frontend: página mínima — selector de archivo, subida con progreso simple, confirmación. Sin mostrar datos de la compra más allá de lo que el propio flujo ya expone (`tech-specs.md` §5.1 no define un `GET` para este token — no inventar uno fuera de lo especificado).
 
 **Definition of done:**
-- [ ] El token se hashea con la misma derivación que `compras.ts` generó (`hashearToken`, reutilizado, no reimplementado)
-- [ ] Un token ya usado, vencido o inexistente responde con un mensaje distinguible en cada caso, no un 404 genérico
-- [ ] El tipo de archivo se verifica por magic bytes leídos de S3, nunca por `Content-Type` declarado ni por extensión — SVG rechazado siempre
-- [ ] La transición `esperando_comprobante → en_revision` es una única escritura condicional (consumo de un solo uso), nunca lectura-luego-escritura
-- [ ] `BucketComprobantes` tiene `CorsConfiguration` para el `PUT` directo del navegador
-- [ ] El productor (o cada productor, si son varios) recibe la notificación de comprobante por revisar
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [x] El token se hashea con la misma derivación que `compras.ts` generó (`hashearToken`, reutilizado, no reimplementado)
+- [x] Un token ya usado, vencido o inexistente responde con un mensaje distinguible en cada caso (`404`/`410`/`409`), no un 404 genérico
+- [x] El tipo de archivo se verifica por magic bytes leídos de S3 (`Range: bytes=0-11`), nunca por `Content-Type` declarado ni por extensión — SVG rechazado siempre (probado explícitamente con una cabecera SVG que no coincide con ninguna firma binaria)
+- [x] La transición `esperando_comprobante → en_revision` es una única escritura condicional (consumo de un solo uso), nunca lectura-luego-escritura
+- [x] `BucketComprobantes` tiene `CorsConfiguration` para el `PUT` directo del navegador
+- [x] El productor (o cada productor, si son varios) recibe la notificación de comprobante por revisar (plantilla `aviso_comprobante`, best-effort)
+- [x] `npm run test:api` y `npm run test` en verde (137 pruebas backend + 124 frontend)
+- [x] `npm run build` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (implementación lista en `claude/tarea-1-mobile-feasibility-044k5v`; PR pendiente de solicitud explícita del usuario)
 
 ---
 

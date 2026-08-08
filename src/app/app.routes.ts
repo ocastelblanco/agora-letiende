@@ -42,6 +42,15 @@ export const routes: Routes = [
     title: 'Comprar boletas — Ágora',
   },
   {
+    path: 'comprobante/:token',
+    loadComponent: () =>
+      import('./features/evento/comprobante/comprobante.component').then(
+        (m) => m.ComprobanteComponent,
+      ),
+    // RenderMode.Client, mismo criterio que /evento/:slug/comprar.
+    title: 'Cargar comprobante — Ágora',
+  },
+  {
     path: 'login',
     loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent),
     canActivate: [guardiaInvitado],

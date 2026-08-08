@@ -1,0 +1,49 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-lg">
+    <h1 class="mb-1 text-2xl font-bold text-primary">Cargar comprobante</h1>
+    <p class="mb-6 text-sm text-primary/70">
+      Sube la foto o el PDF del comprobante de tu pago para confirmar tu compra.
+    </p>
+
+    @if (subido()) {
+      <div class="rounded-2xl bg-white p-6 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <h2 class="mb-2 text-lg font-semibold text-primary">¡Comprobante recibido!</h2>
+        <p class="text-sm text-primary/70">
+          El equipo lo va a revisar pronto. Te avisaremos por correo con el resultado.
+        </p>
+      </div>
+    } @else {
+      <div class="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <input
+          #inputComprobante
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          class="hidden"
+          [disabled]="enviando()"
+          (change)="seleccionarArchivo($event)"
+        />
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="enviando()"
+          (click)="inputComprobante.click()"
+        >
+          {{ archivoSeleccionado() ? 'Cambiar archivo' : 'Seleccionar archivo' }}
+        </button>
+
+        @if (archivoSeleccionado(); as archivo) {
+          <p class="text-xs text-primary/60">{{ archivo.name }}</p>
+        }
+
+        <button
+          type="button"
+          [disabled]="!archivoSeleccionado() || enviando()"
+          (click)="subir()"
+          class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {{ enviando() ? 'Subiendo…' : 'Confirmar comprobante' }}
+        </button>
+      </div>
+    }
+  </div>
+</div>

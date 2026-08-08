@@ -300,10 +300,12 @@ async function consultarEstadoCompra(
 
 /**
  * `POST /api/compras`, `GET /api/compras/:compraId/estado` — sin
- * `exigirRol`: es la única superficie pública que muta estado en Ágora
- * (`tech-specs.md` §8.3), protegida con límite de tasa a nivel de API
- * (`serverless.yml`, `provider.httpApi.throttle`) y validación exhaustiva
- * de payload, nunca con autenticación de equipo.
+ * `exigirRol`: superficie pública que muta estado en Ágora
+ * (`tech-specs.md` §8.3), protegida solo con validación exhaustiva de
+ * payload, nunca con autenticación de equipo. **Sin límite de tasa por IP
+ * todavía** — gap documentado a propósito en `TODO.md`/`MEMORY.md` §7
+ * (Serverless Framework no soporta throttle nativo por ruta para HTTP
+ * API, verificado).
  */
 export const handler: APIGatewayProxyHandlerV2 = async (
   evento: APIGatewayProxyEventV2,
