@@ -6,12 +6,13 @@ export interface Destinatario {
 }
 
 /**
- * Plantillas de v1 (`tech-specs.md` §5.6). Solo `enlace_comprobante` tiene
- * implementación por ahora — el resto se agrega en las tareas que las usan
- * (carga de comprobante, aprobación, emisión de boletas, liberación de
- * reserva), no como stubs vacíos por adelantado.
+ * Plantillas de v1 (`tech-specs.md` §5.6). Implementadas hasta ahora:
+ * `enlace_comprobante` (Compra y reserva de sillas) y `aviso_comprobante`
+ * (Carga de comprobante) — el resto se agrega en las tareas que las usan
+ * (aprobación, emisión de boletas, liberación de reserva), no como stubs
+ * vacíos por adelantado.
  */
-export type Plantilla = 'enlace_comprobante';
+export type Plantilla = 'enlace_comprobante' | 'aviso_comprobante';
 
 export interface DatosEnlaceComprobante {
   nombreEvento: string;
@@ -19,6 +20,11 @@ export interface DatosEnlaceComprobante {
   montoTotal: number;
   urlComprobante: string;
   plazoComprobanteMinutos: number;
+}
+
+export interface DatosAvisoComprobante {
+  nombreEvento: string;
+  cantidad: number;
 }
 
 /**
@@ -61,11 +67,27 @@ function renderizarEnlaceComprobante(datos: DatosEnlaceComprobante): { asunto: s
   };
 }
 
+function renderizarAvisoComprobante(datos: DatosAvisoComprobante): { asunto: string; html: string } {
+  const nombreEvento = escaparHtml(datos.nombreEvento);
+  return {
+    asunto: `Comprobante por revisar — ${nombreEvento}`,
+    html: `
+      <p>Un cliente cargó el comprobante de una compra de ${datos.cantidad} boleta(s) para <strong>${nombreEvento}</strong>.</p>
+      <p>Todavía no existe una página de aprobación en Ágora (llega en una tarea posterior, roadmap #11) — por ahora, coordina la revisión por el canal habitual del equipo.</p>
+    `.trim(),
+  };
+}
+
 export class CanalCorreoSes implements CanalNotificacion {
   async enviar(destinatario: Destinatario, plantilla: Plantilla, datos: unknown): Promise<void> {
     switch (plantilla) {
       case 'enlace_comprobante': {
         const { asunto, html } = renderizarEnlaceComprobante(datos as DatosEnlaceComprobante);
+        await enviarCorreo({ destinatario: destinatario.correo, asunto, html });
+        return;
+      }
+      case 'aviso_comprobante': {
+        const { asunto, html } = renderizarAvisoComprobante(datos as DatosAvisoComprobante);
         await enviarCorreo({ destinatario: destinatario.correo, asunto, html });
         return;
       }

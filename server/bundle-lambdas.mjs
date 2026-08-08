@@ -51,6 +51,9 @@ const entradas = [
   // compras.ts (TODO.md Tarea 2) depende de documentoDynamoDB y de
   // @aws-sdk/client-ses — mismo motivo de bundle que el resto.
   { entrada: 'dist-server/api/handlers/compras.js', salida: `${OUT_DIR}/compras.js` },
+  // comprobantes.ts (TODO.md Tarea 2) depende de documentoDynamoDB y de
+  // @aws-sdk/client-ses — mismo motivo de bundle que compras.ts.
+  { entrada: 'dist-server/api/handlers/comprobantes.js', salida: `${OUT_DIR}/comprobantes.js` },
 ];
 
 for (const { entrada, salida } of entradas) {

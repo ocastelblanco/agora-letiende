@@ -66,4 +66,36 @@ describe('CanalCorreoSes', () => {
       }),
     ).rejects.toThrow('SES no disponible');
   });
+
+  it('renderiza y envía la plantilla aviso_comprobante al productor', async () => {
+    enviarCorreoMock.mockResolvedValueOnce(undefined);
+    const canal = new CanalCorreoSes();
+
+    await canal.enviar(
+      { correo: 'productor@letiende.co', nombre: 'productor@letiende.co' },
+      'aviso_comprobante',
+      { nombreEvento: 'Concierto de jazz', cantidad: 2 },
+    );
+
+    expect(enviarCorreoMock).toHaveBeenCalledTimes(1);
+    const llamada = enviarCorreoMock.mock.calls[0]?.[0];
+    expect(llamada.destinatario).toBe('productor@letiende.co');
+    expect(llamada.asunto).toContain('Concierto de jazz');
+    expect(llamada.html).toContain('2 boleta(s)');
+  });
+
+  it('escapa el nombre del evento en aviso_comprobante (defensa en profundidad, A03)', async () => {
+    enviarCorreoMock.mockResolvedValueOnce(undefined);
+    const canal = new CanalCorreoSes();
+
+    await canal.enviar(
+      { correo: 'productor@letiende.co', nombre: 'productor@letiende.co' },
+      'aviso_comprobante',
+      { nombreEvento: '<script>alert(1)</script>', cantidad: 1 },
+    );
+
+    const llamada = enviarCorreoMock.mock.calls[0]?.[0];
+    expect(llamada.html).not.toContain('<script>');
+    expect(llamada.html).toContain('&lt;script&gt;');
+  });
 });
