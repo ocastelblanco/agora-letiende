@@ -127,6 +127,12 @@ jobs:
           SES_REMITENTE: ${{ secrets.SES_REMITENTE }}
           URL_BASE_APP: ${{ secrets.URL_BASE_APP }}
           SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}
+          # Mismo gotcha, esta vez con las Lambdas aprobaciones/boletas
+          # (TODO.md Tarea 2, Emisión de boletas): sin esto, las firmas de
+          # boleta se calculan igual pero con una llave vacía y predecible,
+          # falsificable sin acceso al sistema (CLAUDE.md §5, A02) — a
+          # diferencia de SES_REMITENTE, este fallo no rompe nada visible.
+          SECRETO_FIRMA_BOLETAS: ${{ secrets.SECRETO_FIRMA_BOLETAS }}
 
       - name: Smoke test contra staging recién desplegado
         run: |
@@ -191,3 +197,4 @@ jobs:
           SES_REMITENTE: ${{ secrets.SES_REMITENTE }}
           URL_BASE_APP: ${{ secrets.URL_BASE_APP }}
           SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}
+          SECRETO_FIRMA_BOLETAS: ${{ secrets.SECRETO_FIRMA_BOLETAS }}

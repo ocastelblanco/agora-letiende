@@ -9,7 +9,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
 import { hashearToken } from '../lib/enlaces-magicos';
+import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { ErrorAforo, confirmarSillas, liberarSillas } from '../services/aforo';
+import { emitirBoletas } from '../services/boleteria';
 import { CanalCorreoSes } from '../services/notificaciones';
 import { exigirRol } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
@@ -33,6 +35,7 @@ interface ClienteCompra {
 interface CompraParaAprobacion {
   compraId: string;
   eventoId: string;
+  etapaId: string;
   cantidad: number;
   cliente?: ClienteCompra;
   montoTotal: number;
@@ -196,10 +199,11 @@ async function obtenerDetalleAprobacion(token: string | undefined): Promise<APIG
 /**
  * `POST /api/aprobaciones/:token/aprobar` — escritura condicional de un
  * solo uso (`estado = 'en_revision'`, CU-10: el primero que aprueba bloquea
- * a los demás) y luego confirma el aforo con `aforo.ts` (nunca reimplementa
- * su lógica). **No emite boletas** — `agora-boletas`/roadmap #12 todavía no
- * existen; esa es la responsabilidad de la tarea de emisión, no de esta
- * (decisión de alcance explícita, `TODO.md` Tarea 2).
+ * a los demás), confirma el aforo con `aforo.ts` y emite las boletas con
+ * `boleteria.ts` (ninguna reimplementa esa lógica). El correo con los
+ * enlaces a cada boleta (`boletas_emitidas`) es, a propósito, la única
+ * notificación de "compra aprobada" que recibe el cliente — no hay un
+ * correo intermedio separado (decisión explícita, `TODO.md` Tarea 2).
  */
 async function aprobarCompra(token: string | undefined): Promise<APIGatewayProxyResultV2> {
   const validacion = await validarTokenAprobacion(token);
@@ -240,6 +244,43 @@ async function aprobarCompra(token: string | undefined): Promise<APIGatewayProxy
     // desde la compra), pero si pasa, la compra queda aprobada sin aforo
     // confirmado — se registra para diagnóstico, nunca datos del cliente.
     console.error('confirmarSillas falló tras aprobar la compra', { compraId: compra.compraId });
+  }
+
+  try {
+    const boletas = await emitirBoletas({
+      compraId: compra.compraId,
+      eventoId: compra.eventoId,
+      etapaId: compra.etapaId,
+      montoTotal: compra.montoTotal,
+      cantidad: compra.cantidad,
+    });
+
+    if (compra.cliente) {
+      const resultadoEvento = await documentoDynamoDB.send(
+        new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId: compra.eventoId } }),
+      );
+      const nombreEvento = resultadoEvento.Item?.['nombre'];
+      if (typeof nombreEvento === 'string') {
+        const urlBase = process.env['URL_BASE_APP'] ?? '';
+        const urlsBoletas = boletas.map(
+          (boleta) => `${urlBase}/boleta/${boleta.boletaId}.${firmarCodigoBoleta(boleta.boletaId)}`,
+        );
+        await canalNotificacion.enviar(
+          { correo: compra.cliente.correo, nombre: compra.cliente.nombre },
+          'boletas_emitidas',
+          { nombreEvento, urlsBoletas },
+        );
+      }
+    }
+  } catch (error) {
+    // Best-effort, mismo criterio que confirmarSillas arriba: la aprobación
+    // ya es válida y las boletas (si llegaron a crearse) también, aunque la
+    // emisión o el aviso al cliente fallen — nunca se revierte por esto.
+    const nombreError = error instanceof Error ? error.name : 'error desconocido';
+    console.error('La emisión de boletas o su notificación falló tras aprobar', {
+      compraId: compra.compraId,
+      nombreError,
+    });
   }
 
   return respuestaJson(200, { estado: 'aprobada' });

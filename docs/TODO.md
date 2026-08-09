@@ -65,7 +65,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - `server/api/handlers/compras.ts`: agregar `etapaId` al ítem persistido (ver gap de modelo arriba).
 - `server/api/handlers/aprobaciones.ts`: `aprobarCompra()` llama `emitirBoletas` después de `confirmarSillas` (mismo bloque `try/catch` best-effort que ya existe para el aforo — un fallo en la emisión no debe revertir una aprobación ya válida, se registra `compraId` para diagnóstico) y notifica `boletas_emitidas` al cliente con los enlaces a `/boleta/{codigo}` de cada boleta emitida, best-effort.
 - `server/api/services/notificaciones.ts`: plantilla `boletas_emitidas`.
-- `serverless.yml`: tabla `AgoraBoletas` nueva (`PAY_PER_REQUEST`, PK `boletaId`, GSI `eventoId-estado-index`, GSI `compraId-index`); función `boletas` nueva con rol IAM propio (`dynamodb:GetItem` en `agora-boletas`/`agora-eventos`/`agora-compras`, sin `firebase-admin` — endpoint público, no necesita bundle por ese motivo pero sí por `documentoDynamoDB`, mismo criterio que `eventos-publicos.ts`); rol de `aprobaciones` gana `dynamodb:PutItem` en `agora-boletas`.
+- `serverless.yml`: **hallazgo al implementar — `AgoraBoletas` ya existía** desde la tarea de infraestructura base (`PAY_PER_REQUEST`, PK `boletaId`, GSI `eventoId-estado-index`, GSI `compraId-index`, exactamente como la necesitaba esta tarea), sin consumidor hasta ahora — no hizo falta crearla, solo darle permisos. Función `boletas` nueva con rol IAM propio (`dynamodb:GetItem` en `agora-boletas`/`agora-eventos`/`agora-compras`, sin `firebase-admin` — endpoint público, no necesita bundle por ese motivo pero sí por `documentoDynamoDB`, mismo criterio que `eventos-publicos.ts`); rol de `aprobaciones` gana `dynamodb:PutItem` en `agora-boletas`.
 - `server/bundle-lambdas.mjs`: agregar `boletas.js`.
 - `.github/workflows/deploy.yml`: agregar `SECRETO_FIRMA_BOLETAS` a los dos jobs de deploy **en el mismo cambio que la primera Lambda que lo consume** — la lección de `SES_REMITENTE`/`FIREBASE_SERVICE_ACCOUNT_AGORA` ya se repitió dos veces esta semana (`MEMORY.md` §7), no una tercera.
 - `src/app/app.routes.ts`/`app.routes.server.ts`: `/boleta/:codigo` (`RenderMode.Client`, pública, mismo criterio que `/comprobante/:token`/`/aprobaciones/:token`).
@@ -73,7 +73,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 **Qué hacer:**
 
 1. **`lib/firma-boletas.ts`**: firma determinística truncada del `boletaId`, verificación en tiempo constante.
-2. **Tabla `agora-boletas`** en `serverless.yml`, sin `ProvisionedThroughput`.
+2. **Tabla `agora-boletas`** — ya existía en `serverless.yml`, solo se le dieron permisos IAM nuevos (ver hallazgo arriba).
 3. **`compras.ts`**: persistir `etapaId`.
 4. **`services/boleteria.ts`**: `emitirBoletas()`, consumida únicamente por `aprobarCompra()` en esta tarea.
 5. **`aprobaciones.ts`**: integrar la emisión y la notificación al cliente en el camino feliz de aprobar.
@@ -82,17 +82,17 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 8. **Auditoría** (`CLAUDE.md` §5, A09): `emitidaEn` es append-only (se escribe una sola vez, en la creación de la boleta); ninguna operación de esta tarea sobrescribe un campo ya escrito.
 
 **Definition of done:**
-- [ ] Cada aprobación emite exactamente `cantidad` boletas, cada una con `boletaId` UUID v4 (nunca consecutivo ni derivado de datos del cliente)
-- [ ] El código de la boleta (`{boletaId}.{firma}`) usa HMAC-SHA256 truncado con `SECRETO_FIRMA_BOLETAS`, verificado en tiempo constante
-- [ ] `GET /api/boletas/:codigo` rechaza una firma inválida **antes** de cualquier lectura a DynamoDB, y responde el mismo mensaje genérico para "firma inválida" y para "boleta inexistente" (sin oráculo de enumeración)
-- [ ] `aprobar` reutiliza `confirmarSillas` (ya) y ahora también `emitirBoletas` — ninguna reimplementa `aforo.ts`/`boleteria.ts`
-- [ ] El cliente recibe `boletas_emitidas` con enlace a cada boleta, best-effort, sin revertir la aprobación si la notificación falla
-- [ ] Explícito en código y en `MEMORY.md`: `POST /api/boletas/:codigo/validar` (roadmap #13) y Venta en efectivo (roadmap #14) quedan fuera de esta tarea
-- [ ] `SECRETO_FIRMA_BOLETAS` agregado a `deploy.yml` en el mismo commit que lo empieza a consumir, no como fix posterior
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [x] Cada aprobación emite exactamente `cantidad` boletas, cada una con `boletaId` UUID v4 (nunca consecutivo ni derivado de datos del cliente)
+- [x] El código de la boleta (`{boletaId}.{firma}`) usa HMAC-SHA256 truncado con `SECRETO_FIRMA_BOLETAS`, verificado en tiempo constante
+- [x] `GET /api/boletas/:codigo` rechaza una firma inválida **antes** de cualquier lectura a DynamoDB, y responde el mismo mensaje genérico para "firma inválida" y para "boleta inexistente" (sin oráculo de enumeración)
+- [x] `aprobar` reutiliza `confirmarSillas` (ya) y ahora también `emitirBoletas` — ninguna reimplementa `aforo.ts`/`boleteria.ts`
+- [x] El cliente recibe `boletas_emitidas` con enlace a cada boleta, best-effort, sin revertir la aprobación si la notificación falla
+- [x] Explícito en código y en `MEMORY.md`: `POST /api/boletas/:codigo/validar` (roadmap #13) y Venta en efectivo (roadmap #14) quedan fuera de esta tarea
+- [x] `SECRETO_FIRMA_BOLETAS` agregado a `deploy.yml` en el mismo commit que lo empieza a consumir, no como fix posterior
+- [x] `npm run test:api` y `npm run test` en verde (186 backend + 149 frontend)
+- [x] `npm run build` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (pendiente: abrir PR cuando el usuario lo pida)
 
 ---
 
@@ -115,7 +115,7 @@ Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 - ✅ Remitente `taquilla@letiende.co` en SES probado — llegó a bandeja de entrada en Gmail (sección 5). Queda una verificación opcional de cabeceras SPF/DKIM/DMARC, no bloqueante.
 - ✅ Cuenta de servicio de Firebase creada y cargada (sección 4.3, ADR-002). **No se registra app web propia** — Ágora reutiliza el `firebaseConfig` de Comandante, igual que Babel (ADR-010). El dominio `agora.letiende.co` ya está en Authorized domains; falta el de staging, que se agrega cuando se monte el dominio personalizado (roadmap #11 del backlog).
 - ✅ `SES_REMITENTE`, `URL_BASE_APP` y `SECRETO_ENLACES_MAGICOS` creados en GitHub (`staging`, 08/08/2026) — el correo con el enlace de comprobante llega correctamente, verificado en vivo por el usuario. Falta confirmar que también existan en el entorno `production` antes del primer despliegue real a producción de una tarea que los use.
-- 🔴 `SECRETO_FIRMA_BOLETAS` **todavía no existe en GitHub** — bloquea la validación en vivo de la Tarea 2 activa (Emisión de boletas). A diferencia del patrón de `SES_REMITENTE` (que falla de forma audible, SES rechaza el envío), un `SECRETO_FIRMA_BOLETAS` vacío en `serverless.yml` (`${env:..., ''}`) **no rompe nada visiblemente** — las firmas se calculan igual, solo que con una llave vacía y predecible, lo que vuelve las boletas falsificables sin acceso al sistema (`CLAUDE.md` §5, A02). Crearlo en GitHub (`staging` primero) **antes** de la primera prueba real en staging de esta tarea, no después de encontrar el problema.
+- ✅ `SECRETO_FIRMA_BOLETAS` creado en GitHub (`staging` **y** `production`, 09/08/2026) — valores distintos por entorno, generados aleatoriamente (256 bits). Falta wire-up en `deploy.yml` y en la Lambda que lo consuma por primera vez, parte de la implementación de esta Tarea 2.
 
 Fase 2, conviene arrancarlo pronto porque la Verificación de Negocio de Meta es lenta:
 

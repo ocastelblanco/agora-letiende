@@ -109,6 +109,7 @@ describe('POST /api/compras', () => {
     const comandoPut = sendMock.mock.calls[1]?.[0];
     expect(comandoPut.input.Item).toMatchObject({
       eventoId: 'evt-1',
+      etapaId: 'et-1',
       cantidad: 2,
       montoTotal: 90000,
       estado: 'esperando_comprobante',

@@ -152,4 +152,37 @@ describe('CanalCorreoSes', () => {
     expect(llamada.html).not.toContain('<script>');
     expect(llamada.html).toContain('&lt;script&gt;');
   });
+
+  it('renderiza y envía la plantilla boletas_emitidas con un enlace por boleta', async () => {
+    enviarCorreoMock.mockResolvedValueOnce(undefined);
+    const canal = new CanalCorreoSes();
+
+    await canal.enviar({ correo: 'ana@correo.com', nombre: 'Ana' }, 'boletas_emitidas', {
+      nombreEvento: 'Concierto de jazz',
+      urlsBoletas: [
+        'https://agora.letiende.co/boleta/abc.111',
+        'https://agora.letiende.co/boleta/def.222',
+      ],
+    });
+
+    const llamada = enviarCorreoMock.mock.calls[0]?.[0];
+    expect(llamada.destinatario).toBe('ana@correo.com');
+    expect(llamada.asunto).toContain('Concierto de jazz');
+    expect(llamada.html).toContain('https://agora.letiende.co/boleta/abc.111');
+    expect(llamada.html).toContain('https://agora.letiende.co/boleta/def.222');
+  });
+
+  it('escapa el nombre del evento en boletas_emitidas (defensa en profundidad, A03)', async () => {
+    enviarCorreoMock.mockResolvedValueOnce(undefined);
+    const canal = new CanalCorreoSes();
+
+    await canal.enviar({ correo: 'ana@correo.com', nombre: 'Ana' }, 'boletas_emitidas', {
+      nombreEvento: '<script>alert(1)</script>',
+      urlsBoletas: ['https://agora.letiende.co/boleta/abc.111'],
+    });
+
+    const llamada = enviarCorreoMock.mock.calls[0]?.[0];
+    expect(llamada.html).not.toContain('<script>');
+    expect(llamada.html).toContain('&lt;script&gt;');
+  });
 });

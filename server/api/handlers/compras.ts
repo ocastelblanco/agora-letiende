@@ -201,6 +201,7 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const compra = {
     compraId,
     eventoId: eventoEncontrado.eventoId,
+    etapaId: etapa.etapaId,
     cantidad: datos['cantidad'],
     cliente: {
       nombre: clienteDatos['nombre'],
