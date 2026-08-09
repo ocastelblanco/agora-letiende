@@ -381,7 +381,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | GET | `/api/aprobaciones/:token` | Enlace mágico | Datos de la compra + URL prefirmada del comprobante | — |
 | POST | `/api/aprobaciones/:token/aprobar` | Enlace mágico | Aprueba (condicional), confirma aforo y **emite boletas** | — |
 | POST | `/api/aprobaciones/:token/rechazar` | Enlace mágico | Rechaza, libera aforo y notifica al cliente | `{ motivo? }` |
-| POST | `/api/ventas-efectivo` | Portero+ | Venta presencial: reserva, confirma y emite en una operación | `{ slug, cantidad, cliente }` |
+| POST | `/api/ventas-efectivo` | Portero+ | Venta presencial: reserva, confirma y emite en una operación | `{ slug, cantidad, cliente, autorizacionDatos }` |
 | GET | `/api/boletas/:codigo` | Público con firma | Datos de la boleta digital para mostrarla | — |
 | POST | `/api/boletas/:codigo/validar` | Portero+ | **Valida en puerta** (transición condicional a `usada`) | `{ eventoId }` |
 | GET | `/api/eventos` | Administrador | Lista completa de eventos | — |

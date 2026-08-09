@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (09/08/2026):** Validación en puerta (Tarea 2, roadmap #13) se completó, se probó (193 pruebas backend + 163 frontend) y **se validó en vivo en staging por el usuario** ("todo funciona bien"), incluyendo un bug real reportado en el propio PR y corregido en la misma rama (el portero aterrizaba en la cartelera pública tras el primer login en vez de en `/puerta` — `MEMORY.md` §7). PR #20 abierto, a la espera de que el usuario lo apruebe y fusione — mismo criterio ya usado dos veces antes (PR #17, PR #19): recalcular el motor JIT no espera al merge, solo a la validación. Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Validación en puerta lo ocupa **Venta en efectivo** (roadmap #14) — único ítem restante del backlog, ahora desbloqueado; especificación completa escrita, sin implementar todavía.
+**Prioridad de selección aplicada (09/08/2026, continuación):** el PR #20 (Validación en puerta) se fusionó. **Venta en efectivo (Tarea 2, roadmap #14) se implementó de punta a punta** en esta sesión: backend (`handlers/ventas-efectivo.ts`, `lib/validaciones.ts` extraído, `medioPago` agregado a ambos handlers), frontend (`SeleccionVentaEfectivoComponent` + `VentaEfectivoComponent`), infraestructura (`serverless.yml`, `bundle-lambdas.mjs`, rutas) — 216 pruebas backend + 186 frontend en verde, `npm run build`/`build:api`/`bundle:api` sin errores, auditoría de costos limpia. **Todavía sin validar en vivo en staging ni fusionada** — el trabajo está commiteado y empujado a `claude/tarea-1-mobile-feasibility-044k5v`, sin PR abierto (no se pidió en esta sesión). Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar — sigue siendo la única tarea disponible para arrancar en paralelo.
 
 ---
 
@@ -45,7 +45,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 **Riesgo de duplicación a resolver explícitamente al implementar:** `compras.ts` ya tiene, sin exportar, `etapaVigente()` (elige la etapa vigente por `orden`/`cierraEn` — cálculo con consecuencia económica directa, `CLAUDE.md` §5 A08) y `buscarEventoPublicadoPorSlug()`, además de los validadores de `cliente` (`esNombreClienteValido`/`esTelefonoValido`/`esEmailValido`). `ventas-efectivo.ts` necesita exactamente la misma lógica de precio — **exportar y reutilizar desde `compras.ts`, nunca copiar/pegar una segunda versión** de `etapaVigente` en particular: dos copias de "cómo se calcula el precio" es exactamente el tipo de divergencia que A08 existe para prevenir. Los validadores de `cliente`, al tener ahora dos consumidores reales, se extraen a `server/api/lib/validaciones.ts` (archivo ya previsto en el árbol de `tech-specs.md` §3, nunca creado hasta ahora).
 
-**Decisión de diseño a resolver explícitamente al implementar (no al planear), mismo tipo de hueco ya encontrado en Validación en puerta:** `tech-specs.md` §4.2 solo define la ruta `/evento/:slug/efectivo` (ya con el `slug` en la mano), sin decir cómo el equipo llega ahí. Antes de escribir el frontend, decidir: (a) un botón "Venta en efectivo" agregado a la página pública del evento (`DetalleEventoComponent`), visible solo si `servicioAuth.rol()` cumple `portero` — el equipo de todas formas llega a esa página desde la cartelera, y ya conoce el `slug`; o (b) un selector dedicado tipo `SeleccionPuertaComponent`. Antes de decidir, considerar si conviene unificar con el selector de `/puerta` ya existente en vez de crear un tercer patrón — no es obligatorio, pero vale la pena evaluarlo en vez de repetir la pregunta por tercera vez en la próxima tarea de puerta/panel.
+**Decisión de diseño resuelta al implementar:** se descartó tanto (a) un botón en `DetalleEventoComponent` como la generalización de `SeleccionPuertaComponent` (vía `data`/`withComponentInputBinding()`, confirmado disponible) — el riesgo de tocar un componente ya en producción y probado no valía el ahorro de DRY para ~30 líneas de UI. Se creó `SeleccionVentaEfectivoComponent`, mismo patrón de lista de eventos, pero en `features/evento/venta-efectivo/` (no en `features/puerta/`) porque `tech-specs.md` §11 roadmap #14 especifica esa carpeta literalmente. Ver `MEMORY.md` §9 para el detalle completo.
 
 **Ya existe, se reutiliza sin recrear:**
 - `server/api/services/aforo.ts`: `reservarSillas` + `confirmarSillas` — la operación "reserva, confirma y emite en una operación" de `tech-specs.md` no es una primitiva nueva, son las dos escrituras condicionales ya existentes, invocadas en secuencia (cada una ya es atómica por sí sola).
@@ -56,7 +56,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 **Archivos a crear:**
 - `server/api/handlers/ventas-efectivo.ts` (+ `.spec.ts`) — `POST /api/ventas-efectivo` (`exigirRol('portero')`, `{ slug, cantidad, cliente }`).
 - `server/api/lib/validaciones.ts` (+ `.spec.ts`) — validadores de `cliente` extraídos de `compras.ts` (ver riesgo de duplicación arriba).
-- `src/app/features/evento/venta-efectivo/venta-efectivo.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`), formulario de datos del cliente (mismos campos que `ComprarComponent`, sin comprobante ni autorización de datos vía checkbox — el equipo ya identificó al cliente en persona; confirmar con `CLAUDE.md` Habeas Data si de todas formas hace falta capturar la autorización explícita, no asumir que no).
+- `src/app/features/evento/venta-efectivo/venta-efectivo.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`), formulario de datos del cliente (mismos campos que `ComprarComponent`, sin comprobante). **Resuelto al implementar:** sí lleva checkbox de `autorizacionDatos` — `CLAUDE.md` §5 exige autorización explícita "en el flujo de compra" sin excepción para ventas presenciales; el checkbox lo marca el equipo, confirmando que el cliente autorizó en persona, no el cliente mismo.
 - `src/app/core/api/ventas-efectivo.service.ts` (+ `.spec.ts`) — autenticado.
 
 **Archivos a modificar:**
@@ -74,15 +74,16 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 5. `VentaEfectivoComponent`: formulario, sin plazo de comprobante (la confirmación es inmediata).
 
 **Definition of done:**
-- [ ] El precio y la etapa se calculan siempre en el servidor, reutilizando `etapaVigente` de `compras.ts` — nunca una segunda implementación
-- [ ] La reserva, confirmación y emisión de boletas reutilizan `aforo.ts`/`boleteria.ts` sin reimplementar ninguna escritura condicional
-- [ ] `medioPago` se persiste tanto en `ventas-efectivo.ts` como en `compras.ts` (gap de modelo cerrado en los dos lugares, no solo en el nuevo)
-- [ ] Los validadores de `cliente` viven en `lib/validaciones.ts`, consumidos por ambos handlers — no hay una segunda copia
-- [ ] El cliente recibe `boletas_emitidas`, best-effort
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [x] El precio y la etapa se calculan siempre en el servidor, reutilizando `etapaVigente` de `compras.ts` — nunca una segunda implementación
+- [x] La reserva, confirmación y emisión de boletas reutilizan `aforo.ts`/`boleteria.ts` sin reimplementar ninguna escritura condicional
+- [x] `medioPago` se persiste tanto en `ventas-efectivo.ts` como en `compras.ts` (gap de modelo cerrado en los dos lugares, no solo en el nuevo)
+- [x] Los validadores de `cliente` viven en `lib/validaciones.ts`, consumidos por ambos handlers — no hay una segunda copia
+- [x] El cliente recibe `boletas_emitidas`, best-effort
+- [x] `npm run test:api` y `npm run test` en verde (216 backend, 186 frontend)
+- [x] `npm run build` sin errores (incluye `build:api`/`bundle:api`)
+- [x] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama con PR abierto — **sin fusionar** (commiteado y empujado; PR sin abrir todavía, no se pidió en esta sesión)
+- [ ] Validado en vivo en staging por el usuario
 
 ---
 
