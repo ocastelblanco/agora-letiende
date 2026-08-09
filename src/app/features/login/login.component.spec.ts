@@ -17,11 +17,17 @@ vi.mock('firebase/auth', () => ({
   }),
 }));
 
-function configurarPrueba(iniciarSesionConGoogleMock = vi.fn().mockResolvedValue(undefined)) {
+function configurarPrueba(
+  iniciarSesionConGoogleMock = vi.fn().mockResolvedValue(undefined),
+  rol: 'administrador' | 'productor' | 'portero' | null = null,
+) {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
-      { provide: ServicioAuth, useValue: { iniciarSesionConGoogle: iniciarSesionConGoogleMock } },
+      {
+        provide: ServicioAuth,
+        useValue: { iniciarSesionConGoogle: iniciarSesionConGoogleMock, rol: () => rol },
+      },
     ],
   });
 
@@ -32,8 +38,8 @@ function configurarPrueba(iniciarSesionConGoogleMock = vi.fn().mockResolvedValue
 }
 
 describe('LoginComponent', () => {
-  it('el botón de Google dispara iniciarSesionConGoogle y navega a / al tener éxito', async () => {
-    const { fixture, iniciarSesionConGoogleMock } = configurarPrueba();
+  it('el botón de Google dispara iniciarSesionConGoogle y navega a la sección más específica del rol (bug real: antes navegaba siempre a /, MEMORY.md §7)', async () => {
+    const { fixture, iniciarSesionConGoogleMock } = configurarPrueba(undefined, 'portero');
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
@@ -43,7 +49,20 @@ describe('LoginComponent', () => {
     await Promise.resolve();
 
     expect(iniciarSesionConGoogleMock).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith('/');
+    expect(navigateSpy).toHaveBeenCalledWith('/puerta');
+  });
+
+  it('navega a /admin/usuarios para un administrador', async () => {
+    const { fixture } = configurarPrueba(undefined, 'administrador');
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    const boton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    boton.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(navigateSpy).toHaveBeenCalledWith('/admin/usuarios');
   });
 
   it('muestra el mensaje de ErrorInicioSesion sin exponer detalles internos', async () => {
