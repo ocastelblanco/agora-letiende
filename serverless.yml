@@ -339,20 +339,27 @@ functions:
     handler: dist-server-bundle/boletas.handler
     role: !GetAtt BoletasLambdaRole.Arn
     description: >-
-      GET /api/boletas/:codigo — muestra la boleta digital (QR incluido) a
-      partir de un código firmado, sin autenticación (TODO.md Tarea 2). No
-      incluye la validación en puerta (roadmap #13, todavía sin implementar).
+      GET /api/boletas/:codigo (público) — muestra la boleta digital.
+      POST /api/boletas/:codigo/validar (exigirRol portero) — valida el
+      ingreso en puerta con los cuatro veredictos de tech-specs.md §5.5
+      (TODO.md Tarea 2, Validación en puerta).
     environment:
       TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
       BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
       URL_BASE_APP: ${env:URL_BASE_APP, ''}
       SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
+      # Necesaria desde TODO.md Tarea 2 (Validación en puerta): esta función
+      # gana su primera dependencia de firebase-admin (vía exigirRol) — hasta
+      # ahora era 100% pública. Agregada de una vez en este mismo cambio, no
+      # como fix posterior (misma lección repetida varias veces, MEMORY.md §7).
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
     package:
-      # Depende de documentoDynamoDB — mismo motivo de bundle que
-      # eventos-publicos.ts (server/bundle-lambdas.mjs, MEMORY.md §7). Sin
-      # firebase-admin: endpoint público, nunca usa exigirRol.
+      # Depende de documentoDynamoDB y, desde esta tarea, de firebase-admin
+      # (vía exigirRol) — mismo motivo de bundle que aprobaciones.ts
+      # (server/bundle-lambdas.mjs, MEMORY.md §7).
       patterns:
         - '!**'
         - 'dist-server-bundle/boletas.js'
@@ -360,6 +367,9 @@ functions:
       - httpApi:
           path: /api/boletas/{codigo}
           method: get
+      - httpApi:
+          path: /api/boletas/{codigo}/validar
+          method: post
 
   ssr:
     handler: server/ssr/handler.handler
@@ -855,11 +865,13 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         Policies:
-          # Solo lectura: GetItem en las tres tablas que GET /api/boletas/:codigo
-          # consulta (boleta, evento, compra) — endpoint público, sin
-          # exigirRol, sin ninguna escritura. Sin permisos de S3: el
-          # logotipo del evento se construye como URL pública (mismo
-          # criterio que eventos-publicos.ts), nunca se firma ni se lee.
+          # GetItem sobre agora-boletas/eventos/compras: GET /api/boletas/:codigo
+          # (público) lee las tres. UpdateItem sobre agora-boletas:
+          # POST /api/boletas/:codigo/validar (TODO.md Tarea 2, Validación en
+          # puerta) — la única escritura condicional del ingreso en puerta.
+          # Sin permisos de S3: el logotipo del evento se construye como URL
+          # pública (mismo criterio que eventos-publicos.ts), nunca se firma
+          # ni se lee.
           - PolicyName: agora-boletas-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -871,6 +883,21 @@ resources:
                     - !GetAtt AgoraBoletas.Arn
                     - !GetAtt AgoraEventos.Arn
                     - !GetAtt AgoraCompras.Arn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraBoletas.Arn
+          # GetItem sobre agora-usuarios: exigirRol('portero') resuelve el
+          # rol del solicitante en POST /api/boletas/:codigo/validar — mismo
+          # patrón exacto que aprobaciones.ts/eventos.ts, sin Query/Scan.
+          - PolicyName: agora-boletas-usuarios-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
 
     SsrLambdaRole:
       Type: AWS::IAM::Role

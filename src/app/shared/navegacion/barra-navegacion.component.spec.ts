@@ -66,12 +66,14 @@ describe('BarraNavegacionComponent', () => {
     expect(texto).toContain('Cerrar sesión');
   });
 
-  it('portero solo ve Cartelera', () => {
+  it('portero ve Cartelera y Puerta, pero no las secciones de productor/administrador', () => {
     const usuario = { displayName: 'Pedro Portero', email: 'pedro@letiende.co', photoURL: null } as User;
     const { fixture } = configurarPrueba(usuario, 'portero');
     const texto = fixture.nativeElement.textContent as string;
 
     expect(texto).toContain('Cartelera');
+    expect(texto).toContain('Puerta');
+    expect(texto).not.toContain('Aprobaciones');
     expect(texto).not.toContain('Eventos');
     expect(texto).not.toContain('Usuarios');
   });

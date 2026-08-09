@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ErrorInicioSesion, ServicioAuth } from '../../core/auth/servicio-auth';
+import { rutaDestinoParaRol } from '../../shared/navegacion/secciones-navegacion';
 
 /**
  * Pantalla de ingreso con Google (tech-specs.md §4.2, ruta pública
@@ -58,7 +59,13 @@ export class LoginComponent {
 
     try {
       await this.servicioAuth.iniciarSesionConGoogle();
-      await this.router.navigateByUrl('/');
+      // Mismo criterio que guardiaInvitado (rutaDestinoParaRol, única
+      // fuente de esta decisión) — bug real reportado en vivo por el
+      // usuario: antes navegaba siempre a '/', así que un portero (o
+      // cualquier rol) nunca aterrizaba en su sección más específica tras
+      // el primer ingreso, solo al revisitar /login ya autenticado
+      // (MEMORY.md §7).
+      await this.router.navigateByUrl(rutaDestinoParaRol(this.servicioAuth.rol()));
     } catch (error) {
       this.mensajeError.set(
         error instanceof ErrorInicioSesion

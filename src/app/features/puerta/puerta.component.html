@@ -1,0 +1,62 @@
+<div class="relative min-h-screen bg-primary">
+  <video #video class="h-full min-h-screen w-full object-cover" [class.hidden]="!escaneando()"></video>
+
+  @if (cargandoEvento()) {
+    <div class="absolute inset-0 flex items-center justify-center bg-surface">
+      <p class="text-sm text-primary/70">Cargando…</p>
+    </div>
+  } @else if (!evento()) {
+    <div class="absolute inset-0 flex items-center justify-center bg-surface p-6 text-center">
+      <p class="text-sm text-danger">No se encontró el evento.</p>
+    </div>
+  } @else if (resultado(); as r) {
+    <div
+      class="absolute inset-0 flex flex-col items-center justify-center gap-6 p-6 text-center text-white"
+      [class.bg-tertiary]="r.veredicto === 'VALIDA'"
+      [class.bg-danger]="r.veredicto !== 'VALIDA'"
+    >
+      <span class="text-6xl font-bold uppercase tracking-wider">
+        {{ r.veredicto === 'VALIDA' ? 'Válida' : 'No válida' }}
+      </span>
+      @if (r.veredicto === 'VALIDA') {
+        <p class="text-lg">Boleta #{{ r.numeroEnCompra }} — adelante</p>
+      } @else if (r.veredicto === 'YA_USADA') {
+        <p class="text-lg">Esta boleta ya ingresó{{ r.ingresoEn ? ' (' + r.ingresoEn + ')' : '' }}</p>
+      } @else if (r.veredicto === 'OTRO_EVENTO') {
+        <p class="text-lg">Esta boleta es de otra función</p>
+      } @else {
+        <p class="text-lg">Código inválido o inexistente</p>
+      }
+      <button
+        type="button"
+        (click)="escanear(video)"
+        class="h-16 rounded-2xl border border-white/40 px-6 text-lg font-bold tracking-wider uppercase"
+      >
+        Escanear otra
+      </button>
+    </div>
+  } @else if (errorRed()) {
+    <div class="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-danger p-6 text-center text-white">
+      <span class="text-4xl font-bold uppercase tracking-wider">Error de red</span>
+      <p class="text-lg">No se pudo validar la boleta. Intenta de nuevo.</p>
+      <button
+        type="button"
+        (click)="escanear(video)"
+        class="h-16 rounded-2xl border border-white/40 px-6 text-lg font-bold tracking-wider uppercase"
+      >
+        Reintentar
+      </button>
+    </div>
+  } @else if (!escaneando()) {
+    <div class="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-surface p-6 text-center">
+      <h1 class="text-2xl font-bold text-primary">{{ evento()!.nombre }}</h1>
+      <button
+        type="button"
+        (click)="escanear(video)"
+        class="h-16 rounded-2xl bg-primary px-6 text-lg font-bold tracking-wider text-neutral uppercase"
+      >
+        Escanear
+      </button>
+    </div>
+  }
+</div>

@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (09/08/2026, madrugada):** Emisión de boletas con QR firmado (Tarea 2, roadmap #12) se completó, se probó (186 pruebas backend + 149 frontend) y **se validó en vivo en staging por el usuario** (PR #19, "todo funciona perfecto" — sin bugs nuevos encontrados esta vez). El PR está abierto, a la espera de que el usuario lo apruebe y fusione — el usuario pidió dejar el motor JIT y la documentación listos de una vez, antes de fusionar, para no perder una vuelta de planeación (mismo criterio ya usado tras validar Carga de comprobante, PR #17). Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Emisión de boletas lo ocupa **Validación en puerta** (roadmap #13) — único ítem del backlog que dependía de esa tarea y ahora queda desbloqueado.
+**Prioridad de selección aplicada (09/08/2026):** Validación en puerta (Tarea 2, roadmap #13) se completó, se probó (193 pruebas backend + 163 frontend) y **se validó en vivo en staging por el usuario** ("todo funciona bien"), incluyendo un bug real reportado en el propio PR y corregido en la misma rama (el portero aterrizaba en la cartelera pública tras el primer login en vez de en `/puerta` — `MEMORY.md` §7). PR #20 abierto, a la espera de que el usuario lo apruebe y fusione — mismo criterio ya usado dos veces antes (PR #17, PR #19): recalcular el motor JIT no espera al merge, solo a la validación. Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Validación en puerta lo ocupa **Venta en efectivo** (roadmap #14) — único ítem restante del backlog, ahora desbloqueado; especificación completa escrita, sin implementar todavía.
 
 ---
 
@@ -35,44 +35,50 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Validación en puerta
+## Tarea 2 — [FEATURE]: Venta en efectivo
 
-**Origen:** `PRD.md` §5.5 (flujo de validación), CU-12/CU-13/CU-14 (boleta válida / ya usada / de otro evento) · `tech-specs.md` §11 ítem 13 (`features/puerta/`, `handlers/boletas.ts` con `@zxing/browser`), §5.5 ("Validación en puerta": una sola operación condicional, cuatro veredictos explícitos, nunca un error genérico), §5.1 (`POST /api/boletas/:codigo/validar`, `{ eventoId }`), §4.2 (ruta `/evento/:slug/puerta`, `GuardiaAuth` + rol ≥ portero) · `CLAUDE.md` §5 (A04 Regla 3: transición de estado condicional, distinguir "ya usada" con fecha/hora de "inexistente" y de "otro evento"; A09 auditoría) · `CLAUDE.md` §7 (gotcha: `getUserMedia` exige HTTPS y gesto explícito del usuario, mismo hallazgo que Babel documentó para el escaneo de ISBN)
+**Origen:** `PRD.md` §5.4 (flujo completo), CU-11 · `tech-specs.md` §11 ítem 14 (`features/evento/venta-efectivo/`), §5.1 (`POST /api/ventas-efectivo`, Portero+, `{ slug, cantidad, cliente }` — "reserva, confirma y emite en una operación"), §4.2 (ruta `/evento/:slug/efectivo`, `GuardiaAuth` + rol ≥ portero) · `CLAUDE.md` §5 (A08 el precio y la etapa se calculan siempre en el servidor)
 
-**Alcance:** un `portero` (o rol superior) abre la pantalla de la puerta de un evento, escanea el QR de una boleta con la cámara del celular, y el sistema autoriza o rechaza el ingreso con una única escritura condicional — nunca lectura seguida de escritura. La respuesta siempre distingue explícitamente cuál de los cuatro veredictos ocurrió, para que el portero pueda decidir de pie, con una fila esperando (`PRD.md` §5.5): **`VALIDA`** (autoriza y marca `usada`), **`YA_USADA`** (con la fecha/hora del primer ingreso), **`OTRO_EVENTO`** (la boleta es de una función distinta) y **`NO_EXISTE`** (código inválido o inventado). A diferencia de `GET /api/boletas/:codigo` (público, que deliberadamente nunca distingue "firma inválida" de "no existe" para no dar pie a enumerar boletas), acá el llamador ya es personal autenticado escaneando una boleta real — distinguir los casos es un requisito de UX explícito de `tech-specs.md`/`CLAUDE.md`, no una filtración.
+**Alcance:** cualquier integrante del equipo (`portero`, `productor` o `administrador` — `PRD.md` §5.4 dice "cualquier integrante", así que `rolMinimo: 'portero'`) registra una venta presencial desde la app: ingresa los datos del cliente, confirma, y el sistema reserva el aforo, lo confirma y emite las boletas **en la misma operación**, sin pasar por comprobante ni aprobación. Sirve tanto para venta anticipada en la sede como para quien llega a la puerta el día del evento sin haber comprado.
 
-**Decisión de diseño a resolver explícitamente al implementar (no al planear):** `tech-specs.md` §4.2 solo define la ruta `/evento/:slug/puerta` (ya con el `slug` conocido), pero no define cómo un portero **llega** ahí — no hay una pantalla "elegir evento" en la especificación. Antes de escribir el frontend, decidir y documentar como parte de esta tarea: (a) agregar una sección "Puerta" a `secciones-navegacion.ts` que abra un selector simple de eventos (mismo patrón de lista que `ListaAprobacionesComponent`), o (b) asumir que el portero llega por un enlace directo compartido para el evento del día (sin selector, menos código). Mirar `docs/DESIGN.md` antes de decidir si ya hay un patrón de "selector de evento" pensado.
+**Gap de modelo de datos descubierto al especificar esta tarea (no es un bug, es información que faltaba hasta ahora):** `agora-compras` **nunca persiste `medioPago`** — ni `compras.ts` (la compra pública) lo guarda hoy, pese a que `tech-specs.md` §5.1 sí define ese campo en la interfaz `Compra`. Como el objetivo explícito de esta tarea es distinguir una venta en efectivo de una compra normal, el campo por fin hace falta de verdad. Se agrega `medioPago: 'efectivo' | 'transferencia' | 'bold'` a la escritura de **ambos** handlers (`compras.ts` con el medio que el cliente eligió del evento, `ventas-efectivo.ts` con `'efectivo'` fijo) en esta misma tarea — no solo en el nuevo, para no dejar el gap a medias en el handler viejo.
 
-**Payload de `POST /api/boletas/:codigo/validar` (`{ eventoId }`):** el cliente (la pantalla de puerta, que ya sabe para qué evento está abierta) envía el `eventoId` esperado; el backend nunca infiere el evento del propio QR — lo compara contra el `eventoId` real de la boleta encontrada. Respuesta siempre `200` con un campo `veredicto` (nunca un código HTTP de error para un resultado de negocio esperado, mismo criterio que otros endpoints de este proyecto que devuelven distintos `estado` en `200`) — el frontend nunca debe tener que distinguir "petición falló" de "boleta inválida", son cosas distintas.
+**Riesgo de duplicación a resolver explícitamente al implementar:** `compras.ts` ya tiene, sin exportar, `etapaVigente()` (elige la etapa vigente por `orden`/`cierraEn` — cálculo con consecuencia económica directa, `CLAUDE.md` §5 A08) y `buscarEventoPublicadoPorSlug()`, además de los validadores de `cliente` (`esNombreClienteValido`/`esTelefonoValido`/`esEmailValido`). `ventas-efectivo.ts` necesita exactamente la misma lógica de precio — **exportar y reutilizar desde `compras.ts`, nunca copiar/pegar una segunda versión** de `etapaVigente` en particular: dos copias de "cómo se calcula el precio" es exactamente el tipo de divergencia que A08 existe para prevenir. Los validadores de `cliente`, al tener ahora dos consumidores reales, se extraen a `server/api/lib/validaciones.ts` (archivo ya previsto en el árbol de `tech-specs.md` §3, nunca creado hasta ahora).
+
+**Decisión de diseño a resolver explícitamente al implementar (no al planear), mismo tipo de hueco ya encontrado en Validación en puerta:** `tech-specs.md` §4.2 solo define la ruta `/evento/:slug/efectivo` (ya con el `slug` en la mano), sin decir cómo el equipo llega ahí. Antes de escribir el frontend, decidir: (a) un botón "Venta en efectivo" agregado a la página pública del evento (`DetalleEventoComponent`), visible solo si `servicioAuth.rol()` cumple `portero` — el equipo de todas formas llega a esa página desde la cartelera, y ya conoce el `slug`; o (b) un selector dedicado tipo `SeleccionPuertaComponent`. Antes de decidir, considerar si conviene unificar con el selector de `/puerta` ya existente en vez de crear un tercer patrón — no es obligatorio, pero vale la pena evaluarlo en vez de repetir la pregunta por tercera vez en la próxima tarea de puerta/panel.
 
 **Ya existe, se reutiliza sin recrear:**
-- `server/api/handlers/boletas.ts`: ya existe desde Emisión de boletas (roadmap #12) con `GET /api/boletas/:codigo` — esta tarea le **agrega** `POST /api/boletas/:codigo/validar` al mismo archivo (ya definido en el roadmap técnico así), reutilizando `separarCodigo`/`verificarFirmaBoleta` sin recrearlos.
-- `server/api/lib/autorizacion.ts`: `exigirRol('portero')` — mismo patrón que `aprobaciones.ts`/`eventos.ts`.
-- `server/api/lib/firma-boletas.ts`: `verificarFirmaBoleta` — el escaneo de la cámara decodifica la misma URL que ya lleva `{boletaId}.{firma}`, la firma se verifica igual que en el `GET`.
+- `server/api/services/aforo.ts`: `reservarSillas` + `confirmarSillas` — la operación "reserva, confirma y emite en una operación" de `tech-specs.md` no es una primitiva nueva, son las dos escrituras condicionales ya existentes, invocadas en secuencia (cada una ya es atómica por sí sola).
+- `server/api/services/boleteria.ts`: `emitirBoletas` — mismo consumidor que `aprobaciones.ts`, esta tarea es su segundo consumidor real, tal como la especificación de Emisión de boletas ya lo anticipaba.
+- `services/notificaciones.ts`: plantilla `boletas_emitidas` — mismo correo que ya recibe un cliente cuya compra fue aprobada.
+- `server/api/lib/autorizacion.ts`: `exigirRol('portero')`.
 
 **Archivos a crear:**
-- `src/app/features/puerta/puerta.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/evento/:slug/puerta` (`guardiaRol`, mínimo `portero`), cámara vía `@zxing/browser` (dependencia npm nueva). El acceso a la cámara se dispara **solo** desde un manejador de click en un botón "Escanear" — nunca automáticamente al cargar la página (`CLAUDE.md` §7, gotcha ya sufrido en Babel para el escaneo de ISBN, mismo problema exacto de iOS Safari). Pantalla de veredicto grande y a color: `tertiary` para `VALIDA`, `danger` para los otros tres (`docs/DESIGN.md`, paleta ya usada así en el resto del proyecto).
-- `src/app/core/api/validacion-puerta.service.ts` (+ `.spec.ts`) — autenticado (`Authorization`, mismo criterio que `AprobacionesService.cargarPendientes`), `validarBoleta(codigo, eventoId)`.
+- `server/api/handlers/ventas-efectivo.ts` (+ `.spec.ts`) — `POST /api/ventas-efectivo` (`exigirRol('portero')`, `{ slug, cantidad, cliente }`).
+- `server/api/lib/validaciones.ts` (+ `.spec.ts`) — validadores de `cliente` extraídos de `compras.ts` (ver riesgo de duplicación arriba).
+- `src/app/features/evento/venta-efectivo/venta-efectivo.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`), formulario de datos del cliente (mismos campos que `ComprarComponent`, sin comprobante ni autorización de datos vía checkbox — el equipo ya identificó al cliente en persona; confirmar con `CLAUDE.md` Habeas Data si de todas formas hace falta capturar la autorización explícita, no asumir que no).
+- `src/app/core/api/ventas-efectivo.service.ts` (+ `.spec.ts`) — autenticado.
 
 **Archivos a modificar:**
-- `server/api/handlers/boletas.ts`: agregar `POST /api/boletas/:codigo/validar` — `UpdateCommand` condicional (`ConditionExpression: estado = 'valida' AND eventoId = :eventoId`, `SET estado = 'usada', ingresoEn = :ahora, ingresoPor = :correo`). Si la condición falla, **una lectura posterior** (nunca previa) clasifica el motivo exacto — mismo patrón que `clasificarFalloReserva` de `aforo.ts`: si `boleta.eventoId !== eventoId` → `OTRO_EVENTO`; si no → `YA_USADA` (con `ingresoEn`). Si el código no pasa la verificación de firma o el `boletaId` no existe → `NO_EXISTE`.
-- `serverless.yml`: rol IAM de la función `boletas` gana `dynamodb:UpdateItem` sobre `agora-boletas` (hoy solo tiene `GetItem`) y `dynamodb:GetItem` sobre `agora-usuarios` (nuevo — `exigirRol` lo necesita; hasta ahora `boletas` era 100% pública, sin ninguna dependencia de `firebase-admin`) + variable de entorno `FIREBASE_SERVICE_ACCOUNT_AGORA`/`TABLA_USUARIOS` nuevas en la función. El bundle de esbuild (`bundle-lambdas.mjs`) ya incluye `boletas.js` — sin cambios ahí, pero verificar que el bundle siga arrancando con la nueva dependencia de `firebase-admin` (mismo tipo de verificación ya hecha para `aprobaciones.js`).
-- `src/app/app.routes.ts`/`app.routes.server.ts`: `/evento/:slug/puerta` (`RenderMode.Client` — depende de la sesión de Firebase, mismo criterio que `/admin/*`).
-- `shared/navegacion/secciones-navegacion.ts`: solo si se elige la opción (a) del punto de diseño de arriba.
-- `package.json`: `@zxing/browser` nuevo.
+- `server/api/handlers/compras.ts`: exportar `etapaVigente`/`buscarEventoPublicadoPorSlug`; agregar `medioPago` a la escritura (ver gap de modelo arriba); usar los validadores extraídos a `lib/validaciones.ts` en vez de las copias locales.
+- `serverless.yml`: función `ventasEfectivo` nueva con rol IAM propio (`dynamodb:GetItem`/`Query` en `agora-eventos`, `UpdateItem` condicional en `agora-eventos` vía `aforo.ts`, `PutItem` en `agora-compras`, `PutItem` en `agora-boletas` vía `boleteria.ts`, `GetItem` en `agora-usuarios` vía `exigirRol`, `ses:SendEmail` acotado a `letiende.co`).
+- `server/bundle-lambdas.mjs`: agregar `ventas-efectivo.js`.
+- `src/app/app.routes.ts`/`app.routes.server.ts`: `/evento/:slug/efectivo` (`RenderMode.Client`).
 
 **Qué hacer:**
 
-1. Resolver el punto de diseño de "cómo llega el portero a `/evento/:slug/puerta`" (arriba) antes de escribir el componente.
-2. `POST /api/boletas/:codigo/validar` en `handlers/boletas.ts`: escritura condicional única, clasificación de motivo con lectura posterior (nunca previa), los cuatro veredictos.
-3. `PuertaComponent`: cámara disparada solo por gesto del usuario, pantalla de veredicto a color, mensaje explícito para cada uno de los cuatro casos (con la hora del primer ingreso en `YA_USADA`).
-4. **Auditoría** (`CLAUDE.md` §5, A09): `ingresoEn`/`ingresoPor` son append-only — la propia `ConditionExpression` ya lo garantiza (una vez `usada`, ninguna escritura posterior puede pasar la condición `estado = 'valida'`).
+1. Resolver el punto de diseño de "cómo llega el equipo a `/evento/:slug/efectivo`" antes de escribir el componente.
+2. Extraer `lib/validaciones.ts` desde `compras.ts`, y exportar `etapaVigente`/`buscarEventoPublicadoPorSlug` — sin reescribir su lógica, solo moverla/exportarla.
+3. Agregar `medioPago` a `compras.ts` (gap de modelo) antes de escribir `ventas-efectivo.ts`, para que el nuevo handler no sea el único lugar que lo persiste.
+4. `handlers/ventas-efectivo.ts`: valida payload, calcula precio en el servidor (`etapaVigente`, nunca aceptado del cliente), `reservarSillas` → `confirmarSillas` → `emitirBoletas` → notifica `boletas_emitidas`, best-effort.
+5. `VentaEfectivoComponent`: formulario, sin plazo de comprobante (la confirmación es inmediata).
 
 **Definition of done:**
-- [ ] La validación es una única escritura condicional (`estado = 'valida' AND eventoId = :eventoId`) — nunca lectura seguida de escritura
-- [ ] La respuesta distingue explícitamente los cuatro veredictos (`VALIDA`/`YA_USADA` con fecha-hora/`OTRO_EVENTO`/`NO_EXISTE`) — nunca un mensaje genérico
-- [ ] El acceso a la cámara se solicita solo tras un gesto explícito del usuario (tap en "Escanear"), nunca automáticamente al cargar la página
-- [ ] Reutiliza `separarCodigo`/`verificarFirmaBoleta` de la tarea de Emisión de boletas — no los reimplementa
+- [ ] El precio y la etapa se calculan siempre en el servidor, reutilizando `etapaVigente` de `compras.ts` — nunca una segunda implementación
+- [ ] La reserva, confirmación y emisión de boletas reutilizan `aforo.ts`/`boleteria.ts` sin reimplementar ninguna escritura condicional
+- [ ] `medioPago` se persiste tanto en `ventas-efectivo.ts` como en `compras.ts` (gap de modelo cerrado en los dos lugares, no solo en el nuevo)
+- [ ] Los validadores de `cliente` viven en `lib/validaciones.ts`, consumidos por ambos handlers — no hay una segunda copia
+- [ ] El cliente recibe `boletas_emitidas`, best-effort
 - [ ] `npm run test:api` y `npm run test` en verde
 - [ ] `npm run build` sin errores
 - [ ] Auditoría de costos sin coincidencias nuevas
@@ -84,8 +90,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
 
-1. Venta en efectivo (depende de Emisión de boletas)
-2. Panel de control básico
+1. Panel de control básico
 
 ---
 

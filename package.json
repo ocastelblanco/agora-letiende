@@ -34,6 +34,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1104.0",
     "@aws-sdk/util-dynamodb": "^3.996.7",
     "@codegenie/serverless-express": "^5.0.0",
+    "@zxing/browser": "^0.2.1",
     "express": "^5.1.0",
     "firebase": "^12.17.0",
     "firebase-admin": "^14.2.0",
