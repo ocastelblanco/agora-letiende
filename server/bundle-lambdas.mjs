@@ -61,6 +61,13 @@ const entradas = [
   // documentoDynamoDB — mismo motivo de bundle que eventos-publicos.ts, sin
   // firebase-admin (endpoint público, nunca usa exigirRol).
   { entrada: 'dist-server/api/handlers/boletas.js', salida: `${OUT_DIR}/boletas.js` },
+  // ventas-efectivo.ts (TODO.md Tarea 2, Venta en efectivo) depende de
+  // firebase-admin (vía exigirRol), documentoDynamoDB y @aws-sdk/client-ses
+  // — mismo motivo de bundle que aprobaciones.ts. Importa tipos y funciones
+  // de compras.ts (buscarEventoPublicadoPorSlug/etapaVigente), pero eso no
+  // cambia el motivo de empaquetado: esbuild ya resuelve ese import interno
+  // sin problema.
+  { entrada: 'dist-server/api/handlers/ventas-efectivo.js', salida: `${OUT_DIR}/ventas-efectivo.js` },
 ];
 
 for (const { entrada, salida } of entradas) {
