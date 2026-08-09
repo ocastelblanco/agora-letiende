@@ -9,6 +9,13 @@ import { documentoDynamoDB } from '../services/dynamodb';
 import { AforoInsuficienteError, ErrorAforo, EventoNoPublicadoError, reservarSillas } from '../services/aforo';
 import { generarTokenEnlace } from '../lib/enlaces-magicos';
 import { CanalCorreoSes } from '../services/notificaciones';
+import {
+  esEmailValido,
+  esEnteroPositivo,
+  esNombreClienteValido,
+  esTelefonoValido,
+  esTextoValido,
+} from '../lib/validaciones';
 import { respuestaJson } from '../lib/http';
 
 const canalNotificacion = new CanalCorreoSes();
@@ -17,12 +24,18 @@ const canalNotificacion = new CanalCorreoSes();
 // ya documentado en CLAUDE.md (Habeas Data), NO es texto legal revisado por
 // un humano. Debe reemplazarse antes de vender boletas reales (TODO.md
 // Tarea 2). La versión se persiste en cada compra para poder demostrar qué
-// texto exacto aceptó cada cliente si cambia más adelante.
-const VERSION_TERMINOS_ACTUAL = '2026-08-07';
+// texto exacto aceptó cada cliente si cambia más adelante. Exportada porque
+// `ventas-efectivo.ts` (venta presencial, también un flujo de compra) la
+// reutiliza sin duplicar el texto.
+export const VERSION_TERMINOS_ACTUAL = '2026-08-07';
 
-type EstadoCompra = 'esperando_comprobante' | 'en_revision' | 'aprobada' | 'rechazada' | 'expirada';
+export type EstadoCompra = 'esperando_comprobante' | 'en_revision' | 'aprobada' | 'rechazada' | 'expirada';
 
-interface EtapaBoleteria {
+// tech-specs.md §4.3 — única copia del lado del backend, mismo criterio que
+// el `MedioPago` del modelo de frontend (`src/app/core/models/evento.model.ts`).
+export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
+
+export interface EtapaBoleteria {
   etapaId: string;
   nombre: string;
   precio: number;
@@ -30,13 +43,14 @@ interface EtapaBoleteria {
   orden: number;
 }
 
-interface EventoParaCompra {
+export interface EventoParaCompra {
   eventoId: string;
   slug: string;
   nombre: string;
   estado: string;
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
+  mediosPago: MedioPago[];
   plazoComprobanteMinutos: number;
 }
 
@@ -55,39 +69,11 @@ function leerCuerpo(evento: APIGatewayProxyEventV2): unknown {
   }
 }
 
-function esTextoValido(valor: unknown, longitudMaxima: number): valor is string {
-  return typeof valor === 'string' && valor.trim().length > 0 && valor.length <= longitudMaxima;
-}
-
-function esEnteroPositivo(valor: unknown): valor is number {
-  return typeof valor === 'number' && Number.isInteger(valor) && valor > 0;
-}
-
-function esEmailValido(valor: unknown): valor is string {
-  return typeof valor === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
-}
-
-function esTelefonoValido(valor: unknown): valor is string {
-  return typeof valor === 'string' && /^[0-9+()\-\s]{7,20}$/.test(valor);
-}
-
 /**
- * El nombre del cliente es entrada hostil por definición (`CLAUDE.md` §5,
- * A03: texto libre escrito por un desconocido en un formulario público) —
- * más estricto que `esTextoValido`: además de longitud máxima, rechaza
- * caracteres de control.
+ * Reutilizada por `ventas-efectivo.ts` (`TODO.md` Tarea 2) — único punto que
+ * resuelve un evento publicado por slug, nunca se reimplementa.
  */
-function esNombreClienteValido(valor: unknown): valor is string {
-  return (
-    typeof valor === 'string' &&
-    valor.trim().length > 0 &&
-    valor.length <= 200 &&
-    // eslint-disable-next-line no-control-regex
-    !/[\x00-\x1f\x7f]/.test(valor)
-  );
-}
-
-async function buscarEventoPublicadoPorSlug(slug: string): Promise<EventoParaCompra | null> {
+export async function buscarEventoPublicadoPorSlug(slug: string): Promise<EventoParaCompra | null> {
   const resultado = await documentoDynamoDB.send(
     new QueryCommand({
       TableName: process.env['TABLA_EVENTOS'],
@@ -105,8 +91,10 @@ async function buscarEventoPublicadoPorSlug(slug: string): Promise<EventoParaCom
  * La etapa vigente es, entre las etapas ordenadas por `orden`, la primera
  * cuyo `cierraEn` todavía no pasó (`TODO.md` Tarea 2) — el precio nunca se
  * acepta desde el cliente, se calcula siempre acá (`CLAUDE.md` §5, A08).
+ * Exportada: `ventas-efectivo.ts` la reutiliza, nunca reimplementa el
+ * cálculo de precio.
  */
-function etapaVigente(etapas: EtapaBoleteria[], ahora: Date): EtapaBoleteria | null {
+export function etapaVigente(etapas: EtapaBoleteria[], ahora: Date): EtapaBoleteria | null {
   const ordenadas = [...etapas].sort((a, b) => a.orden - b.orden);
   return ordenadas.find((etapa) => new Date(etapa.cierraEn).getTime() > ahora.getTime()) ?? null;
 }
@@ -209,6 +197,15 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
       correo: clienteDatos['correo'],
     },
     montoTotal,
+    // Único medio realmente alcanzable por este flujo hoy: Bold (fase 2,
+    // ADR-003 en MEMORY.md) todavía no existe, y 'efectivo' es exclusivo de
+    // ventas-efectivo.ts (venta presencial, sin comprobante). Fijo en vez de
+    // aceptado del payload — mismo criterio de A08 que el precio: nunca se
+    // confía en lo que el cliente afirme haber pagado. Gap de modelo
+    // cerrado en esta tarea (TODO.md Tarea 2): antes de este cambio,
+    // ninguna compra persistía medioPago pese a que tech-specs.md §4.3 ya
+    // lo define en la interfaz Compra.
+    medioPago: 'transferencia' as MedioPago,
     estado: 'esperando_comprobante' as EstadoCompra,
     tokenComprobanteHash: hash,
     autorizacionDatosAceptadaEn: ahora.toISOString(),
