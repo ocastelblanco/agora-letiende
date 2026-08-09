@@ -1,14 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendMock, verificarFirmaBoletaMock } = vi.hoisted(() => ({
+const { sendMock, verificarFirmaBoletaMock, exigirRolMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),
   verificarFirmaBoletaMock: vi.fn(),
+  exigirRolMock: vi.fn(),
 }));
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 vi.mock('../lib/firma-boletas', () => ({ verificarFirmaBoleta: verificarFirmaBoletaMock }));
+vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
 
 const { handler } = await import('./boletas');
+
+class ConditionalCheckFailedException extends Error {
+  constructor() {
+    super('The conditional request failed');
+    this.name = 'ConditionalCheckFailedException';
+  }
+}
+
+const permisosPortero = {
+  email: 'portero@letiende.co',
+  nombre: 'Portero',
+  rol: 'portero' as const,
+  activo: true,
+};
 
 const boletaValida = {
   boletaId: 'bol-1',
@@ -36,11 +52,14 @@ const compraConCliente = {
 
 function crearPeticion(
   metodo: string,
-  opciones: { codigo?: string } = {},
+  opciones: { codigo?: string; rawPath?: string; cuerpo?: unknown } = {},
 ): Parameters<typeof handler>[0] {
   return {
     requestContext: { http: { method: metodo } },
+    rawPath: opciones.rawPath ?? '',
     pathParameters: opciones.codigo ? { codigo: opciones.codigo } : undefined,
+    body: opciones.cuerpo !== undefined ? JSON.stringify(opciones.cuerpo) : undefined,
+    headers: {},
   } as unknown as Parameters<typeof handler>[0];
 }
 
@@ -52,6 +71,8 @@ async function invocar(metodo: string, opciones?: Parameters<typeof crearPeticio
 beforeEach(() => {
   sendMock.mockReset();
   verificarFirmaBoletaMock.mockReset();
+  exigirRolMock.mockReset();
+  exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosPortero });
   process.env['URL_BASE_APP'] = 'https://agora.letiende.co';
   process.env['BUCKET_ACTIVOS'] = 'agora-activos-test';
 });
@@ -151,5 +172,123 @@ describe('GET /api/boletas/:codigo', () => {
     const respuesta = await invocar('POST', { codigo: 'bol-1.firma' });
 
     expect(respuesta.statusCode).toBe(405);
+  });
+});
+
+describe('POST /api/boletas/:codigo/validar', () => {
+  it('responde con la respuesta de exigirRol si no está autorizado', async () => {
+    exigirRolMock.mockResolvedValueOnce({
+      autorizado: false,
+      respuesta: { statusCode: 403, body: '{"mensaje":"No autorizado en Ágora"}' },
+    });
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma/validar',
+      codigo: 'bol-1.firma',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    expect(respuesta.statusCode).toBe(403);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 400 si falta eventoId en el cuerpo', async () => {
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma/validar',
+      codigo: 'bol-1.firma',
+      cuerpo: {},
+    });
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('responde NO_EXISTE sin tocar DynamoDB si la firma es inválida (rechazo barato)', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(false);
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma-mala/validar',
+      codigo: 'bol-1.firma-mala',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(respuesta.statusCode).toBe(200);
+    expect(cuerpo.veredicto).toBe('NO_EXISTE');
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('VALIDA: autoriza el ingreso con una única escritura condicional', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockResolvedValueOnce({ Attributes: { ...boletaValida, estado: 'usada' } });
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma-buena/validar',
+      codigo: 'bol-1.firma-buena',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.veredicto).toBe('VALIDA');
+    expect(cuerpo.numeroEnCompra).toBe(1);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const comando = sendMock.mock.calls[0]?.[0];
+    expect(comando.input).toMatchObject({
+      Key: { boletaId: 'bol-1' },
+      UpdateExpression: 'SET estado = :usada, ingresoEn = :ahora, ingresoPor = :correo',
+      ConditionExpression: 'estado = :valida AND eventoId = :eventoId',
+    });
+    expect(comando.input.ExpressionAttributeValues[':eventoId']).toBe('evt-1');
+    expect(comando.input.ExpressionAttributeValues[':correo']).toBe('portero@letiende.co');
+  });
+
+  it('YA_USADA: condición falla porque la boleta ya se usó, responde con la hora del primer ingreso', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+    sendMock.mockResolvedValueOnce({
+      Item: { ...boletaValida, estado: 'usada', ingresoEn: '2026-08-09T20:00:00.000Z' },
+    });
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma-buena/validar',
+      codigo: 'bol-1.firma-buena',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(respuesta.statusCode).toBe(200);
+    expect(cuerpo.veredicto).toBe('YA_USADA');
+    expect(cuerpo.ingresoEn).toBe('2026-08-09T20:00:00.000Z');
+  });
+
+  it('OTRO_EVENTO: condición falla porque la boleta es de otro evento', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+    sendMock.mockResolvedValueOnce({ Item: { ...boletaValida, eventoId: 'evt-ajeno' } });
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma-buena/validar',
+      codigo: 'bol-1.firma-buena',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.veredicto).toBe('OTRO_EVENTO');
+  });
+
+  it('NO_EXISTE: condición falla y la boleta no existe en absoluto', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+    sendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-x.firma-buena/validar',
+      codigo: 'bol-x.firma-buena',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.veredicto).toBe('NO_EXISTE');
   });
 });

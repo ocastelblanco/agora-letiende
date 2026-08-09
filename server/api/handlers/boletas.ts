@@ -3,10 +3,11 @@ import type {
   APIGatewayProxyHandlerV2,
   APIGatewayProxyResultV2,
 } from 'aws-lambda';
-import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { verificarFirmaBoleta } from '../lib/firma-boletas';
 import { generarQrPng } from '../services/qr';
+import { exigirRol } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 
 // Placeholder honesto: mismo texto ya usado en el JSON-LD de
@@ -46,6 +47,21 @@ function separarCodigo(codigo: string): { boletaId: string; firma: string } | nu
     return null;
   }
   return { boletaId: codigo.slice(0, indice), firma: codigo.slice(indice + 1) };
+}
+
+function esErrorCondicionFallida(error: unknown): boolean {
+  return error instanceof Error && error.name === 'ConditionalCheckFailedException';
+}
+
+function leerCuerpo(evento: APIGatewayProxyEventV2): unknown {
+  if (!evento.body) {
+    return null;
+  }
+  try {
+    return JSON.parse(evento.body);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -115,15 +131,122 @@ async function obtenerBoletaDigital(codigo: string | undefined): Promise<APIGate
   });
 }
 
-/** `GET /api/boletas/:codigo` — único endpoint de esta tarea (`TODO.md` Tarea 2). */
+/**
+ * Tras un fallo de la condición combinada de `validarBoletaEnPuerta`,
+ * clasifica el motivo con una lectura **posterior** al intento de
+ * escritura — nunca antes, mismo criterio que `clasificarFalloReserva` de
+ * `aforo.ts`. Distingue explícitamente `OTRO_EVENTO` de `YA_USADA` (con la
+ * hora del primer ingreso) — nunca un veredicto genérico, el portero
+ * necesita decidir de pie con una fila esperando (`PRD.md` §5.5).
+ */
+async function clasificarFalloValidacion(
+  boletaId: string,
+  eventoIdEsperado: string,
+): Promise<Record<string, unknown>> {
+  const resultado = await documentoDynamoDB.send(
+    new GetCommand({ TableName: process.env['TABLA_BOLETAS'], Key: { boletaId } }),
+  );
+  const boleta = resultado.Item as BoletaAlmacenada | undefined;
+  if (!boleta) {
+    return { veredicto: 'NO_EXISTE' };
+  }
+  if (boleta.eventoId !== eventoIdEsperado) {
+    return { veredicto: 'OTRO_EVENTO' };
+  }
+  return { veredicto: 'YA_USADA', ingresoEn: boleta.ingresoEn };
+}
+
+/**
+ * `POST /api/boletas/:codigo/validar` (`exigirRol('portero')`, `{ eventoId }`)
+ * — escritura condicional única (`estado = 'valida' AND eventoId = :eventoId`,
+ * `CLAUDE.md` §5 A04 Regla 3): nunca lectura seguida de escritura. Siempre
+ * responde `200` con un `veredicto` — un resultado de negocio esperado
+ * (boleta ya usada, de otro evento) no es un error HTTP, mismo criterio que
+ * otros endpoints de este proyecto que devuelven distintos `estado` en `200`.
+ *
+ * A diferencia de `GET /api/boletas/:codigo` (público, que nunca distingue
+ * "firma inválida" de "no existe" para no dar pie a enumerar boletas), acá
+ * el llamador ya es personal autenticado escaneando una boleta real —
+ * distinguir los cuatro veredictos es un requisito de UX explícito, no una
+ * filtración (`tech-specs.md` §5.5).
+ */
+async function validarBoletaEnPuerta(
+  codigo: string | undefined,
+  evento: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const autorizacion = await exigirRol(evento, 'portero');
+  if (!autorizacion.autorizado) {
+    return autorizacion.respuesta;
+  }
+
+  if (!codigo) {
+    return respuestaJson(400, { mensaje: 'Falta el código de la boleta en la ruta' });
+  }
+  const cuerpo = leerCuerpo(evento);
+  if (cuerpo === undefined) {
+    return respuestaJson(400, { mensaje: 'Cuerpo inválido' });
+  }
+  const datos = (cuerpo ?? {}) as Record<string, unknown>;
+  const eventoIdEsperado = datos['eventoId'];
+  if (typeof eventoIdEsperado !== 'string' || eventoIdEsperado.length === 0) {
+    return respuestaJson(400, { mensaje: 'Falta eventoId' });
+  }
+
+  const separado = separarCodigo(codigo);
+  if (!separado || !verificarFirmaBoleta(separado.boletaId, separado.firma)) {
+    return respuestaJson(200, { veredicto: 'NO_EXISTE' });
+  }
+  const { boletaId } = separado;
+
+  try {
+    const resultado = await documentoDynamoDB.send(
+      new UpdateCommand({
+        TableName: process.env['TABLA_BOLETAS'],
+        Key: { boletaId },
+        UpdateExpression: 'SET estado = :usada, ingresoEn = :ahora, ingresoPor = :correo',
+        ConditionExpression: 'estado = :valida AND eventoId = :eventoId',
+        ExpressionAttributeValues: {
+          ':usada': 'usada',
+          ':valida': 'valida',
+          ':eventoId': eventoIdEsperado,
+          ':ahora': new Date().toISOString(),
+          ':correo': autorizacion.permisos.email,
+        },
+        ReturnValues: 'ALL_NEW',
+      }),
+    );
+    const boletaActualizada = resultado.Attributes as BoletaAlmacenada | undefined;
+    return respuestaJson(200, {
+      veredicto: 'VALIDA',
+      boletaId,
+      numeroEnCompra: boletaActualizada?.numeroEnCompra,
+    });
+  } catch (error) {
+    if (!esErrorCondicionFallida(error)) {
+      throw error;
+    }
+    return respuestaJson(200, await clasificarFalloValidacion(boletaId, eventoIdEsperado));
+  }
+}
+
+/**
+ * `GET /api/boletas/:codigo` (público) y `POST /api/boletas/:codigo/validar`
+ * (`exigirRol('portero')`) — `TODO.md` Tarea 2 (Emisión de boletas) y
+ * Tarea 2 (Validación en puerta).
+ */
 export const handler: APIGatewayProxyHandlerV2 = async (
   evento: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> => {
   const codigo = evento.pathParameters?.['codigo'];
+  const metodo = evento.requestContext.http.method;
+  const rawPath = evento.rawPath ?? '';
 
   try {
-    if (evento.requestContext.http.method === 'GET') {
+    if (metodo === 'GET') {
       return await obtenerBoletaDigital(codigo);
+    }
+    if (metodo === 'POST' && rawPath.endsWith('/validar')) {
+      return await validarBoletaEnPuerta(codigo, evento);
     }
     return respuestaJson(405, { mensaje: 'Método no soportado' });
   } catch {

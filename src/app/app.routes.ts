@@ -42,6 +42,16 @@ export const routes: Routes = [
     title: 'Comprar boletas — Ágora',
   },
   {
+    path: 'evento/:slug/puerta',
+    loadComponent: () =>
+      import('./features/puerta/puerta.component').then((m) => m.PuertaComponent),
+    canActivate: [guardiaRol],
+    // No usa rolMinimoDe: es una ruta dinámica por evento, no una sección
+    // fija de SECCIONES_NAVEGACION (esa es /puerta, el selector).
+    data: { rolMinimo: 'portero' },
+    title: 'Puerta — Ágora',
+  },
+  {
     path: 'comprobante/:token',
     loadComponent: () =>
       import('./features/evento/comprobante/comprobante.component').then(
@@ -81,6 +91,16 @@ export const routes: Routes = [
     canActivate: [guardiaRol],
     data: { rolMinimo: rolMinimoDe('/admin/usuarios') },
     title: 'Usuarios — Ágora',
+  },
+  {
+    path: 'puerta',
+    loadComponent: () =>
+      import('./features/puerta/seleccion-puerta.component').then(
+        (m) => m.SeleccionPuertaComponent,
+      ),
+    canActivate: [guardiaRol],
+    data: { rolMinimo: rolMinimoDe('/puerta') },
+    title: 'Puerta — Ágora',
   },
   {
     path: 'admin/aprobaciones',

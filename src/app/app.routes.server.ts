@@ -63,6 +63,14 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Client,
   },
   {
+    path: 'puerta',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'evento/:slug/puerta',
+    renderMode: RenderMode.Client,
+  },
+  {
     path: '**',
     renderMode: RenderMode.Prerender,
   },
