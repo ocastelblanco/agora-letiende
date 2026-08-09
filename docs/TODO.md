@@ -92,7 +92,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - [x] `npm run test:api` y `npm run test` en verde (186 backend + 149 frontend)
 - [x] `npm run build` sin errores
 - [x] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (pendiente: abrir PR cuando el usuario lo pida)
+- [x] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (PR #19)
 
 ---
 
