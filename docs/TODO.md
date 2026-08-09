@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (08/08/2026, noche):** Carga de comprobante por enlace mágico (Tarea 2, roadmap #10) se completó, se probó (137 pruebas backend + 124 frontend) y se validó en vivo en staging por el usuario (PR #17, incluyó un bug real de despliegue encontrado y corregido en la misma sesión — ver `MEMORY.md` §2, §7 y §9). Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Carga de comprobante lo ocupa **Aprobación del productor** (roadmap #11) — es el único ítem del backlog que dependía de esa tarea y ahora queda desbloqueado.
+**Prioridad de selección aplicada (09/08/2026, madrugada):** Aprobación del productor (Tarea 2, roadmap #11) se completó, se probó (158 pruebas backend + 143 frontend) y se validó en vivo en staging por el usuario (PR #18, incluyó un bug real de permisos IAM encontrado y corregido en la misma rama — ver `MEMORY.md` §2, §7 y §9). Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Aprobación del productor lo ocupa **Emisión de boletas con QR firmado** (roadmap #12) — primer ítem del backlog, único que dependía de esa tarea y ahora queda desbloqueado. El usuario confirmó explícitamente que el correo de "compra aprobada" al cliente se difiere a esta tarea (la boleta emitida ES esa notificación, evita construir un correo intermedio que quedaría obsoleto de inmediato).
 
 ---
 
@@ -35,52 +35,64 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Aprobación del productor
+## Tarea 2 — [FEATURE]: Emisión de boletas con QR firmado
 
-**Origen:** `PRD.md` §5.3 (flujo completo), CU-08/CU-09/CU-10 · `tech-specs.md` §11 ítem 11, §5.1 (`GET /api/aprobaciones`, `GET /api/aprobaciones/:token`, `POST /api/aprobaciones/:token/aprobar`, `POST /api/aprobaciones/:token/rechazar`), §5.6 (`services/notificaciones.ts`, ya existe), §8.2 (enlaces mágicos, ya existe) · `CLAUDE.md` §5 (A01 jerarquía de roles/pertenencia al evento, A04 confirmarSillas/liberarSillas ya existen, A07 enlaces mágicos, A09 auditoría)
+**Origen:** `PRD.md` §5.3 (flujo completo, "el sistema emite una boleta digital por cada boleta comprada"), §5.1 CU (boleta digital incluye QR único, datos del evento, dirección, etapa, datos del cliente, logos) · `tech-specs.md` §11 ítem 12 (`services/boleteria.ts`, `lib/firma-boletas.ts`, tabla `agora-boletas`, `features/boleta/`), §5.5 (mecanismo de emisión y de firma del código), §5.1 (`GET /api/boletas/:codigo`), §5.2 (tabla `agora-boletas`, GSIs `eventoId-estado-index`/`compraId-index`), §5.6 (plantilla `boletas_emitidas`, ya prevista en la lista de v1), §9 (`SECRETO_FIRMA_BOLETAS`, ya documentado, todavía sin crear en GitHub) · `CLAUDE.md` §5 (A02 identificador de boleta UUID v4 + firma HMAC, A08 nunca aceptar precio/etapa del cliente)
 
-**Alcance:** que un productor vea las compras `en_revision` de sus eventos, revise el comprobante y las apruebe o las rechace. **Decisión de alcance explícita, mismo criterio que "boletas gratuitas" en la Tarea de Compra y reserva:** `POST .../aprobar` confirma el aforo (`confirmarSillas`, ya existe) y transiciona la compra a `aprobada`, **pero no emite boletas** — `tech-specs.md` §5.1 describe la aprobación como si "emitiera boletas" en el mismo paso, pero `agora-boletas`/`firma-boletas.ts` (roadmap #12) todavía no existen. Inventar una emisión falsa aquí sería el mismo tipo de implementación a medias que ya se evitó antes; la tarea de emisión (roadmap #12) es la que cierra ese hueco, leyendo las compras `aprobada` sin boleta emitida.
+**Alcance:** cuando `POST /api/aprobaciones/:token/aprobar` confirma una compra, emitir exactamente `cantidad` boletas (una por silla), cada una con un `boletaId` UUID v4 y un código de QR firmado (`{boletaId}.{firma}`, HMAC-SHA256 truncado con `SECRETO_FIRMA_BOLETAS`) que un desconocido no puede adivinar ni falsificar sin la llave. Exponer `GET /api/boletas/:codigo` (público, firma obligatoria) para mostrar la boleta digital, y notificar al cliente por correo con el enlace a cada boleta — esta notificación es, a propósito, la que reemplaza el correo de "compra aprobada" que el usuario preguntó si existía (sesión 08/08/2026 noche): en vez de un correo intermedio que quedaría obsoleto en cuanto existieran boletas reales, se difirió hasta esta tarea a pedido explícito del usuario.
+
+**Decisiones de alcance explícitas (mismo criterio que "boletas gratuitas" y "aprobar no emite boletas" de tareas anteriores — no inventar una implementación a medias):**
+- **No incluye `POST /api/boletas/:codigo/validar`** (validación en la puerta, roadmap #13) — esta tarea solo emite y muestra, no valida el ingreso. `handlers/boletas.ts` nace con un único endpoint (`GET`), el `POST` se agrega en la tarea de Validación en puerta sin recrear el archivo.
+- **No incluye Venta en efectivo** (roadmap #14) — esa tarea futura reutilizará `emitirBoletas()` de `services/boleteria.ts` sin recrearla, igual que esta tarea reutiliza `confirmarSillas`/`liberarSillas` de `aforo.ts`.
+- **El correo no adjunta el PNG del QR** — `services/correo-ses.ts` (`SendEmailCommand`) no soporta adjuntos todavía; el correo trae el enlace a `/boleta/{codigo}`, que sí renderiza el QR (el servidor lo genera en el `GET`, reutilizando `services/qr.ts`, ya existente desde la tarea de QR del evento).
+
+**Gap de modelo de datos descubierto al especificar esta tarea (no es un bug, es información que faltaba hasta ahora):** `agora-compras` no guarda `etapaId` — `handlers/compras.ts` solo persiste `montoTotal`/`cantidad`, suficiente para todo lo implementado hasta hoy, pero `emitirBoletas` sí necesita saber a qué etapa perteneció cada boleta (para mostrarla en la boleta digital). Se agrega `etapaId` a la escritura de `compras.ts` en esta misma tarea. `valorUnitario` **no** se persiste aparte — se deriva en `boleteria.ts` como `compra.montoTotal / compra.cantidad` (división exacta, sin decimales, porque `montoTotal = etapa.precio * cantidad`), evitando un campo redundante.
 
 **Ya existe, se reutiliza sin recrear:**
-- `server/api/services/aforo.ts`: `confirmarSillas`/`liberarSillas` — esta tarea es su primer consumidor real (hasta ahora solo tenían pruebas unitarias directas).
-- `server/api/lib/enlaces-magicos.ts`: `generarTokenEnlace`/`hashearToken` — el token de aprobación es de 24 horas (`tech-specs.md` §8.2, distinto del de comprobante), pero la derivación es la misma.
-- GSI `tokenAprobacionHash-index` en `agora-compras`: ya existe en `serverless.yml` desde la tabla original, todavía sin consumidor.
-- `server/api/services/notificaciones.ts`: agregar las plantillas `compra_rechazada` (cliente) y actualizar `aviso_comprobante` para incluir el enlace real de aprobación (hoy dice explícitamente "todavía no existe una página de aprobación" — con esta tarea, ya existe).
-
-**Modificación clave a `comprobantes.ts` (no es un archivo nuevo de esta tarea, pero la tarea lo toca):** `confirmarComprobante()` ya transiciona la compra a `en_revision` y llama `aviso_comprobante` — debe generar también el token de aprobación (`generarTokenEnlace`, expira a las 24 h) en la misma escritura que graba `en_revision`, guardar su hash (`tokenAprobacionHash`) y pasar el enlace real (`${URL_BASE_APP}/aprobaciones/{token}`) a la plantilla en vez de omitirlo.
+- `server/api/services/qr.ts`: `generarQrPng`/`generarQrSvg` (roadmap #15, QR del evento) — genera el PNG del código de la boleta a partir de la URL firmada, sin cambios.
+- `server/api/lib/enlaces-magicos.ts`: patrón de HMAC con `createHmac('sha256', secreto)` — `lib/firma-boletas.ts` sigue el mismo estilo pero **no** es un enlace mágico de un solo uso (la firma es determinística y reverificable cualquier cantidad de veces, no se persiste ni se consume).
+- `server/api/services/aforo.ts`: `confirmarSillas` (ya consumido por `aprobaciones.ts`) — sin cambios, `emitirBoletas` se llama después, en el mismo flujo de `aprobarCompra`.
+- `services/notificaciones.ts`: agregar la plantilla `boletas_emitidas` (ya prevista en `tech-specs.md` §5.6, todavía sin implementación).
 
 **Archivos a crear:**
-- `server/api/handlers/aprobaciones.ts` (+ `.spec.ts`) — los cuatro endpoints.
-- `src/app/core/api/aprobaciones.service.ts` (+ `.spec.ts`) — dos clientes distintos: uno autenticado (`GET /api/aprobaciones`, con `Authorization`) y uno público por token (los otros tres, sin `Authorization`, mismo criterio que `ComprobantesService`).
-- `src/app/features/aprobaciones/lista-aprobaciones.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/admin/aprobaciones` (`guardiaRol`, mínimo `productor`), lista las compras `en_revision` de los eventos del productor.
-- `src/app/features/aprobaciones/revisar-aprobacion.component.ts` (+ `.html`, `.spec.ts`) — ruta pública `/aprobaciones/:token`, muestra los datos de la compra y el comprobante (imagen/PDF vía la URL prefirmada que devuelve el `GET` por token), botones aprobar/rechazar.
+- `server/api/lib/firma-boletas.ts` (+ `.spec.ts`) — `firmarCodigoBoleta(boletaId)`/`verificarFirmaBoleta(boletaId, firma)`, HMAC-SHA256 truncado (documentar la longitud elegida en el propio código) con `SECRETO_FIRMA_BOLETAS`, comparación en tiempo constante (`crypto.timingSafeEqual`, guardando longitudes distintas antes de comparar para no lanzar `RangeError`).
+- `server/api/services/boleteria.ts` (+ `.spec.ts`) — `emitirBoletas(compra: { compraId, eventoId, etapaId, montoTotal, cantidad })`: crea `cantidad` ítems en `agora-boletas` (`PutCommand` con `ConditionExpression: attribute_not_exists(boletaId)` por cada uno, mismo criterio de UUID v4 astronómicamente improbable que ya usan `compras.ts`/`eventos.ts`), `numeroEnCompra` de 1 a `cantidad`, `estado: 'valida'`, `emitidaEn`. Devuelve el arreglo de boletas creadas (para que `aprobaciones.ts` arme los enlaces del correo sin releer DynamoDB).
+- `server/api/handlers/boletas.ts` (+ `.spec.ts`) — `GET /api/boletas/:codigo` (público): separa `codigo` en `boletaId`+`firma`, **verifica la firma antes de tocar DynamoDB** (rechazo barato) y responde el mismo mensaje genérico tanto si la firma es inválida como si el `boletaId` no existe (nunca distinguir los dos casos — evita un oráculo que permita enumerar boletas reales probando firmas). Con firma válida y boleta existente: `GetItem` de la boleta, del evento (nombre, descripción, fecha, dirección fija "Bogotá, Colombia" — mismo placeholder ya usado en el JSON-LD de `DetalleEventoComponent`, no una dirección real sin verificar; logotipo vía la misma construcción de URL pública que `eventos-publicos.ts`) y de la compra (nombre del cliente); arma el PNG del QR con `generarQrPng` (base64 en la respuesta) y el nombre de la etapa (buscada en `evento.etapas` por `etapaId`).
+- `src/app/core/api/boleta-digital.service.ts` (+ `.spec.ts`) — público, sin `Authorization`, mismo criterio que `ComprobantesService`.
+- `src/app/features/boleta/boleta-digital.component.ts` (+ `.html`, `.spec.ts`) — ruta pública `/boleta/:codigo`: muestra el QR (imagen `data:image/png;base64,...`), nombre/descripción/fecha del evento, dirección, etapa, nombre del cliente, número de boleta dentro de la compra, y el logotipo del evento si existe.
 
 **Archivos a modificar:**
-- `serverless.yml`: función `aprobaciones` nueva con rol IAM propio — `dynamodb:Scan` en `agora-eventos` (filtrar por `productores` conteniendo el correo del token; ya hay precedente de `Scan` para listados de bajo volumen en `eventos.ts`, no se introduce un GSI nuevo para esto todavía) + `dynamodb:Query` en `agora-compras` (por `eventoId-creadaEn-index` y por `tokenAprobacionHash-index`) + `dynamodb:UpdateItem` condicional en `agora-compras` y `agora-eventos` (vía `aforo.ts`) + `dynamodb:GetItem` en `agora-usuarios` (resolver el rol, vía `exigirRol`) + `s3:GetObject` prefirmado sobre `BucketComprobantes` (mostrar el comprobante al productor) + `ses:SendEmail` acotado a `letiende.co`.
-- `server/api/handlers/comprobantes.ts`: generar el token de aprobación al confirmar (ver arriba).
-- `server/api/services/notificaciones.ts`: plantilla `compra_rechazada`.
-- `server/bundle-lambdas.mjs`: agregar `aprobaciones.js`.
-- `src/app/app.routes.ts`/`app.routes.server.ts`: `/admin/aprobaciones` (`RenderMode.Client`, protegida) y `/aprobaciones/:token` (`RenderMode.Client`, pública).
-- `shared/navegacion/secciones-navegacion.ts`: nueva sección "Aprobaciones" para `productor`+.
+- `server/api/handlers/compras.ts`: agregar `etapaId` al ítem persistido (ver gap de modelo arriba).
+- `server/api/handlers/aprobaciones.ts`: `aprobarCompra()` llama `emitirBoletas` después de `confirmarSillas` (mismo bloque `try/catch` best-effort que ya existe para el aforo — un fallo en la emisión no debe revertir una aprobación ya válida, se registra `compraId` para diagnóstico) y notifica `boletas_emitidas` al cliente con los enlaces a `/boleta/{codigo}` de cada boleta emitida, best-effort.
+- `server/api/services/notificaciones.ts`: plantilla `boletas_emitidas`.
+- `serverless.yml`: tabla `AgoraBoletas` nueva (`PAY_PER_REQUEST`, PK `boletaId`, GSI `eventoId-estado-index`, GSI `compraId-index`); función `boletas` nueva con rol IAM propio (`dynamodb:GetItem` en `agora-boletas`/`agora-eventos`/`agora-compras`, sin `firebase-admin` — endpoint público, no necesita bundle por ese motivo pero sí por `documentoDynamoDB`, mismo criterio que `eventos-publicos.ts`); rol de `aprobaciones` gana `dynamodb:PutItem` en `agora-boletas`.
+- `server/bundle-lambdas.mjs`: agregar `boletas.js`.
+- `.github/workflows/deploy.yml`: agregar `SECRETO_FIRMA_BOLETAS` a los dos jobs de deploy **en el mismo cambio que la primera Lambda que lo consume** — la lección de `SES_REMITENTE`/`FIREBASE_SERVICE_ACCOUNT_AGORA` ya se repitió dos veces esta semana (`MEMORY.md` §7), no una tercera.
+- `src/app/app.routes.ts`/`app.routes.server.ts`: `/boleta/:codigo` (`RenderMode.Client`, pública, mismo criterio que `/comprobante/:token`/`/aprobaciones/:token`).
 
 **Qué hacer:**
 
-1. **`GET /api/aprobaciones`** (`exigirRol('productor')`): resuelve los eventos donde el correo del token está en `productores`, y por cada uno hace `Query` sobre `agora-compras` (`eventoId-creadaEn-index`) filtrando `estado = 'en_revision'`. Nunca confía en un `eventoId` que el cliente pase — la pertenencia siempre se verifica contra `evento.productores` (`CLAUDE.md` §5, A01, regla explícita de jerarquía de roles).
-2. **`GET /api/aprobaciones/:token`**: valida el token igual que `comprobantes.ts` (existe / no vencido / `estado === 'en_revision'`), devuelve los datos de la compra (sí incluye `cliente`, a diferencia de `GET /api/compras/:id/estado` — acá es información que el productor necesita para verificar el pago) más una URL prefirmada de `GetObject` sobre `comprobanteKey` para mostrar el archivo.
-3. **`POST /api/aprobaciones/:token/aprobar`**: `UpdateCommand` condicional `estado = 'en_revision' → 'aprobada'` que además graba `resueltoPor`/`resueltoEn`. Si la condición falla, lee el estado actual y responde "esta compra ya fue resuelta por {resueltoPor}" (CU-10 — bloqueo entre productores, nunca un error genérico). Si la condición pasa, llama `confirmarSillas(eventoId, cantidad)`.
-4. **`POST /api/aprobaciones/:token/rechazar`** (`{ motivo? }`): mismo patrón condicional, transiciona a `rechazada`, llama `liberarSillas(eventoId, cantidad)` y notifica al cliente con `compra_rechazada` (incluye `motivo` si se envió), best-effort.
-5. **Auditoría** (`CLAUDE.md` §5, A09): tanto aprobar como rechazar son transiciones con consecuencia económica — `resueltoPor` y `resueltoEn` son append-only, nunca se sobrescriben tras la primera escritura (la propia `ConditionExpression` ya lo garantiza).
+1. **`lib/firma-boletas.ts`**: firma determinística truncada del `boletaId`, verificación en tiempo constante.
+2. **Tabla `agora-boletas`** en `serverless.yml`, sin `ProvisionedThroughput`.
+3. **`compras.ts`**: persistir `etapaId`.
+4. **`services/boleteria.ts`**: `emitirBoletas()`, consumida únicamente por `aprobarCompra()` en esta tarea.
+5. **`aprobaciones.ts`**: integrar la emisión y la notificación al cliente en el camino feliz de aprobar.
+6. **`handlers/boletas.ts`**: `GET /api/boletas/:codigo`, con el rechazo barato de firma inválida antes de cualquier lectura de DynamoDB.
+7. **Frontend**: `BoletaDigitalService` + `BoletaDigitalComponent` en `/boleta/:codigo`, con el QR y los datos de la boleta.
+8. **Auditoría** (`CLAUDE.md` §5, A09): `emitidaEn` es append-only (se escribe una sola vez, en la creación de la boleta); ninguna operación de esta tarea sobrescribe un campo ya escrito.
 
 **Definition of done:**
-- [x] Un productor solo ve/resuelve compras de eventos donde está en `productores` — nunca por rol a secas
-- [x] La aprobación/rechazo es una única escritura condicional sobre `estado = 'en_revision'` — el segundo productor que intenta resolver la misma compra recibe "ya fue resuelta por {nombre}", no un error genérico (CU-10)
-- [x] `aprobar` llama `confirmarSillas`, `rechazar` llama `liberarSillas` — ninguna reimplementa la lógica de `aforo.ts`
-- [x] Explícito en código y en `MEMORY.md`: `aprobar` no emite boletas todavía (roadmap #12)
-- [x] El cliente recibe la notificación de compra rechazada, con el motivo si el productor lo dio
-- [x] `npm run test:api` y `npm run test` en verde (158 backend + 143 frontend)
-- [x] `npm run build` sin errores
-- [x] Auditoría de costos sin coincidencias nuevas
-- [x] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar** (PR #18)
+- [ ] Cada aprobación emite exactamente `cantidad` boletas, cada una con `boletaId` UUID v4 (nunca consecutivo ni derivado de datos del cliente)
+- [ ] El código de la boleta (`{boletaId}.{firma}`) usa HMAC-SHA256 truncado con `SECRETO_FIRMA_BOLETAS`, verificado en tiempo constante
+- [ ] `GET /api/boletas/:codigo` rechaza una firma inválida **antes** de cualquier lectura a DynamoDB, y responde el mismo mensaje genérico para "firma inválida" y para "boleta inexistente" (sin oráculo de enumeración)
+- [ ] `aprobar` reutiliza `confirmarSillas` (ya) y ahora también `emitirBoletas` — ninguna reimplementa `aforo.ts`/`boleteria.ts`
+- [ ] El cliente recibe `boletas_emitidas` con enlace a cada boleta, best-effort, sin revertir la aprobación si la notificación falla
+- [ ] Explícito en código y en `MEMORY.md`: `POST /api/boletas/:codigo/validar` (roadmap #13) y Venta en efectivo (roadmap #14) quedan fuera de esta tarea
+- [ ] `SECRETO_FIRMA_BOLETAS` agregado a `deploy.yml` en el mismo commit que lo empieza a consumir, no como fix posterior
+- [ ] `npm run test:api` y `npm run test` en verde
+- [ ] `npm run build` sin errores
+- [ ] Auditoría de costos sin coincidencias nuevas
+- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
 
 ---
 
@@ -88,10 +100,9 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
 
-1. Emisión de boletas con QR firmado (depende de Aprobación del productor)
-2. Validación en puerta
-3. Venta en efectivo
-4. Panel de control básico
+1. Validación en puerta (depende de Emisión de boletas)
+2. Venta en efectivo (depende de Emisión de boletas)
+3. Panel de control básico
 
 ---
 
@@ -103,7 +114,8 @@ Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 
 - ✅ Remitente `taquilla@letiende.co` en SES probado — llegó a bandeja de entrada en Gmail (sección 5). Queda una verificación opcional de cabeceras SPF/DKIM/DMARC, no bloqueante.
 - ✅ Cuenta de servicio de Firebase creada y cargada (sección 4.3, ADR-002). **No se registra app web propia** — Ágora reutiliza el `firebaseConfig` de Comandante, igual que Babel (ADR-010). El dominio `agora.letiende.co` ya está en Authorized domains; falta el de staging, que se agrega cuando se monte el dominio personalizado (roadmap #11 del backlog).
-- ✅ `SES_REMITENTE`, `URL_BASE_APP` y `SECRETO_ENLACES_MAGICOS` creados en GitHub (`staging`, 08/08/2026) — el correo con el enlace de comprobante llega correctamente, verificado en vivo por el usuario. Falta confirmar que también existan en el entorno `production` antes del primer despliegue real a producción de una tarea que los use. `SECRETO_FIRMA_BOLETAS` sigue pendiente para más adelante (emisión de boletas, roadmap #12, todavía no implementada).
+- ✅ `SES_REMITENTE`, `URL_BASE_APP` y `SECRETO_ENLACES_MAGICOS` creados en GitHub (`staging`, 08/08/2026) — el correo con el enlace de comprobante llega correctamente, verificado en vivo por el usuario. Falta confirmar que también existan en el entorno `production` antes del primer despliegue real a producción de una tarea que los use.
+- 🔴 `SECRETO_FIRMA_BOLETAS` **todavía no existe en GitHub** — bloquea la validación en vivo de la Tarea 2 activa (Emisión de boletas). A diferencia del patrón de `SES_REMITENTE` (que falla de forma audible, SES rechaza el envío), un `SECRETO_FIRMA_BOLETAS` vacío en `serverless.yml` (`${env:..., ''}`) **no rompe nada visiblemente** — las firmas se calculan igual, solo que con una llave vacía y predecible, lo que vuelve las boletas falsificables sin acceso al sistema (`CLAUDE.md` §5, A02). Crearlo en GitHub (`staging` primero) **antes** de la primera prueba real en staging de esta tarea, no después de encontrar el problema.
 
 Fase 2, conviene arrancarlo pronto porque la Verificación de Negocio de Meta es lenta:
 
