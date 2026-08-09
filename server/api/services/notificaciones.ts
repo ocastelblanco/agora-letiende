@@ -8,11 +8,16 @@ export interface Destinatario {
 /**
  * Plantillas de v1 (`tech-specs.md` §5.6). Implementadas hasta ahora:
  * `enlace_comprobante` (Compra y reserva de sillas), `aviso_comprobante`
- * (Carga de comprobante) y `compra_rechazada` (Aprobación del productor) —
- * el resto se agrega en las tareas que las usan (emisión de boletas,
- * liberación de reserva), no como stubs vacíos por adelantado.
+ * (Carga de comprobante), `compra_rechazada` (Aprobación del productor) y
+ * `boletas_emitidas` (Emisión de boletas) — el resto se agrega en las
+ * tareas que las usan (liberación de reserva), no como stubs vacíos por
+ * adelantado.
  */
-export type Plantilla = 'enlace_comprobante' | 'aviso_comprobante' | 'compra_rechazada';
+export type Plantilla =
+  | 'enlace_comprobante'
+  | 'aviso_comprobante'
+  | 'compra_rechazada'
+  | 'boletas_emitidas';
 
 export interface DatosEnlaceComprobante {
   nombreEvento: string;
@@ -32,6 +37,11 @@ export interface DatosCompraRechazada {
   nombreEvento: string;
   cantidad: number;
   motivo?: string;
+}
+
+export interface DatosBoletasEmitidas {
+  nombreEvento: string;
+  urlsBoletas: string[];
 }
 
 /**
@@ -100,6 +110,21 @@ function renderizarCompraRechazada(datos: DatosCompraRechazada): { asunto: strin
   };
 }
 
+function renderizarBoletasEmitidas(datos: DatosBoletasEmitidas): { asunto: string; html: string } {
+  const nombreEvento = escaparHtml(datos.nombreEvento);
+  const enlaces = datos.urlsBoletas
+    .map((url, indice) => `<p>Boleta ${indice + 1}: <a href="${url}">${url}</a></p>`)
+    .join('\n');
+  return {
+    asunto: `Tus boletas — ${nombreEvento}`,
+    html: `
+      <p>¡Tu compra para <strong>${nombreEvento}</strong> fue aprobada! Aquí están tus boletas.</p>
+      ${enlaces}
+      <p>Muestra la boleta correspondiente (con su código QR) en la puerta el día del evento.</p>
+    `.trim(),
+  };
+}
+
 export class CanalCorreoSes implements CanalNotificacion {
   async enviar(destinatario: Destinatario, plantilla: Plantilla, datos: unknown): Promise<void> {
     switch (plantilla) {
@@ -115,6 +140,11 @@ export class CanalCorreoSes implements CanalNotificacion {
       }
       case 'compra_rechazada': {
         const { asunto, html } = renderizarCompraRechazada(datos as DatosCompraRechazada);
+        await enviarCorreo({ destinatario: destinatario.correo, asunto, html });
+        return;
+      }
+      case 'boletas_emitidas': {
+        const { asunto, html } = renderizarBoletasEmitidas(datos as DatosBoletasEmitidas);
         await enviarCorreo({ destinatario: destinatario.correo, asunto, html });
         return;
       }

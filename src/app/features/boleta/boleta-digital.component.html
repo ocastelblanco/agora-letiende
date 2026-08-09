@@ -1,0 +1,41 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-md">
+    @if (cargando()) {
+      <p class="text-sm text-primary/70">Cargando…</p>
+    } @else if (errorCarga(); as error) {
+      <div class="rounded-2xl bg-white p-6 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <p class="text-sm text-danger">{{ error }}</p>
+      </div>
+    } @else if (boleta(); as datos) {
+      <div class="flex flex-col items-center gap-4 rounded-2xl bg-white p-6 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        @if (datos.logotipoUrl) {
+          <img [src]="datos.logotipoUrl" [alt]="datos.nombreEvento" class="h-16 w-auto object-contain" />
+        }
+
+        <h1 class="text-xl font-bold text-primary">{{ datos.nombreEvento }}</h1>
+        <p class="text-sm text-primary/70">{{ datos.descripcionEvento }}</p>
+        <p class="text-sm text-primary">{{ fechaLegible(datos.fechaHora) }} — {{ datos.direccion }}</p>
+
+        @if (datos.etapaNombre) {
+          <p class="text-xs text-primary/60">{{ datos.etapaNombre }}</p>
+        }
+
+        <img
+          [src]="'data:image/png;base64,' + datos.qrPng"
+          alt="Código QR de la boleta"
+          class="h-48 w-48"
+        />
+
+        <p class="text-xs text-primary/60">Boleta {{ datos.numeroEnCompra }}</p>
+
+        @if (datos.nombreCliente) {
+          <p class="text-sm text-primary">{{ datos.nombreCliente }}</p>
+        }
+
+        <p class="text-xs font-semibold uppercase tracking-wider text-secondary">
+          {{ datos.estado === 'valida' ? 'Válida' : datos.estado === 'usada' ? 'Ya usada' : 'Anulada' }}
+        </p>
+      </div>
+    }
+  </div>
+</div>

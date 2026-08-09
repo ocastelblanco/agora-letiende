@@ -60,6 +60,13 @@ export const routes: Routes = [
     title: 'Revisar compra — Ágora',
   },
   {
+    path: 'boleta/:codigo',
+    loadComponent: () =>
+      import('./features/boleta/boleta-digital.component').then((m) => m.BoletaDigitalComponent),
+    // RenderMode.Client, mismo criterio que /comprobante/:token.
+    title: 'Tu boleta — Ágora',
+  },
+  {
     path: 'login',
     loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent),
     canActivate: [guardiaInvitado],

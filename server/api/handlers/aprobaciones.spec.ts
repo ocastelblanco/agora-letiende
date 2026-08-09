@@ -8,6 +8,7 @@ const {
   exigirRolMock,
   confirmarSillasMock,
   liberarSillasMock,
+  emitirBoletasMock,
   enviarMock,
 } = vi.hoisted(() => ({
   sendMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   exigirRolMock: vi.fn(),
   confirmarSillasMock: vi.fn(),
   liberarSillasMock: vi.fn(),
+  emitirBoletasMock: vi.fn(),
   enviarMock: vi.fn(),
 }));
 
@@ -34,6 +36,7 @@ vi.mock('../services/aforo', async () => {
   const real = await vi.importActual<typeof import('../services/aforo')>('../services/aforo');
   return { ...real, confirmarSillas: confirmarSillasMock, liberarSillas: liberarSillasMock };
 });
+vi.mock('../services/boleteria', () => ({ emitirBoletas: emitirBoletasMock }));
 
 const { handler } = await import('./aprobaciones');
 const { ErrorAforo } = await import('../services/aforo');
@@ -50,6 +53,7 @@ const AHORA_EPOCH = Math.floor(new Date('2026-08-09T00:00:00.000Z').getTime() / 
 const compraEnRevision = {
   compraId: 'compra-1',
   eventoId: 'evt-1',
+  etapaId: 'et-1',
   cantidad: 2,
   cliente: { nombre: 'Ana Pérez', telefono: '3001234567', correo: 'ana@correo.com' },
   montoTotal: 90000,
@@ -57,6 +61,11 @@ const compraEnRevision = {
   comprobanteKey: 'compras/compra-1/comprobante-x.png',
   tokenAprobacionExpiraEn: AHORA_EPOCH + 3600,
 };
+
+const boletasEmitidas = [
+  { boletaId: 'bol-1', eventoId: 'evt-1', compraId: 'compra-1', numeroEnCompra: 1, etapaId: 'et-1', valorUnitario: 45000, estado: 'valida' as const, emitidaEn: '2026-08-09T00:00:00.000Z' },
+  { boletaId: 'bol-2', eventoId: 'evt-1', compraId: 'compra-1', numeroEnCompra: 2, etapaId: 'et-1', valorUnitario: 45000, estado: 'valida' as const, emitidaEn: '2026-08-09T00:00:00.000Z' },
+];
 
 const permisosProductor = {
   email: 'productor@letiende.co',
@@ -93,9 +102,11 @@ beforeEach(() => {
   exigirRolMock.mockReset();
   confirmarSillasMock.mockReset();
   liberarSillasMock.mockReset();
+  emitirBoletasMock.mockReset();
   enviarMock.mockReset();
   hashearTokenMock.mockReturnValue('hash-derivado');
   getSignedUrlMock.mockResolvedValue('https://s3.amazonaws.com/presignada');
+  emitirBoletasMock.mockResolvedValue(boletasEmitidas);
   enviarMock.mockResolvedValue(undefined);
 });
 
@@ -223,6 +234,7 @@ describe('POST /api/aprobaciones/:token/aprobar', () => {
     sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
     sendMock.mockResolvedValueOnce({});
     confirmarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
 
     const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
 
@@ -235,6 +247,31 @@ describe('POST /api/aprobaciones/:token/aprobar', () => {
     });
   });
 
+  it('emite las boletas con emitirBoletas (sin reimplementar boleteria.ts) y notifica al cliente con un enlace por boleta', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    confirmarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(emitirBoletasMock).toHaveBeenCalledWith({
+      compraId: 'compra-1',
+      eventoId: 'evt-1',
+      etapaId: 'et-1',
+      montoTotal: 90000,
+      cantidad: 2,
+    });
+    expect(enviarMock).toHaveBeenCalledTimes(1);
+    const [destinatario, plantilla, datos] = enviarMock.mock.calls[0] ?? [];
+    expect(destinatario).toEqual({ correo: 'ana@correo.com', nombre: 'Ana Pérez' });
+    expect(plantilla).toBe('boletas_emitidas');
+    expect(datos.nombreEvento).toBe('Concierto de jazz');
+    expect(datos.urlsBoletas).toHaveLength(2);
+    expect(datos.urlsBoletas[0]).toContain('/boleta/bol-1.');
+    expect(datos.urlsBoletas[1]).toContain('/boleta/bol-2.');
+  });
+
   it('responde 409 si otro productor ya la resolvió (condición fallida)', async () => {
     sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
     sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
@@ -243,12 +280,38 @@ describe('POST /api/aprobaciones/:token/aprobar', () => {
 
     expect(respuesta.statusCode).toBe(409);
     expect(confirmarSillasMock).not.toHaveBeenCalled();
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
   });
 
   it('responde 200 igual si confirmarSillas lanza ErrorAforo (no debería pasar, pero no revierte la aprobación)', async () => {
     sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
     sendMock.mockResolvedValueOnce({});
     confirmarSillasMock.mockRejectedValueOnce(new ErrorAforo('inesperado'));
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+  });
+
+  it('responde 200 aunque emitirBoletas falle (best-effort, la aprobación ya es válida)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    confirmarSillasMock.mockResolvedValueOnce(undefined);
+    emitirBoletasMock.mockRejectedValueOnce(new Error('DynamoDB no disponible'));
+
+    const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(enviarMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 200 aunque la notificación de boletas emitidas falle (best-effort)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    confirmarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+    enviarMock.mockRejectedValueOnce(new Error('SES no disponible'));
 
     const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
 
@@ -262,6 +325,7 @@ describe('POST /api/aprobaciones/:token/aprobar', () => {
 
     expect(respuesta.statusCode).toBe(410);
     expect(confirmarSillasMock).not.toHaveBeenCalled();
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
   });
 });
 

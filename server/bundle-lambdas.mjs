@@ -57,6 +57,10 @@ const entradas = [
   // aprobaciones.ts (TODO.md Tarea 2) depende de firebase-admin (vía
   // exigirRol), documentoDynamoDB y @aws-sdk/client-ses.
   { entrada: 'dist-server/api/handlers/aprobaciones.js', salida: `${OUT_DIR}/aprobaciones.js` },
+  // boletas.ts (TODO.md Tarea 2, Emisión de boletas) depende de
+  // documentoDynamoDB — mismo motivo de bundle que eventos-publicos.ts, sin
+  // firebase-admin (endpoint público, nunca usa exigirRol).
+  { entrada: 'dist-server/api/handlers/boletas.js', salida: `${OUT_DIR}/boletas.js` },
 ];
 
 for (const { entrada, salida } of entradas) {

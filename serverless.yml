@@ -304,8 +304,15 @@ functions:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
       TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
       BUCKET_COMPROBANTES: ${self:custom.nombresBuckets.comprobantes}
       SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      # Necesarias desde TODO.md Tarea 2 (Emisión de boletas): aprobarCompra()
+      # ahora arma la URL firmada de cada boleta emitida para el correo al
+      # cliente. Agregadas de una vez en este mismo cambio, no como fix
+      # posterior — mismo gotcha ya sufrido dos veces (MEMORY.md §7).
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
+      SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
       SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
     package:
@@ -327,6 +334,32 @@ functions:
       - httpApi:
           path: /api/aprobaciones/{token}/rechazar
           method: post
+
+  boletas:
+    handler: dist-server-bundle/boletas.handler
+    role: !GetAtt BoletasLambdaRole.Arn
+    description: >-
+      GET /api/boletas/:codigo — muestra la boleta digital (QR incluido) a
+      partir de un código firmado, sin autenticación (TODO.md Tarea 2). No
+      incluye la validación en puerta (roadmap #13, todavía sin implementar).
+    environment:
+      TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
+      SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
+    package:
+      # Depende de documentoDynamoDB — mismo motivo de bundle que
+      # eventos-publicos.ts (server/bundle-lambdas.mjs, MEMORY.md §7). Sin
+      # firebase-admin: endpoint público, nunca usa exigirRol.
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/boletas.js'
+    events:
+      - httpApi:
+          path: /api/boletas/{codigo}
+          method: get
 
   ssr:
     handler: server/ssr/handler.handler
@@ -783,9 +816,21 @@ resources:
                   Action:
                     - s3:GetObject
                   Resource: !Sub '${BucketComprobantes.Arn}/compras/*'
+          # PutItem sobre agora-boletas: emitirBoletas() de boleteria.ts, que
+          # aprobarCompra() invoca tras confirmar el aforo (TODO.md Tarea 2,
+          # Emisión de boletas). Sin ConditionExpression attribute_not_exists
+          # que requiera otra acción — solo escribe boletas nuevas.
+          - PolicyName: agora-aprobaciones-boletas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                  Resource: !GetAtt AgoraBoletas.Arn
           # ses:SendEmail (no ses:*), acotado a la identidad verificada de
-          # letiende.co — la notificación de compra rechazada es el único
-          # correo que esta función envía.
+          # letiende.co — la notificación de compra rechazada y la de
+          # boletas emitidas son los únicos correos que esta función envía.
           - PolicyName: agora-aprobaciones-ses-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -795,6 +840,37 @@ resources:
                     - ses:SendEmail
                     - ses:SendRawEmail
                   Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+
+    BoletasLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-boletas-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Solo lectura: GetItem en las tres tablas que GET /api/boletas/:codigo
+          # consulta (boleta, evento, compra) — endpoint público, sin
+          # exigirRol, sin ninguna escritura. Sin permisos de S3: el
+          # logotipo del evento se construye como URL pública (mismo
+          # criterio que eventos-publicos.ts), nunca se firma ni se lee.
+          - PolicyName: agora-boletas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource:
+                    - !GetAtt AgoraBoletas.Arn
+                    - !GetAtt AgoraEventos.Arn
+                    - !GetAtt AgoraCompras.Arn
 
     SsrLambdaRole:
       Type: AWS::IAM::Role

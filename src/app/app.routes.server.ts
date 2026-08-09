@@ -35,6 +35,11 @@ export const serverRoutes: ServerRoute[] = [
     path: 'aprobaciones/:token',
     renderMode: RenderMode.Client,
   },
+  // Mismo motivo que /comprobante/:token (TODO.md Tarea 2, roadmap #12).
+  {
+    path: 'boleta/:codigo',
+    renderMode: RenderMode.Client,
+  },
   // La sesión de Firebase vive solo en el navegador (IndexedDB del SDK
   // cliente, sin cookie de sesión) — cualquier ruta protegida por
   // GuardiaAuth/GuardiaRol debe ser RenderMode.Client, nunca Server ni
