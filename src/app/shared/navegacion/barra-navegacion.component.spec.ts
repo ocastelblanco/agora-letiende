@@ -72,6 +72,7 @@ describe('BarraNavegacionComponent', () => {
     const texto = fixture.nativeElement.textContent as string;
 
     expect(texto).toContain('Cartelera');
+    expect(texto).toContain('Efectivo');
     expect(texto).toContain('Puerta');
     expect(texto).not.toContain('Aprobaciones');
     expect(texto).not.toContain('Eventos');

@@ -52,6 +52,19 @@ export const routes: Routes = [
     title: 'Puerta — Ágora',
   },
   {
+    path: 'evento/:slug/efectivo',
+    loadComponent: () =>
+      import('./features/evento/venta-efectivo/venta-efectivo.component').then(
+        (m) => m.VentaEfectivoComponent,
+      ),
+    canActivate: [guardiaRol],
+    // Mismo criterio que /evento/:slug/puerta: ruta dinámica por evento, no
+    // una sección fija de SECCIONES_NAVEGACION (esa es /efectivo, el
+    // selector, TODO.md Tarea 2).
+    data: { rolMinimo: 'portero' },
+    title: 'Venta en efectivo — Ágora',
+  },
+  {
     path: 'comprobante/:token',
     loadComponent: () =>
       import('./features/evento/comprobante/comprobante.component').then(
@@ -101,6 +114,16 @@ export const routes: Routes = [
     canActivate: [guardiaRol],
     data: { rolMinimo: rolMinimoDe('/puerta') },
     title: 'Puerta — Ágora',
+  },
+  {
+    path: 'efectivo',
+    loadComponent: () =>
+      import('./features/evento/venta-efectivo/seleccion-venta-efectivo.component').then(
+        (m) => m.SeleccionVentaEfectivoComponent,
+      ),
+    canActivate: [guardiaRol],
+    data: { rolMinimo: rolMinimoDe('/efectivo') },
+    title: 'Venta en efectivo — Ágora',
   },
   {
     path: 'admin/aprobaciones',

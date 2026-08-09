@@ -1,0 +1,121 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-2xl">
+    @if (cargando()) {
+      <p class="rounded-2xl bg-white p-4 text-sm text-primary/70 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        Cargando evento…
+      </p>
+    } @else if (noEncontrado()) {
+      <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <h1 class="mb-2 text-xl font-bold text-primary">Evento no encontrado</h1>
+        <p class="text-sm text-primary/70">Este evento no existe o ya no está disponible.</p>
+      </div>
+    } @else if (evento(); as detalleEvento) {
+      <h1 class="mb-1 text-2xl font-bold text-primary">Venta en efectivo</h1>
+      <p class="mb-6 text-sm text-primary/70">{{ detalleEvento.nombre }}</p>
+
+      @if (ventaRegistrada(); as venta) {
+        <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <h2 class="mb-2 text-lg font-semibold text-primary">Venta registrada</h2>
+          <p class="mb-4 text-sm text-primary">
+            Se emitieron {{ venta.boletas }} boleta(s). El cliente las recibirá por correo.
+          </p>
+          <dl class="flex flex-col gap-1 text-sm text-primary/80">
+            <div class="flex justify-between">
+              <dt>Cantidad de boletas</dt>
+              <dd>{{ venta.cantidad }}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt>Total</dt>
+              <dd class="font-semibold">{{ venta.montoTotal | precio }}</dd>
+            </div>
+          </dl>
+        </div>
+      } @else if (!puedeVender()) {
+        <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="text-sm text-primary/70">
+            Este evento no admite ventas en efectivo en este momento (sin aforo disponible, no publicado,
+            o el medio de pago no está habilitado).
+          </p>
+        </div>
+      } @else {
+        <form
+          [formGroup]="formulario"
+          (ngSubmit)="registrarVenta()"
+          class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
+        >
+          <div>
+            <label for="cantidad" class="mb-1 block text-sm font-semibold text-primary">
+              Cantidad de boletas
+            </label>
+            <input
+              id="cantidad"
+              type="number"
+              formControlName="cantidad"
+              [max]="detalleEvento.maxBoletasPorCompra"
+              min="1"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+            <p class="mt-1 text-xs text-primary/60">
+              Máximo {{ detalleEvento.maxBoletasPorCompra }} por venta.
+            </p>
+          </div>
+
+          <div>
+            <label for="nombre" class="mb-1 block text-sm font-semibold text-primary">Nombre completo</label>
+            <input
+              id="nombre"
+              type="text"
+              formControlName="nombre"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+          </div>
+
+          <div>
+            <label for="telefono" class="mb-1 block text-sm font-semibold text-primary">Teléfono</label>
+            <input
+              id="telefono"
+              type="tel"
+              formControlName="telefono"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+          </div>
+
+          <div>
+            <label for="correo" class="mb-1 block text-sm font-semibold text-primary">Correo</label>
+            <input
+              id="correo"
+              type="email"
+              formControlName="correo"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+            @if (formulario.controls.correo.invalid && formulario.controls.correo.touched) {
+              <p class="mt-1 text-xs text-danger">Ingresa un correo válido — ahí le llegarán las boletas.</p>
+            }
+          </div>
+
+          <div class="flex items-center justify-between rounded-xl border border-primary/10 px-3 py-2">
+            <span class="text-sm font-semibold text-primary">Total a cobrar en efectivo</span>
+            <span class="text-lg font-bold text-primary">{{ totalEstimado() | precio }}</span>
+          </div>
+
+          <label class="flex items-start gap-2 text-xs text-primary/80">
+            <input type="checkbox" formControlName="autorizacionDatos" class="mt-0.5" />
+            <span>
+              Confirmo que el cliente aceptó los términos y condiciones y autorizó el tratamiento de sus
+              datos personales (nombre, teléfono y correo) para emitir y validar su boleta de este evento,
+              según la Ley 1581 de 2012.
+            </span>
+          </label>
+
+          <button
+            type="submit"
+            [disabled]="enviando()"
+            class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {{ enviando() ? 'Registrando…' : 'Registrar venta' }}
+          </button>
+        </form>
+      }
+    }
+  </div>
+</div>
