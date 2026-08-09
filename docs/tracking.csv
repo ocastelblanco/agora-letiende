@@ -73,3 +73,4 @@ Cloud infraestructure,09/08/2026 19:05,09/08/2026 19:20,0:15:00,AI,Sonnet 5,serv
 Frontend,09/08/2026 19:20,09/08/2026 20:05,0:45:00,AI,Sonnet 5,Servicio y componentes de seleccion y formulario de venta en efectivo nueva seccion Efectivo en navegacion antes de Puerta a proposito y rutas nuevas,Claude Code,cli,high
 Backend,09/08/2026 20:05,09/08/2026 20:30,0:25:00,AI,Sonnet 5,Verificacion completa de pruebas backend y frontend build de api y de produccion con parche temporal y reversion en node_modules por version de node del contenedor,Claude Code,cli,medium
 Specs definition,09/08/2026 20:30,09/08/2026 20:50,0:20:00,AI,Sonnet 5,Actualizacion de tech-specs MEMORY y TODO con Venta en efectivo implementada commiteada y empujada sin PR ni validacion en staging todavia,Claude Code,cli,low
+Backend,09/08/2026 20:50,09/08/2026 20:55,0:05:00,AI,Sonnet 5,Apertura del PR 21 venta en efectivo contra main,Claude Code,cli,low
