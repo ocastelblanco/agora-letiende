@@ -112,6 +112,10 @@ describe('POST /api/compras', () => {
       etapaId: 'et-1',
       cantidad: 2,
       montoTotal: 90000,
+      // Único medio realmente alcanzable por este flujo hoy (Bold es fase
+      // 2, 'efectivo' es exclusivo de ventas-efectivo.ts) — gap de modelo
+      // cerrado en esta tarea: antes ninguna compra persistía medioPago.
+      medioPago: 'transferencia',
       estado: 'esperando_comprobante',
       tokenComprobanteHash: 'hash-derivado',
     });

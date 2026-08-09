@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (09/08/2026):** Validación en puerta (Tarea 2, roadmap #13) se completó, se probó (193 pruebas backend + 163 frontend) y **se validó en vivo en staging por el usuario** ("todo funciona bien"), incluyendo un bug real reportado en el propio PR y corregido en la misma rama (el portero aterrizaba en la cartelera pública tras el primer login en vez de en `/puerta` — `MEMORY.md` §7). PR #20 abierto, a la espera de que el usuario lo apruebe y fusione — mismo criterio ya usado dos veces antes (PR #17, PR #19): recalcular el motor JIT no espera al merge, solo a la validación. Dominio personalizado (Tarea 1, roadmap #17 del roadmap técnico) sigue activa sin cambios, todavía sin empezar. El slot que deja libre Validación en puerta lo ocupa **Venta en efectivo** (roadmap #14) — único ítem restante del backlog, ahora desbloqueado; especificación completa escrita, sin implementar todavía.
+**Prioridad de selección aplicada (09/08/2026, continuación):** el usuario aprobó el **PR #21** (Venta en efectivo) como comentario en el propio PR ("Aprobado. Actualizar motor JIT y documentación como último commit antes de fusión"), mismo criterio ya usado varias veces: recalcular el motor JIT no espera al merge, solo a la validación/aprobación. Venta en efectivo (roadmap #14) pasa a completada (`MEMORY.md` §2). El slot libre lo ocupa **Panel de control básico** (roadmap #16, único ítem restante del backlog v1, ahora desbloqueado porque depende de Validación en puerta #13, ya fusionada) — especificación completa escrita, sin implementar todavía. Dominio personalizado (Tarea 1, roadmap #17) sigue activa sin cambios, todavía sin empezar.
 
 ---
 
@@ -35,62 +35,60 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Venta en efectivo
+## Tarea 2 — [FEATURE]: Panel de control básico
 
-**Origen:** `PRD.md` §5.4 (flujo completo), CU-11 · `tech-specs.md` §11 ítem 14 (`features/evento/venta-efectivo/`), §5.1 (`POST /api/ventas-efectivo`, Portero+, `{ slug, cantidad, cliente }` — "reserva, confirma y emite en una operación"), §4.2 (ruta `/evento/:slug/efectivo`, `GuardiaAuth` + rol ≥ portero) · `CLAUDE.md` §5 (A08 el precio y la etapa se calculan siempre en el servidor)
+**Origen:** `PRD.md` §5.6 (alcance completo, marcado "v1 básico, v2 completo"), CU-15/CU-16 · `tech-specs.md` §11 ítem 16 (`features/panel/`, `handlers/reportes.ts`, depende de #13 Validación en puerta, ya fusionada), §5.1 (`GET /api/eventos/:eventoId/panel`, Productor del evento), §4.2 (ruta `/evento/:slug/panel`, `GuardiaAuth` + rol ≥ productor **+ asignado al evento**) · `CLAUDE.md` §5 (A01: un productor solo ve el panel de los eventos donde está en `productores`, verificado contra ese campo, nunca contra el rol a secas)
 
-**Alcance:** cualquier integrante del equipo (`portero`, `productor` o `administrador` — `PRD.md` §5.4 dice "cualquier integrante", así que `rolMinimo: 'portero'`) registra una venta presencial desde la app: ingresa los datos del cliente, confirma, y el sistema reserva el aforo, lo confirma y emite las boletas **en la misma operación**, sin pasar por comprobante ni aprobación. Sirve tanto para venta anticipada en la sede como para quien llega a la puerta el día del evento sin haber comprado.
+**Alcance:** el productor de un evento (o cualquier administrador) consulta, para ese evento: boletas vendidas y valor recaudado por etapa de boletería, sillas disponibles/vendidas, la lista de clientes que compraron, y — el dato con más urgencia el día del evento — cuántos asistentes ya ingresaron y cuántos faltan. Es una pantalla de **solo lectura**, sin ninguna acción que mute estado.
 
-**Gap de modelo de datos descubierto al especificar esta tarea (no es un bug, es información que faltaba hasta ahora):** `agora-compras` **nunca persiste `medioPago`** — ni `compras.ts` (la compra pública) lo guarda hoy, pese a que `tech-specs.md` §5.1 sí define ese campo en la interfaz `Compra`. Como el objetivo explícito de esta tarea es distinguir una venta en efectivo de una compra normal, el campo por fin hace falta de verdad. Se agrega `medioPago: 'efectivo' | 'transferencia' | 'bold'` a la escritura de **ambos** handlers (`compras.ts` con el medio que el cliente eligió del evento, `ventas-efectivo.ts` con `'efectivo'` fijo) en esta misma tarea — no solo en el nuevo, para no dejar el gap a medias en el handler viejo.
+**Decisión de alcance resuelta al especificar, no una ambigüedad a resolver después:** `PRD.md` §5.6 titula la sección "v1 básico, v2 completo" y en el mismo párrafo menciona "descargar la lista completa de boletas" — pero la tabla de roadmap de `PRD.md` §6 pone **"Exportación de reportes en XLSX y PDF" explícitamente en v2** (Media prioridad), y `tech-specs.md` §11 roadmap #21 ("v2 — Exportación XLSX/PDF") depende de #16 y amplía `handlers/reportes.ts`. Las dos fuentes coinciden en que el archivo descargable es v2: esta tarea implementa **solo** `GET /api/eventos/:eventoId/panel` (métricas en pantalla), **no** `GET /api/eventos/:eventoId/reportes?formato=xlsx|pdf` (que sí aparece, de forma inconsistente con el roadmap, en la tabla de endpoints de `tech-specs.md` §5.1 — corregir esa fila al implementar, mismo criterio ya usado con el payload de `ventas-efectivo` en la tarea anterior).
 
-**Riesgo de duplicación a resolver explícitamente al implementar:** `compras.ts` ya tiene, sin exportar, `etapaVigente()` (elige la etapa vigente por `orden`/`cierraEn` — cálculo con consecuencia económica directa, `CLAUDE.md` §5 A08) y `buscarEventoPublicadoPorSlug()`, además de los validadores de `cliente` (`esNombreClienteValido`/`esTelefonoValido`/`esEmailValido`). `ventas-efectivo.ts` necesita exactamente la misma lógica de precio — **exportar y reutilizar desde `compras.ts`, nunca copiar/pegar una segunda versión** de `etapaVigente` en particular: dos copias de "cómo se calcula el precio" es exactamente el tipo de divergencia que A08 existe para prevenir. Los validadores de `cliente`, al tener ahora dos consumidores reales, se extraen a `server/api/lib/validaciones.ts` (archivo ya previsto en el árbol de `tech-specs.md` §3, nunca creado hasta ahora).
+**Riesgo de duplicación a resolver explícitamente al implementar:** verificar el rol de un productor **para un evento específico** (`evento.productores.includes(email)`, con bypass para `administrador`) ya aparece una vez, inline, en `listarPendientes()` de `aprobaciones.ts` (filtra la lista completa de eventos por productor). Esta tarea es el segundo consumidor real de "¿este productor está asignado a este evento puntual?" — evaluar si conviene extraer una función compartida (p. ej. en `lib/autorizacion.ts`, junto a `exigirRol`) en vez de repetir la comparación ad hoc una tercera vez en el futuro (`CLAUDE.md` §5, A01: "la jerarquía se resuelve en una única función del backend"). No es obligatorio resolverlo con una extracción — es una decisión de diseño a tomar con el código real de ambos handlers en pantalla, no en abstracto.
 
-**Decisión de diseño a resolver explícitamente al implementar (no al planear), mismo tipo de hueco ya encontrado en Validación en puerta:** `tech-specs.md` §4.2 solo define la ruta `/evento/:slug/efectivo` (ya con el `slug` en la mano), sin decir cómo el equipo llega ahí. Antes de escribir el frontend, decidir: (a) un botón "Venta en efectivo" agregado a la página pública del evento (`DetalleEventoComponent`), visible solo si `servicioAuth.rol()` cumple `portero` — el equipo de todas formas llega a esa página desde la cartelera, y ya conoce el `slug`; o (b) un selector dedicado tipo `SeleccionPuertaComponent`. Antes de decidir, considerar si conviene unificar con el selector de `/puerta` ya existente en vez de crear un tercer patrón — no es obligatorio, pero vale la pena evaluarlo en vez de repetir la pregunta por tercera vez en la próxima tarea de puerta/panel.
+**Gap real descubierto al especificar, fuera de alcance de esta tarea (no lo resuelve, solo lo deja documentado):** la tabla `agora-auditoria` existe en `serverless.yml` desde la infraestructura base, pero **ningún handler la usa todavía** — ni siquiera tiene la variable de entorno `TABLA_AUDITORIA` configurada en ninguna función. `CLAUDE.md` §5 (A09) exige un rastro de auditoría append-only para toda transición con consecuencia económica; hoy esa información vive solo como campos sobrescribibles (`resueltoPor`/`resueltoEn`) en el propio ítem de la compra, no en un registro separado e inmutable. El panel de esta tarea lee el estado actual (no un historial), así que no lo necesita — pero es una deuda real que alguna tarea futura debe cerrar explícitamente, no seguir postergando en silencio.
+
+**Decisión de diseño a resolver explícitamente al implementar (mismo tipo de hueco ya resuelto dos veces, en Validación en puerta y en Venta en efectivo):** ni `tech-specs.md` ni `PRD.md` dicen cómo un productor llega a `/evento/:slug/panel` con el `slug` en la mano. A diferencia de `/puerta` y `/efectivo` (selectores que listan *todos* los eventos publicados, sin filtrar por asignación), un selector de panel tendría que filtrar por productor asignado — dato que hoy no expone ningún endpoint público. Opciones a evaluar con el código real en pantalla: (a) agregar un enlace "Panel" a cada fila de `ListaAprobacionesComponent` (`/admin/aprobaciones`, ya filtra por productor asignado del lado del backend) en vez de crear un cuarto patrón de selector; (b) un selector nuevo respaldado por un endpoint que devuelva únicamente los eventos del productor autenticado. No decidir en abstracto — mirar primero si (a) alcanza antes de construir (b).
 
 **Ya existe, se reutiliza sin recrear:**
-- `server/api/services/aforo.ts`: `reservarSillas` + `confirmarSillas` — la operación "reserva, confirma y emite en una operación" de `tech-specs.md` no es una primitiva nueva, son las dos escrituras condicionales ya existentes, invocadas en secuencia (cada una ya es atómica por sí sola).
-- `server/api/services/boleteria.ts`: `emitirBoletas` — mismo consumidor que `aprobaciones.ts`, esta tarea es su segundo consumidor real, tal como la especificación de Emisión de boletas ya lo anticipaba.
-- `services/notificaciones.ts`: plantilla `boletas_emitidas` — mismo correo que ya recibe un cliente cuya compra fue aprobada.
-- `server/api/lib/autorizacion.ts`: `exigirRol('portero')`.
+- `server/api/lib/autorizacion.ts`: `exigirRol('productor')` — la verificación de "asignado a este evento" se agrega **después**, no reemplaza a `exigirRol`.
+- Índices ya provisionados y sin usar todavía para este propósito: `eventoId-estado-index` de `agora-boletas` (una sola `Query` por `eventoId` trae todas las boletas del evento, agregación de vendidas/ingresadas/faltan en código, sin `Scan`) y `eventoId-creadaEn-index` de `agora-compras` (mismo patrón que `listarPendientes()` en `aprobaciones.ts`, filtrando por `estado` en vez de escanear).
+- Patrón de acceso de datos personales ya establecido: mismo criterio que `obtenerDetalleAprobacion()` en `aprobaciones.ts` — el panel expone `cliente` porque quien lo pide ya está autenticado y autorizado para ese evento puntual, no antes.
+- Frontend: `docs/DESIGN.md` ya define el contenedor (`max-w-4xl`/`max-w-6xl`, "paneles de administración") y el patrón de tabla (`mat-table` con sorting/paginación) para esta pantalla exacta — sin inventar un patrón visual nuevo. `MatTableDataSource`/`MatSort`/`MatPaginator` ya se usan en `GestionEventosComponent`/`GestionUsuariosComponent`/`ListaAprobacionesComponent`: tercer/cuarto consumidor, no el primero.
 
 **Archivos a crear:**
-- `server/api/handlers/ventas-efectivo.ts` (+ `.spec.ts`) — `POST /api/ventas-efectivo` (`exigirRol('portero')`, `{ slug, cantidad, cliente }`).
-- `server/api/lib/validaciones.ts` (+ `.spec.ts`) — validadores de `cliente` extraídos de `compras.ts` (ver riesgo de duplicación arriba).
-- `src/app/features/evento/venta-efectivo/venta-efectivo.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`), formulario de datos del cliente (mismos campos que `ComprarComponent`, sin comprobante ni autorización de datos vía checkbox — el equipo ya identificó al cliente en persona; confirmar con `CLAUDE.md` Habeas Data si de todas formas hace falta capturar la autorización explícita, no asumir que no).
-- `src/app/core/api/ventas-efectivo.service.ts` (+ `.spec.ts`) — autenticado.
+- `server/api/handlers/reportes.ts` (+ `.spec.ts`) — `GET /api/eventos/:eventoId/panel` (`exigirRol('productor')` + verificación de asignación al evento, con bypass para `administrador`).
+- `src/app/features/panel/panel-evento.component.ts` (+ `.html`, `.spec.ts`) — ruta protegida `/evento/:slug/panel`.
+- `src/app/core/api/panel.service.ts` (+ `.spec.ts`) — autenticado.
 
 **Archivos a modificar:**
-- `server/api/handlers/compras.ts`: exportar `etapaVigente`/`buscarEventoPublicadoPorSlug`; agregar `medioPago` a la escritura (ver gap de modelo arriba); usar los validadores extraídos a `lib/validaciones.ts` en vez de las copias locales.
-- `serverless.yml`: función `ventasEfectivo` nueva con rol IAM propio (`dynamodb:GetItem`/`Query` en `agora-eventos`, `UpdateItem` condicional en `agora-eventos` vía `aforo.ts`, `PutItem` en `agora-compras`, `PutItem` en `agora-boletas` vía `boleteria.ts`, `GetItem` en `agora-usuarios` vía `exigirRol`, `ses:SendEmail` acotado a `letiende.co`).
-- `server/bundle-lambdas.mjs`: agregar `ventas-efectivo.js`.
-- `src/app/app.routes.ts`/`app.routes.server.ts`: `/evento/:slug/efectivo` (`RenderMode.Client`).
+- `serverless.yml`: función `reportes` nueva con rol IAM propio (`dynamodb:Query` en `agora-boletas` vía `eventoId-estado-index`, `dynamodb:Query` en `agora-compras` vía `eventoId-creadaEn-index`, `dynamodb:GetItem`/`Query` en `agora-eventos` para resolver `slug` → `eventoId` y leer `productores`, `dynamodb:GetItem` en `agora-usuarios` vía `exigirRol`).
+- `server/bundle-lambdas.mjs`: agregar `reportes.js`.
+- `src/app/app.routes.ts`/`app.routes.server.ts`: `/evento/:slug/panel` (`RenderMode.Client` — misma razón que `/evento/:slug/puerta`/`/evento/:slug/efectivo`, sesión de Firebase).
+- `docs/tech-specs.md` §5.1: corregir la fila de `GET /api/eventos/:eventoId/reportes` para marcarla explícitamente v2 (ver decisión de alcance arriba), no implementarla en esta tarea.
 
 **Qué hacer:**
 
-1. Resolver el punto de diseño de "cómo llega el equipo a `/evento/:slug/efectivo`" antes de escribir el componente.
-2. Extraer `lib/validaciones.ts` desde `compras.ts`, y exportar `etapaVigente`/`buscarEventoPublicadoPorSlug` — sin reescribir su lógica, solo moverla/exportarla.
-3. Agregar `medioPago` a `compras.ts` (gap de modelo) antes de escribir `ventas-efectivo.ts`, para que el nuevo handler no sea el único lugar que lo persiste.
-4. `handlers/ventas-efectivo.ts`: valida payload, calcula precio en el servidor (`etapaVigente`, nunca aceptado del cliente), `reservarSillas` → `confirmarSillas` → `emitirBoletas` → notifica `boletas_emitidas`, best-effort.
-5. `VentaEfectivoComponent`: formulario, sin plazo de comprobante (la confirmación es inmediata).
+1. Resolver el punto de diseño de "cómo llega un productor a `/evento/:slug/panel`" antes de escribir el componente — evaluar primero si un enlace en `ListaAprobacionesComponent` alcanza.
+2. Resolver el riesgo de duplicación de "productor asignado a este evento" con el código real de `aprobaciones.ts` en pantalla.
+3. `handlers/reportes.ts`: `exigirRol('productor')` → resolver evento por slug o id → verificar asignación (o `administrador`) → `Query` a `agora-boletas`/`agora-compras` → agregar métricas en código (vendidas/recaudado por etapa, ingresados/faltan, lista de clientes) → responder.
+4. `PanelEventoComponent`: tabla de Angular Material con el patrón ya establecido, sin acción alguna que mute estado.
 
 **Definition of done:**
-- [ ] El precio y la etapa se calculan siempre en el servidor, reutilizando `etapaVigente` de `compras.ts` — nunca una segunda implementación
-- [ ] La reserva, confirmación y emisión de boletas reutilizan `aforo.ts`/`boleteria.ts` sin reimplementar ninguna escritura condicional
-- [ ] `medioPago` se persiste tanto en `ventas-efectivo.ts` como en `compras.ts` (gap de modelo cerrado en los dos lugares, no solo en el nuevo)
-- [ ] Los validadores de `cliente` viven en `lib/validaciones.ts`, consumidos por ambos handlers — no hay una segunda copia
-- [ ] El cliente recibe `boletas_emitidas`, best-effort
+- [ ] `GET /api/eventos/:eventoId/panel` responde solo a `exigirRol('productor')` **y** verificación de asignación al evento (o `administrador`) — nunca al rol a secas
+- [ ] Las métricas se calculan con `Query` sobre los GSIs ya provisionados (`eventoId-estado-index`, `eventoId-creadaEn-index`) — nunca `Scan`
+- [ ] No incluye exportación de archivo (XLSX/PDF) — explícitamente fuera de alcance, diferido a roadmap #21 (v2)
+- [ ] `docs/tech-specs.md` §5.1 corregido para reflejar que el endpoint de reportes/exportación es v2
+- [ ] El gap de `agora-auditoria` sin usar queda documentado en `MEMORY.md`, no resuelto a medias dentro de esta tarea
 - [ ] `npm run test:api` y `npm run test` en verde
 - [ ] `npm run build` sin errores
 - [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
 
 ---
 
 ## Backlog
 
-Orden previsto una vez cerradas las dos tareas activas (`tech-specs.md` §11). No desglosar todavía: se convierten en tareas atómicas al promoverse.
-
-1. Panel de control básico
+Vacío de ítems v1 — con Panel de control básico promovido a Tarea 2, no queda ningún ítem v1 sin desglosar (`PRD.md` §6). Lo siguiente después de cerrar las dos tareas activas es evaluar el arranque de v2 (`tech-specs.md` §11, roadmap #19-22: Bold, WhatsApp, Exportación XLSX/PDF, Google Calendar) — no desglosar todavía.
 
 ---
 

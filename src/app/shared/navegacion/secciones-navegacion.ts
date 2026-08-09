@@ -18,8 +18,18 @@ export interface SeccionNavegacion {
  * depende de este orden con `findLast` para elegir la sección más
  * específica que el rol de un usuario ya autenticado cumple.
  */
+// 'Efectivo' y 'Puerta' comparten rolMinimo 'portero' — 'Efectivo' va ANTES
+// a propósito: `rutaDestinoParaRol` usa `findLast`, así que la última
+// sección de cada nivel de rol es la que gana como destino tras iniciar
+// sesión. Puerta (escanear en la entrada) es la razón principal por la que
+// un portero abre la app un día de función (`PRD.md` §8, el requisito de
+// rendimiento más estricto del producto); Efectivo es una acción secundaria
+// y ocasional. Si se agrega una nueva sección de nivel 'portero' más
+// adelante, insertarla también antes de 'Puerta' para no cambiar este
+// destino sin una decisión explícita (`TODO.md` Tarea 2).
 export const SECCIONES_NAVEGACION: SeccionNavegacion[] = [
   { etiqueta: 'Cartelera', ruta: '/', rolMinimo: 'portero' },
+  { etiqueta: 'Efectivo', ruta: '/efectivo', rolMinimo: 'portero' },
   { etiqueta: 'Puerta', ruta: '/puerta', rolMinimo: 'portero' },
   { etiqueta: 'Aprobaciones', ruta: '/admin/aprobaciones', rolMinimo: 'productor' },
   { etiqueta: 'Eventos', ruta: '/admin/eventos', rolMinimo: 'administrador' },

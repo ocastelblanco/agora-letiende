@@ -9,6 +9,10 @@ describe('rutaDestinoParaRol', () => {
     expect(rutaDestinoParaRol('portero')).toBe('/puerta');
   });
 
+  it('sigue devolviendo /puerta y no /efectivo, pese a que ambas comparten rolMinimo "portero" (orden intencional, TODO.md Tarea 2)', () => {
+    expect(rutaDestinoParaRol('portero')).not.toBe('/efectivo');
+  });
+
   it('devuelve /admin/aprobaciones para productor', () => {
     expect(rutaDestinoParaRol('productor')).toBe('/admin/aprobaciones');
   });

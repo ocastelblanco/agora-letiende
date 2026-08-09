@@ -335,6 +335,34 @@ functions:
           path: /api/aprobaciones/{token}/rechazar
           method: post
 
+  ventasEfectivo:
+    handler: dist-server-bundle/ventas-efectivo.handler
+    role: !GetAtt VentasEfectivoLambdaRole.Arn
+    description: >-
+      POST /api/ventas-efectivo (exigirRol portero) — venta presencial:
+      reserva, confirma y emite boletas en una sola operación, sin
+      comprobante ni aprobación (TODO.md Tarea 2, PRD.md CU-11).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
+      SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
+      SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+    package:
+      # Depende de firebase-admin (vía exigirRol), documentoDynamoDB y
+      # @aws-sdk/client-ses — mismo motivo de bundle que aprobaciones.ts
+      # (server/bundle-lambdas.mjs, MEMORY.md §7).
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/ventas-efectivo.js'
+    events:
+      - httpApi:
+          path: /api/ventas-efectivo
+          method: post
+
   boletas:
     handler: dist-server-bundle/boletas.handler
     role: !GetAtt BoletasLambdaRole.Arn
@@ -898,6 +926,84 @@ resources:
                   Action:
                     - dynamodb:GetItem
                   Resource: !GetAtt AgoraUsuarios.Arn
+
+    VentasEfectivoLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-ventas-efectivo-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # GetItem sobre agora-usuarios: exigirRol('portero') resuelve el
+          # rol del solicitante — mismo patrón exacto que
+          # aprobaciones.ts/boletas.ts, sin Query/Scan.
+          - PolicyName: agora-ventas-efectivo-usuarios-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
+          # Sobre agora-eventos: Query (resolver el slug por su GSI, mismo
+          # criterio que compras.ts, que esta función reutiliza vía
+          # buscarEventoPublicadoPorSlug) y UpdateItem (reservarSillas +
+          # confirmarSillas de aforo.ts, ambas en la misma operación).
+          - PolicyName: agora-ventas-efectivo-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraEventos.Arn
+                    - !Sub '${AgoraEventos.Arn}/index/*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # Sobre agora-compras: solo PutItem — a diferencia de compras.ts,
+          # esta función nunca consulta el estado de una compra existente
+          # (nace y muere `aprobada` en la misma operación).
+          - PolicyName: agora-ventas-efectivo-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                  Resource: !GetAtt AgoraCompras.Arn
+          # PutItem sobre agora-boletas: emitirBoletas() de boleteria.ts,
+          # mismo criterio que aprobaciones.ts.
+          - PolicyName: agora-ventas-efectivo-boletas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                  Resource: !GetAtt AgoraBoletas.Arn
+          # ses:SendEmail (no ses:*), acotado a la identidad verificada de
+          # letiende.co — la notificación de boletas emitidas es el único
+          # correo que esta función envía.
+          - PolicyName: agora-ventas-efectivo-ses-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ses:SendEmail
+                    - ses:SendRawEmail
+                  Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role

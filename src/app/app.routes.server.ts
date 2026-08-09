@@ -70,6 +70,16 @@ export const serverRoutes: ServerRoute[] = [
     path: 'evento/:slug/puerta',
     renderMode: RenderMode.Client,
   },
+  // Mismo motivo que /puerta y /evento/:slug/puerta (TODO.md Tarea 2,
+  // Venta en efectivo): sesión de Firebase protegida por guardiaRol.
+  {
+    path: 'efectivo',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'evento/:slug/efectivo',
+    renderMode: RenderMode.Client,
+  },
   {
     path: '**',
     renderMode: RenderMode.Prerender,
