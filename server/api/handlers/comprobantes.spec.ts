@@ -184,9 +184,12 @@ describe('POST /api/comprobantes/:token/confirmar', () => {
     const comandoUpdate = sendMock.mock.calls[1]?.[0];
     expect(comandoUpdate.input).toMatchObject({
       UpdateExpression:
-        'SET estado = :enRevision, tokenAprobacionHash = :tokenHash, tokenAprobacionExpiraEn = :tokenExpira',
+        'SET estado = :enRevision, tokenAprobacionHash = :tokenHash, tokenAprobacionExpiraEn = :tokenExpira REMOVE expiraEn',
       ConditionExpression: 'estado = :esperando',
     });
+    // El atributo de TTL debe quitarse al salir de esperando_comprobante —
+    // si no, DynamoDB borra compras ya en_revision/aprobadas (MEMORY.md §7).
+    expect(comandoUpdate.input.UpdateExpression).toContain('REMOVE expiraEn');
     expect(typeof comandoUpdate.input.ExpressionAttributeValues[':tokenHash']).toBe('string');
     expect(typeof comandoUpdate.input.ExpressionAttributeValues[':tokenExpira']).toBe('number');
     expect(enviarMock).toHaveBeenCalledTimes(2);

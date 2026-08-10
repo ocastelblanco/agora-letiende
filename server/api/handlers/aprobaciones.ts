@@ -213,11 +213,15 @@ async function aprobarCompra(token: string | undefined): Promise<APIGatewayProxy
   const { compra } = validacion;
 
   try {
+    // REMOVE expiraEn: defensa adicional, mismo criterio que
+    // comprobantes.ts — comprobantes.ts ya lo quita al pasar a en_revision,
+    // pero un REMOVE sobre un atributo inexistente es un no-op, así que no
+    // hay riesgo de romper el camino feliz (MEMORY.md §7).
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+        UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
         ConditionExpression: 'estado = :enRevision',
         ExpressionAttributeValues: {
           ':aprobada': 'aprobada',
@@ -313,11 +317,12 @@ async function rechazarCompra(
       : undefined;
 
   try {
+    // REMOVE expiraEn: misma defensa adicional que aprobarCompra arriba.
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
         ConditionExpression: 'estado = :enRevision',
         ExpressionAttributeValues: {
           ':rechazada': 'rechazada',
