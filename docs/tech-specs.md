@@ -389,7 +389,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | PUT | `/api/eventos/:eventoId` | Administrador | Edita evento | `Evento` parcial |
 | POST | `/api/eventos/:eventoId/activos/url-carga` | Administrador | URL prefirmada para imagen/logotipo | `{ tipo, tipoMime, tamano }` |
 | GET | `/api/eventos/:eventoId/panel` | Productor del evento | Métricas del panel de control | — |
-| GET | `/api/eventos/:eventoId/reportes` | Productor del evento | URL prefirmada del archivo XLSX/PDF | `?formato=xlsx\|pdf` |
+| GET | `/api/eventos/:eventoId/reportes` | Productor del evento | **v2** — URL prefirmada del archivo XLSX/PDF (roadmap #21, no implementado en v1) | `?formato=xlsx\|pdf` |
 | GET | `/api/usuarios` | Administrador | Lista de usuarios | — |
 | POST | `/api/usuarios` | Administrador | Crea usuario | `{ email, nombre, rol }` |
 | PUT | `/api/usuarios/:email` | Administrador | Edita usuario | `{ nombre?, rol?, activo? }` |
