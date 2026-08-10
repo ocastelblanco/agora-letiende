@@ -46,6 +46,13 @@ export interface DetallePanel {
   sillasDisponibles: number;
   sillasVendidas: number;
   porEtapa: MetricaEtapaPanel[];
+  /**
+   * Vendidas/recaudado sobre TODAS las compras aprobadas, calculados sin
+   * pasar por `etapas` — a diferencia de `porEtapa`, nunca pierden una
+   * venta cuyo `etapaId` quedó huérfano (ver `handlers/reportes.ts`).
+   */
+  totalVendidas: number;
+  totalRecaudado: number;
   ingresados: number;
   totalBoletas: number;
   faltanPorIngresar: number;

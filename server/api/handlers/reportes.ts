@@ -133,15 +133,34 @@ async function obtenerPanelEvento(
   const comprasAprobadas = (resultadoCompras.Items ?? []) as CompraAprobada[];
   const etapas = (Array.isArray(eventoItem['etapas']) ? eventoItem['etapas'] : []) as EtapaEvento[];
 
-  const porEtapa = etapas.map((etapa) => {
-    const comprasDeEtapa = comprasAprobadas.filter((compra) => compra.etapaId === etapa.etapaId);
+  // Se agrupa por el etapaId propio de cada compra, no por `evento.etapas`:
+  // `normalizarEtapas()` (handlers/eventos.ts) genera un etapaId nuevo en
+  // cada PUT que incluya `etapas`, huerfanizando el etapaId de las compras
+  // ya existentes. Agrupar contra `evento.etapas` haría que esas ventas
+  // desaparezcan de `porEtapa` sin ningún error visible (bug preexistente en
+  // eventos.ts, fuera de alcance acá — este agrupamiento es defensivo).
+  const nombresPorEtapaId = new Map(etapas.map((etapa) => [etapa.etapaId, etapa.nombre]));
+  const idsEtapaEnCompras = new Set(comprasAprobadas.map((compra) => compra.etapaId));
+  // Orden: primero las etapas conocidas en el orden declarado por el
+  // evento, luego los etapaId huérfanos (sin coincidencia en `etapas`) en el
+  // orden en que aparecen en las compras.
+  const idsConocidosConVentas = etapas.map((etapa) => etapa.etapaId).filter((id) => idsEtapaEnCompras.has(id));
+  const idsHuerfanos = Array.from(idsEtapaEnCompras).filter((id) => !nombresPorEtapaId.has(id));
+  const porEtapa = [...idsConocidosConVentas, ...idsHuerfanos].map((etapaId) => {
+    const comprasDeEtapa = comprasAprobadas.filter((compra) => compra.etapaId === etapaId);
     return {
-      etapaId: etapa.etapaId,
-      nombre: etapa.nombre,
+      etapaId,
+      nombre: nombresPorEtapaId.get(etapaId) ?? 'Etapa eliminada',
       vendidas: comprasDeEtapa.reduce((total, compra) => total + compra.cantidad, 0),
       recaudado: comprasDeEtapa.reduce((total, compra) => total + compra.montoTotal, 0),
     };
   });
+
+  // Totales calculados directamente sobre TODAS las compras aprobadas, sin
+  // pasar por `etapas` en absoluto — nunca pueden desaparecer aunque
+  // `porEtapa` tenga etapas huérfanas.
+  const totalVendidas = comprasAprobadas.reduce((total, compra) => total + compra.cantidad, 0);
+  const totalRecaudado = comprasAprobadas.reduce((total, compra) => total + compra.montoTotal, 0);
 
   const ingresados = boletas.filter((boleta) => boleta.estado === 'usada').length;
   const totalBoletas = boletas.length;
@@ -171,6 +190,8 @@ async function obtenerPanelEvento(
     sillasDisponibles,
     sillasVendidas: sillasTotales - sillasDisponibles - sillasReservadas,
     porEtapa,
+    totalVendidas,
+    totalRecaudado,
     ingresados,
     totalBoletas,
     faltanPorIngresar: totalBoletas - ingresados,

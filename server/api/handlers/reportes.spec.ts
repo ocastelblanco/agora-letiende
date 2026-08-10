@@ -206,6 +206,8 @@ describe('GET /api/eventos/:eventoId/panel', () => {
         { etapaId: 'et-1', nombre: 'Preventa', vendidas: 2, recaudado: 90000 },
         { etapaId: 'et-2', nombre: 'General', vendidas: 1, recaudado: 60000 },
       ],
+      totalVendidas: 3,
+      totalRecaudado: 150000,
       ingresados: 2,
       totalBoletas: 3,
       faltanPorIngresar: 1,
@@ -239,6 +241,39 @@ describe('GET /api/eventos/:eventoId/panel', () => {
     expect(consultaBoletas.input.IndexName).toBe('eventoId-estado-index');
     const consultaCompras = sendMock.mock.calls[2]?.[0];
     expect(consultaCompras.input.IndexName).toBe('eventoId-creadaEn-index');
+  });
+
+  it('no pierde una compra cuyo etapaId ya no existe en evento.etapas (huérfana por edición del evento)', async () => {
+    // Simula el bug de eventos.ts: `normalizarEtapas()` regenera etapaId en
+    // cada PUT que incluya `etapas`, huerfanizando el etapaId de compras ya
+    // aprobadas. `porEtapa` debe seguir mostrando esa plata, con un nombre
+    // de respaldo, y los totales nunca deben perderla.
+    const compraHuerfana = {
+      ...comprasAprobadas[0],
+      compraId: 'c-huerfana',
+      etapaId: 'et-borrada',
+    };
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({ Items: boletasMixtas })
+      .mockResolvedValueOnce({ Items: [...comprasAprobadas, compraHuerfana] });
+
+    const respuesta = await invocar('GET', { eventoId: 'evt-1' });
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.porEtapa).toContainEqual({
+      etapaId: 'et-borrada',
+      nombre: 'Etapa eliminada',
+      vendidas: 2,
+      recaudado: 90000,
+    });
+    // Los totales se calculan sobre TODAS las compras aprobadas, sin pasar
+    // por `etapas` — nunca pueden desaparecer aunque `porEtapa` tenga
+    // huérfanos.
+    expect(cuerpo.totalVendidas).toBe(5);
+    expect(cuerpo.totalRecaudado).toBe(240000);
   });
 
   it('permite el acceso con bypass de administrador aunque no esté en productores', async () => {

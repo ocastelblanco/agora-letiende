@@ -19,6 +19,8 @@ const detalleEjemplo: DetallePanel = {
     { etapaId: 'et-1', nombre: 'Preventa', vendidas: 2, recaudado: 90000 },
     { etapaId: 'et-2', nombre: 'General', vendidas: 1, recaudado: 60000 },
   ],
+  totalVendidas: 3,
+  totalRecaudado: 150000,
   ingresados: 2,
   totalBoletas: 3,
   faltanPorIngresar: 1,
@@ -123,6 +125,11 @@ describe('PanelEventoComponent', () => {
     expect(texto).toContain('General');
     expect(texto).toContain('Ana Pérez');
     expect(texto).toContain('$90.000');
+    // Totales que nunca desaparecen aunque `porEtapa` tenga huérfanos
+    // (handlers/reportes.ts).
+    expect(texto).toContain('Total boletas vendidas');
+    expect(texto).toContain('Total recaudado');
+    expect(texto).toContain('$150.000');
     // Métricas más urgentes el día del evento (PRD.md §5.6).
     const tarjetas = fixture.nativeElement.querySelectorAll('.grid .text-2xl');
     expect(tarjetas[0].textContent).toContain('2'); // ingresados
