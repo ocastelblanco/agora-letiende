@@ -26,7 +26,13 @@ vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }
 vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
 vi.mock('../lib/enlaces-magicos', () => ({ hashearToken: hashearTokenMock }));
-vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+// exigirRol se mockea, pero tieneAccesoAlEvento se importa real (mismo
+// criterio que aforo.ts abajo) — es una función pura sin dependencias, y las
+// pruebas de listarPendientes() verifican su comportamiento real.
+vi.mock('../lib/autorizacion', async () => {
+  const real = await vi.importActual<typeof import('../lib/autorizacion')>('../lib/autorizacion');
+  return { ...real, exigirRol: exigirRolMock };
+});
 vi.mock('../services/notificaciones', () => ({
   CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
     this.enviar = enviarMock;
