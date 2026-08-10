@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import type { User } from 'firebase/auth';
+import { PanelService } from '../../core/api/panel.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
 import type { Rol } from '../../core/models/usuario.model';
 import { BarraNavegacionComponent } from './barra-navegacion.component';
@@ -23,6 +24,7 @@ function configurarPrueba(
   usuarioActual: User | null,
   rol: Rol | null,
   cerrarSesionMock = vi.fn().mockResolvedValue(undefined),
+  limpiarPanelMock = vi.fn(),
 ) {
   TestBed.configureTestingModule({
     providers: [
@@ -35,6 +37,7 @@ function configurarPrueba(
           cerrarSesion: cerrarSesionMock,
         },
       },
+      { provide: PanelService, useValue: { limpiar: limpiarPanelMock } },
     ],
   });
 
@@ -42,7 +45,7 @@ function configurarPrueba(
     TestBed.createComponent(BarraNavegacionComponent);
   fixture.detectChanges();
 
-  return { fixture, cerrarSesionMock };
+  return { fixture, cerrarSesionMock, limpiarPanelMock };
 }
 
 describe('BarraNavegacionComponent', () => {
@@ -115,5 +118,21 @@ describe('BarraNavegacionComponent', () => {
 
     expect(cerrarSesionMock).toHaveBeenCalledTimes(1);
     expect(navigateSpy).toHaveBeenCalledWith('/login');
+  });
+
+  it('"Cerrar sesión" también limpia PanelService (datos personales de clientes, CLAUDE.md §5 A07)', async () => {
+    const usuario = { displayName: 'Ana Admin', email: 'ana@letiende.co', photoURL: null } as User;
+    const { fixture, limpiarPanelMock } = configurarPrueba(usuario, 'administrador');
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    const botonCerrarSesion = Array.from(
+      fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    ).find((boton) => boton.textContent?.includes('Cerrar sesión'));
+    botonCerrarSesion?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(limpiarPanelMock).toHaveBeenCalledTimes(1);
   });
 });

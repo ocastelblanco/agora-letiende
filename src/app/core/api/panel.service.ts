@@ -136,4 +136,19 @@ export class PanelService {
       this.errorDetalleSignal.set(true);
     }
   }
+
+  /**
+   * Resetea todos los signals a su valor inicial — `detalle()` guarda
+   * `clientes` con datos personales (nombre/teléfono/correo) y debe
+   * limpiarse al cerrar sesión (`CLAUDE.md` §5, A07). Se llama desde
+   * `BarraNavegacionComponent.cerrarSesion()`, no desde `ServicioAuth`: este
+   * servicio ya inyecta `ServicioAuth`, así que inyectar `PanelService` de
+   * vuelta crearía una dependencia circular en el DI de Angular.
+   */
+  limpiar(): void {
+    this.misEventosSignal.set([]);
+    this.errorMisEventosSignal.set(false);
+    this.detalleSignal.set(null);
+    this.errorDetalleSignal.set(false);
+  }
 }

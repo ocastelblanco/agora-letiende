@@ -117,4 +117,50 @@ describe('PanelService', () => {
       expect(servicio.errorDetalle()).toBe(true);
     });
   });
+
+  describe('limpiar', () => {
+    it('resetea misEventos, detalle y sus banderas de error a su valor inicial', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+
+      const promesaEventos = servicio.cargarMisEventos();
+      await Promise.resolve();
+      httpMock.expectOne('/api/eventos/panel').flush([
+        {
+          eventoId: 'evt-1',
+          slug: 'concierto-jazz',
+          nombre: 'Concierto de jazz',
+          fechaHora: '2026-09-01T00:00:00.000Z',
+          estado: 'publicado',
+        },
+      ]);
+      await promesaEventos;
+
+      const promesaDetalle = servicio.cargarDetalle('evt-1');
+      await Promise.resolve();
+      httpMock.expectOne('/api/eventos/evt-1/panel').flush({
+        nombreEvento: 'Concierto de jazz',
+        sillasTotales: 100,
+        sillasDisponibles: 40,
+        sillasVendidas: 55,
+        porEtapa: [],
+        totalVendidas: 3,
+        totalRecaudado: 150000,
+        ingresados: 2,
+        totalBoletas: 3,
+        faltanPorIngresar: 1,
+        clientes: [{ compraId: 'c1', nombre: 'Ana Pérez', cantidad: 2, montoTotal: 90000, etapaId: 'et-1', creadaEn: '2026-08-08T00:00:00.000Z' }],
+      });
+      await promesaDetalle;
+
+      expect(servicio.misEventos().length).toBe(1);
+      expect(servicio.detalle()).not.toBeNull();
+
+      servicio.limpiar();
+
+      expect(servicio.misEventos()).toEqual([]);
+      expect(servicio.errorMisEventos()).toBe(false);
+      expect(servicio.detalle()).toBeNull();
+      expect(servicio.errorDetalle()).toBe(false);
+    });
+  });
 });
