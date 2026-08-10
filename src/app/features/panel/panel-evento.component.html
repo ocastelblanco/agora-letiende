@@ -1,0 +1,103 @@
+<div class="min-h-screen bg-surface px-4 py-8">
+  <div class="mx-auto max-w-6xl">
+    @if (cargando()) {
+      <p class="text-sm text-primary/70">Cargando panel…</p>
+    } @else if (sinAcceso()) {
+      <p class="text-sm text-danger">No tienes acceso al panel de este evento.</p>
+    } @else if (errorDetalle() || !detalle()) {
+      <p class="text-sm text-danger">No se pudieron cargar las métricas de este evento.</p>
+    } @else {
+      <h1 class="mb-1 text-2xl font-bold text-primary">Panel — {{ detalle()!.nombreEvento }}</h1>
+      <p class="mb-6 text-sm text-primary/70">Métricas de solo lectura, sin ninguna acción que modifique el evento.</p>
+
+      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div class="rounded-2xl bg-white p-4 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="text-xs text-primary/60">Ingresados</p>
+          <p class="text-2xl font-bold text-tertiary">{{ detalle()!.ingresados }}</p>
+        </div>
+        <div class="rounded-2xl bg-white p-4 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="text-xs text-primary/60">Faltan por ingresar</p>
+          <p class="text-2xl font-bold text-secondary">{{ detalle()!.faltanPorIngresar }}</p>
+        </div>
+        <div class="rounded-2xl bg-white p-4 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="text-xs text-primary/60">Sillas vendidas</p>
+          <p class="text-2xl font-bold text-primary">{{ detalle()!.sillasVendidas }} / {{ detalle()!.sillasTotales }}</p>
+        </div>
+        <div class="rounded-2xl bg-white p-4 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="text-xs text-primary/60">Sillas disponibles</p>
+          <p class="text-2xl font-bold text-primary">{{ detalle()!.sillasDisponibles }}</p>
+        </div>
+      </div>
+
+      <h2 class="mb-2 text-lg font-semibold text-primary">Ventas por etapa</h2>
+      <div class="mb-6 overflow-x-auto rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        <table mat-table [dataSource]="detalle()!.porEtapa" class="w-full">
+          <ng-container matColumnDef="nombre">
+            <th mat-header-cell *matHeaderCellDef>Etapa</th>
+            <td mat-cell *matCellDef="let etapa">{{ etapa.nombre }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="vendidas">
+            <th mat-header-cell *matHeaderCellDef>Vendidas</th>
+            <td mat-cell *matCellDef="let etapa">{{ etapa.vendidas }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="recaudado">
+            <th mat-header-cell *matHeaderCellDef>Recaudado</th>
+            <td mat-cell *matCellDef="let etapa">{{ etapa.recaudado | precio }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="columnasEtapas"></tr>
+          <tr mat-row *matRowDef="let fila; columns: columnasEtapas"></tr>
+        </table>
+      </div>
+
+      <h2 class="mb-2 text-lg font-semibold text-primary">Clientes</h2>
+      <div class="overflow-x-auto rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+        @if (detalle()!.clientes.length === 0) {
+          <p class="p-4 text-sm text-primary/70">Todavía no hay compras aprobadas para este evento.</p>
+        } @else {
+          <table mat-table [dataSource]="detalle()!.clientes" class="w-full">
+            <ng-container matColumnDef="nombre">
+              <th mat-header-cell *matHeaderCellDef>Cliente</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.nombre }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="telefono">
+              <th mat-header-cell *matHeaderCellDef>Teléfono</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.telefono }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="correo">
+              <th mat-header-cell *matHeaderCellDef>Correo</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.correo }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="cantidad">
+              <th mat-header-cell *matHeaderCellDef>Boletas</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.cantidad }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="montoTotal">
+              <th mat-header-cell *matHeaderCellDef>Total</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.montoTotal | precio }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="medioPago">
+              <th mat-header-cell *matHeaderCellDef>Medio de pago</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.medioPago }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="creadaEn">
+              <th mat-header-cell *matHeaderCellDef>Creada (Bogotá)</th>
+              <td mat-cell *matCellDef="let cliente">{{ fechaLegible(cliente.creadaEn) }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="columnasClientes"></tr>
+            <tr mat-row *matRowDef="let fila; columns: columnasClientes"></tr>
+          </table>
+        }
+      </div>
+    }
+  </div>
+</div>

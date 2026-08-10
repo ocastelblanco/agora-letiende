@@ -80,6 +80,16 @@ export const serverRoutes: ServerRoute[] = [
     path: 'evento/:slug/efectivo',
     renderMode: RenderMode.Client,
   },
+  // Mismo motivo que /efectivo y /evento/:slug/efectivo (TODO.md Tarea 2,
+  // Panel de control básico): sesión de Firebase protegida por guardiaRol.
+  {
+    path: 'panel',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'evento/:slug/panel',
+    renderMode: RenderMode.Client,
+  },
   {
     path: '**',
     renderMode: RenderMode.Prerender,
