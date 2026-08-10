@@ -280,9 +280,12 @@ describe('POST /api/aprobaciones/:token/aprobar', () => {
     expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
     const comandoUpdate = sendMock.mock.calls[1]?.[0];
     expect(comandoUpdate.input).toMatchObject({
-      UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+      UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
       ConditionExpression: 'estado = :enRevision',
     });
+    // Defensa adicional: aunque comprobantes.ts ya debería haberlo quitado,
+    // un REMOVE de más nunca falla (MEMORY.md §7).
+    expect(comandoUpdate.input.UpdateExpression).toContain('REMOVE expiraEn');
   });
 
   it('emite las boletas con emitirBoletas (sin reimplementar boleteria.ts) y notifica al cliente con un enlace por boleta', async () => {
@@ -387,6 +390,13 @@ describe('POST /api/aprobaciones/:token/rechazar', () => {
       'compra_rechazada',
       { nombreEvento: 'Concierto de jazz', cantidad: 2, motivo: 'El comprobante no corresponde al monto' },
     );
+    const comandoUpdate = sendMock.mock.calls[1]?.[0];
+    expect(comandoUpdate.input).toMatchObject({
+      UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+      ConditionExpression: 'estado = :enRevision',
+    });
+    // Defensa adicional, mismo criterio que aprobarCompra (MEMORY.md §7).
+    expect(comandoUpdate.input.UpdateExpression).toContain('REMOVE expiraEn');
   });
 
   it('funciona sin motivo', async () => {
