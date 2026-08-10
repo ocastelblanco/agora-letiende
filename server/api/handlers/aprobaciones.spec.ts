@@ -80,6 +80,13 @@ const permisosProductor = {
   activo: true,
 };
 
+const permisosAdministrador = {
+  email: 'admin@letiende.co',
+  nombre: 'Admin',
+  rol: 'administrador' as const,
+  activo: true,
+};
+
 function crearPeticion(
   metodo: string,
   opciones: { rawPath?: string; token?: string; cuerpo?: unknown; headers?: Record<string, string> } = {},
@@ -169,6 +176,31 @@ describe('GET /api/aprobaciones (autenticado)', () => {
     const respuesta = await invocar('GET');
 
     expect(JSON.parse(respuesta.body ?? 'null')).toEqual([]);
+  });
+
+  it('con bypass de administrador, ve las compras en_revision de todos los eventos aunque no esté en productores', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosAdministrador });
+    sendMock.mockResolvedValueOnce({
+      Items: [
+        { eventoId: 'evt-propio', nombre: 'Concierto de jazz', productores: ['otro@letiende.co'] },
+        { eventoId: 'evt-ajeno', nombre: 'Otro evento', productores: ['alguien-mas@letiende.co'] },
+      ],
+    });
+    sendMock.mockResolvedValueOnce({
+      Items: [{ compraId: 'compra-1', cantidad: 2, montoTotal: 90000, creadaEn: '2026-08-08T00:00:00.000Z' }],
+    });
+    sendMock.mockResolvedValueOnce({
+      Items: [{ compraId: 'compra-2', cantidad: 1, montoTotal: 45000, creadaEn: '2026-08-08T00:00:00.000Z' }],
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '[]');
+    expect(cuerpo).toHaveLength(2);
+    // Query sobre ambos eventos, ninguno filtrado — a diferencia de un
+    // productor sin asignar (caso anterior, lista vacía).
+    expect(sendMock).toHaveBeenCalledTimes(3);
   });
 });
 
