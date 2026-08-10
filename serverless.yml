@@ -399,6 +399,34 @@ functions:
           path: /api/boletas/{codigo}/validar
           method: post
 
+  reportes:
+    handler: dist-server-bundle/reportes.handler
+    role: !GetAtt ReportesLambdaRole.Arn
+    description: >-
+      GET /api/eventos/panel (eventos propios del productor) y
+      GET /api/eventos/:eventoId/panel (métricas de solo lectura del panel
+      de control) — exigirRol('productor') (TODO.md Tarea 2).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
+      TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+    package:
+      # Depende de firebase-admin (vía exigirRol) y documentoDynamoDB —
+      # mismo motivo de bundle que aprobaciones.ts/ventas-efectivo.ts
+      # (server/bundle-lambdas.mjs, MEMORY.md §7).
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/reportes.js'
+    events:
+      - httpApi:
+          path: /api/eventos/panel
+          method: get
+      - httpApi:
+          path: /api/eventos/{eventoId}/panel
+          method: get
+
   ssr:
     handler: server/ssr/handler.handler
     role: !GetAtt SsrLambdaRole.Arn
@@ -1004,6 +1032,75 @@ resources:
                     - ses:SendEmail
                     - ses:SendRawEmail
                   Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+
+    ReportesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-reportes-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # GetItem sobre agora-usuarios: exigirRol('productor') resuelve el
+          # rol del solicitante — mismo patrón exacto que
+          # aprobaciones.ts/boletas.ts/ventas-efectivo.ts, sin Query/Scan.
+          - PolicyName: agora-reportes-usuarios-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraUsuarios.Arn
+          # Sobre agora-eventos: Scan (GET /api/eventos/panel, resolver qué
+          # eventos tienen a este productor en `productores` — mismo
+          # criterio ya aceptado en aprobaciones.ts para esta misma tabla
+          # pequeña) + GetItem (GET /api/eventos/:eventoId/panel, leer el
+          # evento puntual y su campo `productores`). Sin UpdateItem/PutItem
+          # — esta función es 100% de solo lectura.
+          - PolicyName: agora-reportes-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Scan
+                    - dynamodb:GetItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # Sobre agora-boletas: Query acotado al GSI eventoId-estado-index
+          # (todas las boletas del evento, para contar ingresados/faltan) —
+          # nunca Scan.
+          - PolicyName: agora-reportes-boletas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraBoletas.Arn
+                    - !Sub '${AgoraBoletas.Arn}/index/*'
+          # Sobre agora-compras: Query acotado al GSI
+          # eventoId-creadaEn-index (compras aprobadas del evento, mismo GSI
+          # que listarPendientes() en aprobaciones.ts) — nunca Scan. Sin
+          # permisos de S3/SES: esta función no los necesita (TODO.md
+          # Tarea 2).
+          - PolicyName: agora-reportes-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraCompras.Arn
+                    - !Sub '${AgoraCompras.Arn}/index/*'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role
