@@ -270,10 +270,11 @@ describe('GET /api/eventos/:eventoId/panel', () => {
   });
 
   it('no pierde una compra cuyo etapaId ya no existe en evento.etapas (huérfana por edición del evento)', async () => {
-    // Simula el bug de eventos.ts: `normalizarEtapas()` regenera etapaId en
-    // cada PUT que incluya `etapas`, huerfanizando el etapaId de compras ya
-    // aprobadas. `porEtapa` debe seguir mostrando esa plata, con un nombre
-    // de respaldo, y los totales nunca deben perderla.
+    // Simula un huérfano histórico o de datos legado (`normalizarEtapas()`
+    // ya preserva el etapaId real en cada PUT desde TODO.md Tarea 2,
+    // 11/08/2026, pero esta defensa se mantiene permanente). `porEtapa`
+    // debe seguir mostrando esa plata, con un nombre de respaldo, y los
+    // totales nunca deben perderla.
     const compraHuerfana = {
       ...comprasAprobadas[0],
       compraId: 'c-huerfana',

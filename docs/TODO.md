@@ -53,13 +53,13 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - `docs/MEMORY.md` §7: marcar la fila del gotcha original como resuelta, sin borrarla (es evidencia histórica de un bug real ya corregido, mismo criterio que otras filas "Confirmado resuelto" de la tabla).
 
 **Definition of done:**
-- [ ] Un `PUT /api/eventos/:eventoId` que reenvía `etapas` sin cambiar su contenido real (mismo nombre/precio/cierraEn/orden) **no genera ningún `etapaId` nuevo**
-- [ ] Una etapa genuinamente agregada en el mismo `PUT` sí recibe un `etapaId` nuevo generado por el backend, nunca aceptado tal cual de un cliente que pudiera inventarlo
-- [ ] Decisión sobre datos ya huérfanos en staging tomada explícitamente (backfill o "volumen cero, no aplica"), no ignorada por omisión
-- [ ] `reportes.ts`/`obtenerPanelEvento()` siguen funcionando igual de bien con el nombre de respaldo `'Etapa eliminada'` para cualquier huérfano histórico que quede sin backfillear
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build`/`build:api` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+- [x] Un `PUT /api/eventos/:eventoId` que reenvía `etapas` sin cambiar su contenido real (mismo nombre/precio/cierraEn/orden) **no genera ningún `etapaId` nuevo**
+- [x] Una etapa genuinamente agregada en el mismo `PUT` sí recibe un `etapaId` nuevo generado por el backend, nunca aceptado tal cual de un cliente que pudiera inventarlo
+- [x] Decisión sobre datos ya huérfanos en staging tomada explícitamente: **sin backfill** — el usuario decidió eliminar los eventos de prueba de staging y crear otros nuevos en vez de investigar/migrar los datos ya huerfanizados, así que la pregunta queda resuelta por eso, no por omisión
+- [x] `reportes.ts`/`obtenerPanelEvento()` siguen funcionando igual de bien con el nombre de respaldo `'Etapa eliminada'` para cualquier huérfano histórico que quede sin backfillear
+- [x] `npm run test:api` y `npm run test` en verde
+- [x] `npm run build`/`build:api` sin errores
+- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (rama `fix/etapa-id-estable`, PR pendiente de abrir)
 
 ---
 

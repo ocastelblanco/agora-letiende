@@ -86,3 +86,7 @@ Specs definition,10/08/2026 20:15,10/08/2026 20:35,0:20:00,AI,Sonnet 5,Cierre de
 Backend,11/08/2026 11:35,11/08/2026 12:10,0:35:00,AI,Sonnet 5,Implementacion completa de exportacion de reportes en XLSX endpoint IAM S3 prefirmado boton de descarga y verificacion arquitectonica,Claude Code,cli,high
 Backend,11/08/2026 12:12,11/08/2026 12:25,0:13:00,AI,Sonnet 5,Ajuste de columnas del reporte XLSX quita total de compra renombra Valor agrega ID de compra para agrupar,Claude Code,cli,low
 Specs definition,11/08/2026 12:25,11/08/2026 12:52,0:27:00,AI,Sonnet 5,Recalculo del motor JIT y actualizacion de documentacion tras ajustes del reporte XLSX PR 25 pendiente de fusion,Claude Code,cli,medium
+Backend,11/08/2026 12:53,11/08/2026 12:58,0:05:00,AI,Sonnet 5,Investigacion y decision de diseno del fix de etapaId opcion 2 reforzada descarta matching por posicion,Claude Code,cli,medium
+Backend,11/08/2026 12:58,11/08/2026 13:03,0:05:00,AI,Sonnet 5,Implementacion delegada del fix de etapaId backend normalizarEtapas y frontend editar-evento,Claude Code,cli,medium
+Backend,11/08/2026 13:03,11/08/2026 13:09,0:06:00,AI,Sonnet 5,Verificacion arquitectonica independiente del fix de etapaId,Claude Code,cli,medium
+Backend,11/08/2026 13:09,11/08/2026 13:16,0:07:00,AI,Sonnet 5,Fixes de hallazgos de verificacion sincroniza formulario tras editar dedup de etapaId y ajuste de comentarios,Claude Code,cli,medium
