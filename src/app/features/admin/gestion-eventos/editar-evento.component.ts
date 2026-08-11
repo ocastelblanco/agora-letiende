@@ -119,6 +119,11 @@ export class EditarEventoComponent {
 
   private crearGrupoEtapa() {
     return this.fb.nonNullable.group({
+      // Vacío por defecto: una etapa nueva agregada con agregarEtapa() queda
+      // con etapaId: '', que etapasFormulario() traduce a `undefined` —
+      // "generar uno nuevo en el backend" (TODO.md Tarea 2). Sin validadores:
+      // no es un campo que el administrador edite a mano.
+      etapaId: [''],
       nombre: ['', Validators.required],
       precio: [0, [Validators.required, Validators.min(0)]],
       cierraEn: ['', Validators.required],
@@ -284,7 +289,12 @@ export class EditarEventoComponent {
     this.etapas.clear();
     for (const etapa of evento.etapas) {
       const grupo = this.crearGrupoEtapa();
+      // Preserva el etapaId real ya existente (TODO.md Tarea 2) — así
+      // etapasFormulario() lo reenvía tal cual al guardar, en vez de dejar
+      // que el backend genere uno nuevo y huerfanice compras/boletas ya
+      // asociadas a esta etapa.
       grupo.setValue({
+        etapaId: etapa.etapaId,
         nombre: etapa.nombre,
         precio: etapa.precio,
         cierraEn: paraInputBogota(etapa.cierraEn),
@@ -300,6 +310,11 @@ export class EditarEventoComponent {
 
   private etapasFormulario(): DatosEtapaBoleteria[] {
     return this.etapas.controls.map((grupo, indice) => ({
+      // Nunca cadena vacía: el backend (normalizarEtapas(), TODO.md Tarea 2)
+      // solo reutiliza un etapaId si viene como string no vacío y pertenece
+      // al evento; una cadena vacía se trataría como "inválido" en vez de
+      // "ausente", así que se traduce explícitamente a undefined.
+      etapaId: grupo.controls.etapaId.value || undefined,
       nombre: grupo.controls.nombre.value,
       precio: grupo.controls.precio.value,
       cierraEn: desdeInputBogota(grupo.controls.cierraEn.value),

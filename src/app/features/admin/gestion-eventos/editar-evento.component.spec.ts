@@ -189,6 +189,9 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.nombre.value).toBe('Concierto de jazz');
       expect(componente['formulario'].controls.mediosPago.controls.bold.value).toBe(true);
       expect(componente['etapas'].length).toBe(1);
+      // TODO.md Tarea 2: el etapaId real ya existente se preserva en el
+      // FormArray, no se deja vacío.
+      expect(componente['etapas'].at(0).controls.etapaId.value).toBe('et1');
     });
 
     it('marca eventoNoEncontrado cuando el eventoId no está en el listado', async () => {
@@ -222,6 +225,9 @@ describe('EditarEventoComponent', () => {
       expect(snackBarOpenMock).toHaveBeenCalledWith('Evento actualizado correctamente.', 'Cerrar', {
         duration: 4000,
       });
+      // TODO.md Tarea 2: etapasFormulario() reenvía el etapaId real ya
+      // precargado, en vez de dejar que el backend genere uno nuevo.
+      expect(datos.etapas[0].etapaId).toBe('et1');
     });
 
     it('subirImagen() sube el archivo y guarda la key con actualizarEvento()', async () => {

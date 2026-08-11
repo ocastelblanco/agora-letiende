@@ -31,8 +31,16 @@ export interface Evento {
   actualizadoEn: string;
 }
 
-/** Etapa tal como la envía el formulario — sin `etapaId`, que el backend genera. */
+/**
+ * Etapa tal como la envía el formulario. El backend genera un `etapaId`
+ * nuevo para una etapa genuinamente nueva (`etapaId` ausente/vacío), pero
+ * si `etapaId` viene y pertenece a una etapa ya existente del evento
+ * (`PUT /api/eventos/:eventoId`), lo preserva tal cual — así una edición no
+ * huerfaniza el `etapaId` que ya referencian `compras`/`boletas` (TODO.md
+ * Tarea 2).
+ */
 export interface DatosEtapaBoleteria {
+  etapaId?: string;
   nombre: string;
   precio: number;
   cierraEn: string;
