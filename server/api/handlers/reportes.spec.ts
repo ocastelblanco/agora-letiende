@@ -481,10 +481,13 @@ describe('GET /api/eventos/:eventoId/reportes', () => {
       Correo: 'N/D',
       'Fecha y hora de compra': 'N/D',
       'Medio de pago': 'N/D',
-      'Valor unitario': 45000,
+      Valor: 45000,
       'Etapa de boletería': 'Preventa',
-      'Total de la compra': 'N/D',
     });
+    // El ID (compraId) es la llave foránea real de la boleta hacia su
+    // compra — nunca se descarta ni se reemplaza por 'N/D', ni siquiera
+    // cuando la compra no existe.
+    expect(filaHuerfana?.['ID']).toBe('c-inexistente');
   });
 });
 

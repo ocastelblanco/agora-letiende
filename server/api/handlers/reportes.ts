@@ -250,9 +250,9 @@ async function obtenerPanelEvento(
  * `GET /api/eventos/:eventoId/reportes?formato=xlsx|pdf` (`exigirRol('productor')`
  * + `tieneAccesoAlEvento`, `TODO.md` Tarea 2 — Exportación de reportes en
  * XLSX) — genera un `.xlsx` con **una fila por boleta** del evento (no por
- * compra), columnas exactas de `PRD.md` §5.6: cliente, fecha/hora de
- * compra, medio de pago, valor unitario, etapa, fecha/hora de ingreso y el
- * total de la compra a la que pertenece cada boleta.
+ * compra), columnas exactas de `PRD.md` §5.6: ID (el `compraId`, para
+ * agrupar boletas de una misma compra), cliente, fecha/hora de compra,
+ * medio de pago, valor, etapa y fecha/hora de ingreso.
  *
  * `?formato=pdf` responde `501` explícito — mismo criterio que las boletas
  * gratuitas en `compras.ts`/`ventas-efectivo.ts`: nunca se decidió librería
@@ -313,19 +313,22 @@ async function generarReporteEvento(
   // como 'N/D'. Así el número de filas del .xlsx siempre coincide con
   // `totalBoletas` (el mismo total que muestra el panel), y cualquier
   // inconsistencia de datos queda visible en el propio reporte en vez de
-  // desaparecer en silencio.
+  // desaparecer en silencio. `ID` es la excepción: es `boleta.compraId`
+  // directo (la llave foránea real de la boleta hacia su compra), nunca
+  // 'N/D' aunque la compra no se encuentre — permite agrupar en el .xlsx
+  // las boletas de una misma compra incluso en ese caso.
   const filas = boletas.map((boleta) => {
     const compra = comprasPorId.get(boleta.compraId);
     return {
+      ID: boleta.compraId,
       Cliente: compra?.cliente?.nombre ?? 'N/D',
       Teléfono: compra?.cliente?.telefono ?? 'N/D',
       Correo: compra?.cliente?.correo ?? 'N/D',
       'Fecha y hora de compra': compra ? fechaLegibleBogota(compra.creadaEn) : 'N/D',
       'Medio de pago': compra?.medioPago ?? 'N/D',
-      'Valor unitario': boleta.valorUnitario,
+      Valor: boleta.valorUnitario,
       'Etapa de boletería': nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada',
       'Fecha y hora de ingreso': boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
-      'Total de la compra': compra?.montoTotal ?? 'N/D',
     };
   });
 
