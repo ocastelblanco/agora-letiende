@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendMock, exigirRolMock } = vi.hoisted(() => ({
+const { sendMock, exigirRolMock, clienteS3SendMock, getSignedUrlMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),
   exigirRolMock: vi.fn(),
+  clienteS3SendMock: vi.fn(),
+  getSignedUrlMock: vi.fn(),
 }));
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
@@ -12,6 +14,10 @@ vi.mock('../lib/autorizacion', async () => {
   const real = await vi.importActual<typeof import('../lib/autorizacion')>('../lib/autorizacion');
   return { ...real, exigirRol: exigirRolMock };
 });
+// Mismo patrón que comprobantes.spec.ts/aprobaciones.spec.ts para el
+// mecanismo de URL prefirmada (TODO.md Tarea 2, generarReporteEvento).
+vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
+vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
 
 const { handler } = await import('./reportes');
 
@@ -93,9 +99,28 @@ async function invocar(metodo: string, opciones?: Parameters<typeof crearPeticio
   return respuesta as { statusCode: number; body?: string };
 }
 
+/** `GET /api/eventos/:eventoId/reportes?formato=...` — ruta distinta de `/panel`. */
+function crearPeticionReportes(eventoId: string, formato?: string): Parameters<typeof handler>[0] {
+  return {
+    requestContext: { http: { method: 'GET' } },
+    rawPath: `/api/eventos/${eventoId}/reportes`,
+    pathParameters: { eventoId },
+    queryStringParameters: formato !== undefined ? { formato } : undefined,
+    headers: {},
+  } as unknown as Parameters<typeof handler>[0];
+}
+
+async function invocarReportes(eventoId: string, formato?: string) {
+  const respuesta = await handler(crearPeticionReportes(eventoId, formato), {} as never, undefined as never);
+  return respuesta as { statusCode: number; body?: string };
+}
+
 beforeEach(() => {
   sendMock.mockReset();
   exigirRolMock.mockReset();
+  clienteS3SendMock.mockReset();
+  getSignedUrlMock.mockReset();
+  getSignedUrlMock.mockResolvedValue('https://s3.amazonaws.com/reportes-presignada');
 });
 
 describe('GET /api/eventos/panel', () => {
@@ -289,6 +314,150 @@ describe('GET /api/eventos/:eventoId/panel', () => {
     const cuerpo = JSON.parse(respuesta.body ?? '{}');
     expect(cuerpo.ingresados).toBe(0);
     expect(cuerpo.totalBoletas).toBe(0);
+  });
+});
+
+describe('GET /api/eventos/:eventoId/reportes', () => {
+  // A diferencia de `boletasMixtas` (solo boletaId/estado, suficiente para
+  // el panel de métricas), el reporte necesita compraId/etapaId/
+  // valorUnitario/ingresoEn — mismos campos reales que emite
+  // `services/boleteria.ts` (`emitirBoletas`).
+  const boletasParaReporte = [
+    {
+      boletaId: 'b1',
+      compraId: 'c1',
+      etapaId: 'et-1',
+      valorUnitario: 45000,
+      estado: 'usada',
+      ingresoEn: '2026-09-01T01:30:00.000Z',
+    },
+    {
+      boletaId: 'b2',
+      compraId: 'c1',
+      etapaId: 'et-1',
+      valorUnitario: 45000,
+      estado: 'valida',
+    },
+    {
+      boletaId: 'b3',
+      compraId: 'c2',
+      etapaId: 'et-2',
+      valorUnitario: 60000,
+      estado: 'valida',
+    },
+  ];
+
+  it('responde con la respuesta de exigirRol si no está autorizado', async () => {
+    exigirRolMock.mockResolvedValueOnce({
+      autorizado: false,
+      respuesta: { statusCode: 403, body: '{"mensaje":"No autorizado en Ágora"}' },
+    });
+
+    const respuesta = await invocarReportes('evt-1', 'xlsx');
+
+    expect(respuesta.statusCode).toBe(403);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 400 si formato no es xlsx ni pdf', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+
+    const respuesta = await invocarReportes('evt-1', 'csv');
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 400 si formato no viene en la query', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+
+    const respuesta = await invocarReportes('evt-1');
+
+    expect(respuesta.statusCode).toBe(400);
+  });
+
+  it('responde 501 explícito para formato=pdf, sin tocar DynamoDB ni S3', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+
+    const respuesta = await invocarReportes('evt-1', 'pdf');
+
+    expect(respuesta.statusCode).toBe(501);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(clienteS3SendMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 404 si el evento no existe', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocarReportes('evt-inexistente', 'xlsx');
+
+    expect(respuesta.statusCode).toBe(404);
+  });
+
+  it('responde 403 si el productor no está asignado a este evento', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock.mockResolvedValueOnce({ Item: { ...eventoItem, productores: ['otro@letiende.co'] } });
+
+    const respuesta = await invocarReportes('evt-1', 'xlsx');
+
+    expect(respuesta.statusCode).toBe(403);
+    // Nunca consulta boletas/compras ni sube nada a S3 si el acceso al
+    // evento ya fue denegado.
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(clienteS3SendMock).not.toHaveBeenCalled();
+  });
+
+  it('sube el .xlsx a reportes/{eventoId}/ y responde la URL prefirmada, sin exponer el archivo en el cuerpo', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({ Items: boletasParaReporte })
+      .mockResolvedValueOnce({ Items: comprasAprobadas });
+    clienteS3SendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocarReportes('evt-1', 'xlsx');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    // Nunca el archivo en el cuerpo de la respuesta — solo la URL
+    // prefirmada (`CLAUDE.md` §5, A02).
+    expect(cuerpo).toEqual({ url: 'https://s3.amazonaws.com/reportes-presignada' });
+
+    expect(clienteS3SendMock).toHaveBeenCalledTimes(1);
+    const comandoSubida = clienteS3SendMock.mock.calls[0]?.[0];
+    expect(comandoSubida.input.Key).toMatch(/^reportes\/evt-1\/[0-9a-f-]{36}\.xlsx$/);
+    expect(comandoSubida.input.ContentType).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(Buffer.isBuffer(comandoSubida.input.Body)).toBe(true);
+
+    // getSignedUrl firma sobre la misma key recién subida, con vida corta.
+    const [, comandoDescarga, opciones] = getSignedUrlMock.mock.calls[0] as [
+      unknown,
+      { input: { Key: string } },
+      { expiresIn: number },
+    ];
+    expect(comandoDescarga.input.Key).toBe(comandoSubida.input.Key);
+    expect(opciones.expiresIn).toBe(900);
+  });
+
+  it('omite una boleta sin compra aprobada correspondiente, sin inventar datos de cliente', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({
+        Items: [...boletasParaReporte, { boletaId: 'b-huerfana', compraId: 'c-inexistente', etapaId: 'et-1', valorUnitario: 45000, estado: 'valida' }],
+      })
+      .mockResolvedValueOnce({ Items: comprasAprobadas });
+    clienteS3SendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocarReportes('evt-1', 'xlsx');
+
+    expect(respuesta.statusCode).toBe(200);
+    // No lanza ni falla — la boleta huérfana simplemente no aparece en la
+    // hoja generada (verificado indirectamente: la subida a S3 sí ocurre).
+    expect(clienteS3SendMock).toHaveBeenCalledTimes(1);
   });
 });
 

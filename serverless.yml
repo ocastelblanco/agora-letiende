@@ -403,19 +403,22 @@ functions:
     handler: dist-server-bundle/reportes.handler
     role: !GetAtt ReportesLambdaRole.Arn
     description: >-
-      GET /api/eventos/panel (eventos propios del productor) y
-      GET /api/eventos/:eventoId/panel (métricas de solo lectura del panel
-      de control) — exigirRol('productor') (TODO.md Tarea 2).
+      GET /api/eventos/panel, GET /api/eventos/:eventoId/panel y
+      GET /api/eventos/:eventoId/reportes — exigirRol('productor')
+      (TODO.md Tarea 2).
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
       TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
       TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      BUCKET_COMPROBANTES: ${self:custom.nombresBuckets.comprobantes}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
     package:
-      # Depende de firebase-admin (vía exigirRol) y documentoDynamoDB —
-      # mismo motivo de bundle que aprobaciones.ts/ventas-efectivo.ts
-      # (server/bundle-lambdas.mjs, MEMORY.md §7).
+      # Depende de firebase-admin (vía exigirRol), documentoDynamoDB,
+      # @aws-sdk/client-s3+s3-request-presigner (URL prefirmada del .xlsx) y
+      # xlsx (generación del .xlsx) — mismo motivo de bundle que
+      # aprobaciones.ts/ventas-efectivo.ts (server/bundle-lambdas.mjs,
+      # MEMORY.md §7).
       patterns:
         - '!**'
         - 'dist-server-bundle/reportes.js'
@@ -425,6 +428,9 @@ functions:
           method: get
       - httpApi:
           path: /api/eventos/{eventoId}/panel
+          method: get
+      - httpApi:
+          path: /api/eventos/{eventoId}/reportes
           method: get
 
   ssr:
@@ -1089,8 +1095,7 @@ resources:
           # Sobre agora-compras: Query acotado al GSI
           # eventoId-creadaEn-index (compras aprobadas del evento, mismo GSI
           # que listarPendientes() en aprobaciones.ts) — nunca Scan. Sin
-          # permisos de S3/SES: esta función no los necesita (TODO.md
-          # Tarea 2).
+          # SES: esta función no envía correos.
           - PolicyName: agora-reportes-compras-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -1101,6 +1106,20 @@ resources:
                   Resource:
                     - !GetAtt AgoraCompras.Arn
                     - !Sub '${AgoraCompras.Arn}/index/*'
+          # S3 acotado al prefijo reportes/* de BucketComprobantes (distinto
+          # del prefijo compras/* que usan comprobantes.ts/aprobaciones.ts):
+          # PutObject para subir el .xlsx generado en memoria, GetObject
+          # porque getSignedUrl() firma sobre el mismo permiso que ejecuta
+          # la operación (TODO.md Tarea 2, generarReporteEvento).
+          - PolicyName: agora-reportes-s3-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                    - s3:GetObject
+                  Resource: !Sub '${BucketComprobantes.Arn}/reportes/*'
 
     SsrLambdaRole:
       Type: AWS::IAM::Role
@@ -1310,6 +1329,23 @@ resources:
               AllowedOrigins: ['*']
               AllowedHeaders: ['*']
               MaxAge: 3000
+        # El .xlsx de reportes/{eventoId}/{uuid}.xlsx (handlers/reportes.ts,
+        # TODO.md Tarea 2) queda huérfano en S3 tras descargarse — nadie lo
+        # borra explícitamente. Expiración corta solo sobre ese prefijo para
+        # no acumular archivos indefinidamente; compras/* (comprobantes de
+        # pago) NO tiene regla de expiración porque es evidencia financiera
+        # que debe conservarse.
+        # <!-- SIN VERIFICAR: confirmar en calculator.aws el costo real de
+        # Lifecycle Expiration sobre S3 Standard antes de desplegar — el
+        # costo esperado es prácticamente $0 (sin cargo por la propia regla
+        # de expiración, solo el almacenamiento normal mientras el objeto
+        # exista, ≤1 día), pero no se verificó el mismo día de este cambio. -->
+        LifecycleConfiguration:
+          Rules:
+            - Id: ExpirarReportesTemporales
+              Status: Enabled
+              Prefix: reportes/
+              ExpirationInDays: 1
 
     BucketActivos:
       Type: AWS::S3::Bucket

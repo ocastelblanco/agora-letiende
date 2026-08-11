@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyHandlerV2,
   APIGatewayProxyResultV2,
 } from 'aws-lambda';
 import { GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import * as XLSX from 'xlsx';
 import { documentoDynamoDB } from '../services/dynamodb';
+import { clienteS3 } from '../services/s3';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 
@@ -36,7 +41,70 @@ interface CompraAprobada {
 
 interface BoletaDelEvento {
   boletaId: string;
+  compraId: string;
+  etapaId: string;
+  valorUnitario: number;
   estado: string;
+  ingresoEn?: string;
+}
+
+/**
+ * `fechaIso` (UTC ISO 8601, formato de almacenamiento — `CLAUDE.md` §4) →
+ * texto legible en hora de Bogotá para el `.xlsx` de `generarReporteEvento()`
+ * (la única capa de presentación que corre en este archivo). Mismo offset
+ * fijo `-05:00` que `src/app/shared/utilidades/fecha-bogota.ts`: Colombia no
+ * observa horario de verano desde 1993. No se importa esa utilidad de
+ * `src/app/` porque vive fuera del `rootDir` del bundle de las Lambdas
+ * (`server/bundle-lambdas.mjs`) — mismo motivo que las interfaces copiadas
+ * arriba en vez de importadas de `src/app/core/models`.
+ */
+const OFFSET_BOGOTA_MS = 5 * 60 * 60 * 1000;
+function fechaLegibleBogota(fechaIso: string): string {
+  const instante = new Date(Date.parse(fechaIso) - OFFSET_BOGOTA_MS);
+  const año = instante.getUTCFullYear();
+  const mes = String(instante.getUTCMonth() + 1).padStart(2, '0');
+  const dia = String(instante.getUTCDate()).padStart(2, '0');
+  const horas = String(instante.getUTCHours()).padStart(2, '0');
+  const minutos = String(instante.getUTCMinutes()).padStart(2, '0');
+  return `${año}-${mes}-${dia} ${horas}:${minutos}`;
+}
+
+/**
+ * Query pareada a `agora-boletas` (`eventoId-estado-index`) y
+ * `agora-compras` (`eventoId-creadaEn-index`, filtro `estado = 'aprobada'`)
+ * — compartida por `obtenerPanelEvento()` (métricas) y
+ * `generarReporteEvento()` (exportación XLSX, `TODO.md` Tarea 2) para no
+ * repetir el mismo par de `Query` dos veces en este archivo. Nunca `Scan`
+ * (`CLAUDE.md` §5, A04/costos) — ambas consultas ya usan los GSIs
+ * provisionados para este propósito.
+ */
+async function obtenerDatosCrudosDelEvento(
+  eventoId: string,
+): Promise<{ boletas: BoletaDelEvento[]; comprasAprobadas: CompraAprobada[] }> {
+  const [resultadoBoletas, resultadoCompras] = await Promise.all([
+    documentoDynamoDB.send(
+      new QueryCommand({
+        TableName: process.env['TABLA_BOLETAS'],
+        IndexName: 'eventoId-estado-index',
+        KeyConditionExpression: 'eventoId = :eventoId',
+        ExpressionAttributeValues: { ':eventoId': eventoId },
+      }),
+    ),
+    documentoDynamoDB.send(
+      new QueryCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        IndexName: 'eventoId-creadaEn-index',
+        KeyConditionExpression: 'eventoId = :eventoId',
+        FilterExpression: 'estado = :aprobada',
+        ExpressionAttributeValues: { ':eventoId': eventoId, ':aprobada': 'aprobada' },
+      }),
+    ),
+  ]);
+
+  return {
+    boletas: (resultadoBoletas.Items ?? []) as BoletaDelEvento[],
+    comprasAprobadas: (resultadoCompras.Items ?? []) as CompraAprobada[],
+  };
 }
 
 /**
@@ -109,28 +177,7 @@ async function obtenerPanelEvento(
     return respuestaJson(403, { mensaje: 'No autorizado para este evento' });
   }
 
-  const [resultadoBoletas, resultadoCompras] = await Promise.all([
-    documentoDynamoDB.send(
-      new QueryCommand({
-        TableName: process.env['TABLA_BOLETAS'],
-        IndexName: 'eventoId-estado-index',
-        KeyConditionExpression: 'eventoId = :eventoId',
-        ExpressionAttributeValues: { ':eventoId': eventoId },
-      }),
-    ),
-    documentoDynamoDB.send(
-      new QueryCommand({
-        TableName: process.env['TABLA_COMPRAS'],
-        IndexName: 'eventoId-creadaEn-index',
-        KeyConditionExpression: 'eventoId = :eventoId',
-        FilterExpression: 'estado = :aprobada',
-        ExpressionAttributeValues: { ':eventoId': eventoId, ':aprobada': 'aprobada' },
-      }),
-    ),
-  ]);
-
-  const boletas = (resultadoBoletas.Items ?? []) as BoletaDelEvento[];
-  const comprasAprobadas = (resultadoCompras.Items ?? []) as CompraAprobada[];
+  const { boletas, comprasAprobadas } = await obtenerDatosCrudosDelEvento(eventoId);
   const etapas = (Array.isArray(eventoItem['etapas']) ? eventoItem['etapas'] : []) as EtapaEvento[];
 
   // Se agrupa por el etapaId propio de cada compra, no por `evento.etapas`:
@@ -200,19 +247,133 @@ async function obtenerPanelEvento(
 }
 
 /**
- * `GET /api/eventos/panel` y `GET /api/eventos/:eventoId/panel` — ambas
- * `exigirRol('productor')`, solo lectura (`TODO.md` Tarea 2, Panel de
- * control básico). No implementa `GET /api/eventos/:eventoId/reportes`
- * (exportación XLSX/PDF) — v2, fuera de alcance (`docs/tech-specs.md` §11
- * roadmap #21).
+ * `GET /api/eventos/:eventoId/reportes?formato=xlsx|pdf` (`exigirRol('productor')`
+ * + `tieneAccesoAlEvento`, `TODO.md` Tarea 2 — Exportación de reportes en
+ * XLSX) — genera un `.xlsx` con **una fila por boleta** del evento (no por
+ * compra), columnas exactas de `PRD.md` §5.6: cliente, fecha/hora de
+ * compra, medio de pago, valor unitario, etapa, fecha/hora de ingreso y el
+ * total de la compra a la que pertenece cada boleta.
+ *
+ * `?formato=pdf` responde `501` explícito — mismo criterio que las boletas
+ * gratuitas en `compras.ts`/`ventas-efectivo.ts`: nunca se decidió librería
+ * ni diseño de PDF (`docs/tech-specs.md` §2, "PDF por definir"), mejor un
+ * 501 claro que una implementación a medias.
+ *
+ * La descarga nunca va en el cuerpo de la respuesta ni por URL pública
+ * (`CLAUDE.md` §5, A02: el archivo contiene datos personales de clientes) —
+ * se sube en memoria a `BucketComprobantes` (ya privado, ya con Block
+ * Public Access) bajo `reportes/{eventoId}/{uuid}.xlsx` y se devuelve una
+ * URL prefirmada de `GetObject` de vida corta (`expiresIn: 900`, mismo
+ * mecanismo ya usado tres veces en `comprobantes.ts`/`aprobaciones.ts`/
+ * `eventos.ts`). El objeto sube a un bucket ya existente — nunca se crea
+ * un bucket nuevo (`CLAUDE.md` §5-bis, costos); `serverless.yml` agrega un
+ * `LifecycleConfiguration` corto sobre el prefijo `reportes/*` para no
+ * acumular archivos huérfanos.
+ */
+async function generarReporteEvento(
+  eventoId: string | undefined,
+  evento: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const autorizacion = await exigirRol(evento, 'productor');
+  if (!autorizacion.autorizado) {
+    return autorizacion.respuesta;
+  }
+  if (!eventoId) {
+    return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
+  }
+
+  const formato = evento.queryStringParameters?.['formato'];
+  if (formato === 'pdf') {
+    return respuestaJson(501, { mensaje: 'La exportación de reportes en PDF todavía no está soportada' });
+  }
+  if (formato !== 'xlsx') {
+    return respuestaJson(400, { mensaje: "formato debe ser 'xlsx' o 'pdf'" });
+  }
+
+  const resultadoEvento = await documentoDynamoDB.send(
+    new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
+  );
+  const eventoItem = resultadoEvento.Item;
+  if (!eventoItem) {
+    return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+  }
+  if (!tieneAccesoAlEvento(eventoItem, autorizacion.permisos)) {
+    return respuestaJson(403, { mensaje: 'No autorizado para este evento' });
+  }
+
+  const { boletas, comprasAprobadas } = await obtenerDatosCrudosDelEvento(eventoId);
+  const etapas = (Array.isArray(eventoItem['etapas']) ? eventoItem['etapas'] : []) as EtapaEvento[];
+  const nombresPorEtapaId = new Map(etapas.map((etapa) => [etapa.etapaId, etapa.nombre]));
+  const comprasPorId = new Map(comprasAprobadas.map((compra) => [compra.compraId, compra]));
+
+  // Una fila por boleta, no por compra (PRD.md §5.6) — unidas por
+  // `compraId`. Una boleta sin compra aprobada correspondiente (dato
+  // inconsistente, no debería ocurrir en la práctica) se omite en vez de
+  // inventar datos de cliente en el reporte.
+  const filas = boletas.flatMap((boleta) => {
+    const compra = comprasPorId.get(boleta.compraId);
+    if (!compra) {
+      return [];
+    }
+    return [
+      {
+        Cliente: compra.cliente?.nombre ?? '',
+        Teléfono: compra.cliente?.telefono ?? '',
+        Correo: compra.cliente?.correo ?? '',
+        'Fecha y hora de compra': fechaLegibleBogota(compra.creadaEn),
+        'Medio de pago': compra.medioPago ?? '',
+        'Valor unitario': boleta.valorUnitario,
+        'Etapa de boletería': nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada',
+        'Fecha y hora de ingreso': boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
+        'Total de la compra': compra.montoTotal,
+      },
+    ];
+  });
+
+  // Mismo patrón exacto que Babel (server/api/handlers/ventas.ts):
+  // book_new() + json_to_sheet() + book_append_sheet(). `type: 'buffer'`
+  // en vez de 'base64' porque acá el resultado sube a S3 (PutObjectCommand
+  // recibe un Buffer directo), no viaja en el cuerpo de la respuesta.
+  const libro = XLSX.utils.book_new();
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  XLSX.utils.book_append_sheet(libro, hoja, 'Boletas');
+  const contenido = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+
+  const key = `reportes/${eventoId}/${randomUUID()}.xlsx`;
+  await clienteS3.send(
+    new PutObjectCommand({
+      Bucket: process.env['BUCKET_COMPROBANTES'],
+      Key: key,
+      Body: contenido,
+      ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+  );
+
+  const url = await getSignedUrl(
+    clienteS3,
+    new GetObjectCommand({ Bucket: process.env['BUCKET_COMPROBANTES'], Key: key }),
+    { expiresIn: 900 },
+  );
+
+  return respuestaJson(200, { url });
+}
+
+/**
+ * `GET /api/eventos/panel`, `GET /api/eventos/:eventoId/panel` (métricas de
+ * solo lectura) y `GET /api/eventos/:eventoId/reportes?formato=xlsx|pdf`
+ * (exportación, `TODO.md` Tarea 2) — las tres exigen `exigirRol('productor')`.
  */
 export const handler: APIGatewayProxyHandlerV2 = async (
   evento: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> => {
   const eventoId = evento.pathParameters?.['eventoId'];
   const metodo = evento.requestContext.http.method;
+  const esReportes = (evento.rawPath ?? '').endsWith('/reportes');
 
   try {
+    if (esReportes && metodo === 'GET') {
+      return await generarReporteEvento(eventoId, evento);
+    }
     if (metodo === 'GET' && !eventoId) {
       return await listarEventosPanel(evento);
     }
