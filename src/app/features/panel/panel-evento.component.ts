@@ -70,6 +70,7 @@ export class PanelEventoComponent {
     this.cargando.set(true);
     this.sinAcceso.set(false);
     this.eventoIdSignal.set(null);
+    this.errorReporte.set(null);
 
     await this.panelService.cargarMisEventos();
     const evento = this.panelService.misEventos().find((e) => e.slug === slug);

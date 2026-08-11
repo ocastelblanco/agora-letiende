@@ -192,5 +192,28 @@ describe('PanelEventoComponent', () => {
       expect(fixture.nativeElement.textContent).toContain('Concierto de jazz');
       expect(fixture.nativeElement.textContent).toContain('Ana Pérez');
     });
+
+    it('limpia el mensaje de error del reporte al cargar un evento nuevo', async () => {
+      const eventoOtro: EventoPanel = { ...eventoPropio, eventoId: 'evt-2', slug: 'obra-de-teatro' };
+      const descargarReporteMock = vi.fn().mockResolvedValue({ exito: false, error: 'No se pudo generar el reporte' });
+      const { fixture } = configurarPrueba({
+        misEventos: [eventoPropio, eventoOtro],
+        detalle: detalleEjemplo,
+        descargarReporteMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      fixture.nativeElement.querySelector('button').click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('No se pudo generar el reporte');
+
+      // Navega a otro evento (mismo componente, slug distinto) — el error
+      // viejo del evento anterior no debe seguir visible bajo el botón
+      // nuevo.
+      await activarConSlug(fixture, 'obra-de-teatro');
+
+      expect(fixture.nativeElement.textContent).not.toContain('No se pudo generar el reporte');
+    });
   });
 });
