@@ -1,7 +1,10 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ServicioAuth } from '../auth/servicio-auth';
+
+/** Respuesta de `GET /api/eventos/:eventoId/reportes?formato=xlsx`. */
+export type ResultadoReporte = { exito: true; url: string } | { exito: false; error: string };
 
 /** Fila de `GET /api/eventos/panel` (server/api/handlers/reportes.ts). */
 export interface EventoPanel {
@@ -134,6 +137,40 @@ export class PanelService {
     } catch {
       this.detalleSignal.set(null);
       this.errorDetalleSignal.set(true);
+    }
+  }
+
+  /**
+   * Llama `GET /api/eventos/:eventoId/reportes?formato=xlsx` y devuelve la
+   * URL prefirmada que ya arma el backend (`handlers/reportes.ts`,
+   * `TODO.md` Tarea 2) — a diferencia de `EventosService.descargarQr()`, acá
+   * no se pide `responseType: 'blob'`: la respuesta es JSON (`{ url }`), y
+   * esa URL ya viene firmada por S3 con `expiresIn: 900`, así que no
+   * necesita un segundo `fetch` autenticado — quien la reciba solo la abre
+   * (`window.open`/`<a href>`) directo, sin encabezado `Authorization`
+   * (`CLAUDE.md` §5, A02: la autorización real la dio ya la firma de la
+   * URL, no un segundo chequeo del cliente).
+   */
+  async descargarReporte(eventoId: string): Promise<ResultadoReporte> {
+    const idToken = await this.servicioAuth.obtenerIdToken();
+    if (!idToken) {
+      return { exito: false, error: 'No se pudo generar el reporte. Intenta de nuevo.' };
+    }
+
+    try {
+      const respuesta = await firstValueFrom(
+        this.http.get<{ url: string }>(`/api/eventos/${eventoId}/reportes`, {
+          params: { formato: 'xlsx' },
+          headers: { Authorization: `Bearer ${idToken}` },
+        }),
+      );
+      return { exito: true, url: respuesta.url };
+    } catch (error) {
+      const mensaje =
+        error instanceof HttpErrorResponse && typeof error.error?.mensaje === 'string'
+          ? error.error.mensaje
+          : 'No se pudo generar el reporte. Intenta de nuevo.';
+      return { exito: false, error: mensaje };
     }
   }
 

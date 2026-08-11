@@ -118,6 +118,62 @@ describe('PanelService', () => {
     });
   });
 
+  describe('descargarReporte', () => {
+    it('responde error sin llamar al backend si no hay ID Token', async () => {
+      const { httpMock, servicio } = configurarPrueba(null);
+
+      const resultado = await servicio.descargarReporte('evt-1');
+
+      expect(resultado).toEqual({ exito: false, error: 'No se pudo generar el reporte. Intenta de nuevo.' });
+      httpMock.verify();
+    });
+
+    it('llama GET /api/eventos/:eventoId/reportes?formato=xlsx con Authorization y devuelve la URL', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+
+      const promesa = servicio.descargarReporte('evt-1');
+      await Promise.resolve();
+      const peticion = httpMock.expectOne((req) => req.url === '/api/eventos/evt-1/reportes');
+      expect(peticion.request.method).toBe('GET');
+      expect(peticion.request.params.get('formato')).toBe('xlsx');
+      expect(peticion.request.headers.get('Authorization')).toBe('Bearer token-valido');
+      peticion.flush({ url: 'https://s3.amazonaws.com/reportes-presignada' });
+
+      const resultado = await promesa;
+
+      expect(resultado).toEqual({ exito: true, url: 'https://s3.amazonaws.com/reportes-presignada' });
+    });
+
+    it('devuelve el mensaje del backend si la petición falla', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+
+      const promesa = servicio.descargarReporte('evt-1');
+      await Promise.resolve();
+      const peticion = httpMock.expectOne((req) => req.url === '/api/eventos/evt-1/reportes');
+      peticion.flush(
+        { mensaje: 'No autorizado para este evento' },
+        { status: 403, statusText: 'Forbidden' },
+      );
+
+      const resultado = await promesa;
+
+      expect(resultado).toEqual({ exito: false, error: 'No autorizado para este evento' });
+    });
+
+    it('usa un mensaje genérico si el backend no devuelve mensaje', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+
+      const promesa = servicio.descargarReporte('evt-1');
+      await Promise.resolve();
+      const peticion = httpMock.expectOne((req) => req.url === '/api/eventos/evt-1/reportes');
+      peticion.flush(null, { status: 500, statusText: 'Internal Server Error' });
+
+      const resultado = await promesa;
+
+      expect(resultado).toEqual({ exito: false, error: 'No se pudo generar el reporte. Intenta de nuevo.' });
+    });
+  });
+
   describe('limpiar', () => {
     it('resetea misEventos, detalle y sus banderas de error a su valor inicial', async () => {
       const { httpMock, servicio } = configurarPrueba('token-valido');

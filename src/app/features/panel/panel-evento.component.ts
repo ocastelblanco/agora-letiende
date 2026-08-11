@@ -22,7 +22,10 @@ import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
  * asignado a este productor), se trata como "sin acceso" — nunca se
  * distingue el motivo, mismo criterio de no dar pie a enumerar eventos.
  *
- * Pantalla 100% de solo lectura — ninguna acción que mute estado.
+ * Pantalla mayormente de solo lectura — la única acción disponible es
+ * "Descargar reporte", que no muta ningún estado del sistema (no aprueba,
+ * no vende, no valida): solo genera y descarga un archivo (`TODO.md`
+ * Tarea 2).
  */
 @Component({
   selector: 'app-panel-evento',
@@ -39,6 +42,11 @@ export class PanelEventoComponent {
 
   protected readonly detalle = this.panelService.detalle;
   protected readonly errorDetalle = this.panelService.errorDetalle;
+
+  private readonly eventoIdSignal = signal<string | null>(null);
+
+  protected readonly descargandoReporte = signal(false);
+  protected readonly errorReporte = signal<string | null>(null);
 
   protected readonly columnasEtapas = ['nombre', 'vendidas', 'recaudado'];
   protected readonly columnasClientes = [
@@ -61,6 +69,7 @@ export class PanelEventoComponent {
   private async cargarPanel(slug: string): Promise<void> {
     this.cargando.set(true);
     this.sinAcceso.set(false);
+    this.eventoIdSignal.set(null);
 
     await this.panelService.cargarMisEventos();
     const evento = this.panelService.misEventos().find((e) => e.slug === slug);
@@ -70,6 +79,7 @@ export class PanelEventoComponent {
       return;
     }
 
+    this.eventoIdSignal.set(evento.eventoId);
     await this.panelService.cargarDetalle(evento.eventoId);
     this.cargando.set(false);
   }
@@ -77,5 +87,32 @@ export class PanelEventoComponent {
   /** Fecha de creación de la compra en hora de Bogotá (`CLAUDE.md` §4). */
   protected fechaLegible(creadaEnIso: string): string {
     return paraInputBogota(creadaEnIso).replace('T', ' ');
+  }
+
+  /**
+   * Pide la URL prefirmada del `.xlsx` (`PanelService.descargarReporte()`) y
+   * la abre en una pestaña nueva — la URL ya viene firmada por S3, así que
+   * no hace falta un segundo `fetch` ni encabezado `Authorization`. Un
+   * fallo se muestra como mensaje de error sin romper el resto del panel
+   * (sigue siendo mayormente de solo lectura).
+   */
+  protected async descargarReporte(): Promise<void> {
+    const eventoId = this.eventoIdSignal();
+    if (!eventoId || this.descargandoReporte()) {
+      return;
+    }
+
+    this.descargandoReporte.set(true);
+    this.errorReporte.set(null);
+
+    const resultado = await this.panelService.descargarReporte(eventoId);
+
+    if (resultado.exito) {
+      window.open(resultado.url, '_blank');
+    } else {
+      this.errorReporte.set(resultado.error);
+    }
+
+    this.descargandoReporte.set(false);
   }
 }

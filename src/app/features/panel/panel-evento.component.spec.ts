@@ -44,9 +44,12 @@ function configurarPrueba(opciones: {
   detalle?: DetallePanel | null;
   errorDetalle?: boolean;
   cargarDetalleMock?: ReturnType<typeof vi.fn>;
+  descargarReporteMock?: ReturnType<typeof vi.fn>;
 }) {
   const cargarMisEventosMock = vi.fn().mockResolvedValue(undefined);
   const cargarDetalleMock = opciones.cargarDetalleMock ?? vi.fn().mockResolvedValue(undefined);
+  const descargarReporteMock =
+    opciones.descargarReporteMock ?? vi.fn().mockResolvedValue({ exito: true, url: 'https://s3.amazonaws.com/reporte' });
 
   TestBed.configureTestingModule({
     providers: [
@@ -58,13 +61,14 @@ function configurarPrueba(opciones: {
           errorDetalle: () => opciones.errorDetalle ?? false,
           cargarMisEventos: cargarMisEventosMock,
           cargarDetalle: cargarDetalleMock,
+          descargarReporte: descargarReporteMock,
         },
       },
     ],
   });
 
   const fixture: ComponentFixture<PanelEventoComponent> = TestBed.createComponent(PanelEventoComponent);
-  return { fixture, cargarMisEventosMock, cargarDetalleMock };
+  return { fixture, cargarMisEventosMock, cargarDetalleMock, descargarReporteMock };
 }
 
 /**
@@ -136,12 +140,54 @@ describe('PanelEventoComponent', () => {
     expect(tarjetas[1].textContent).toContain('1'); // faltan por ingresar
   });
 
-  it('no muestra ningún botón de acción que mute estado (pantalla 100% de solo lectura)', async () => {
+  it('el único botón de la pantalla es "Descargar reporte" — ninguna acción muta el evento', async () => {
     const { fixture } = configurarPrueba({ misEventos: [eventoPropio], detalle: detalleEjemplo });
 
     await activarConSlug(fixture, 'concierto-jazz');
 
-    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    const botones = fixture.nativeElement.querySelectorAll('button');
+    expect(botones.length).toBe(1);
+    expect(botones[0].textContent).toContain('Descargar reporte');
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
+  });
+
+  describe('descargarReporte', () => {
+    it('abre la URL prefirmada en una pestaña nueva al hacer click', async () => {
+      const descargarReporteMock = vi.fn().mockResolvedValue({ exito: true, url: 'https://s3.amazonaws.com/reporte' });
+      const abrirVentanaSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const { fixture } = configurarPrueba({
+        misEventos: [eventoPropio],
+        detalle: detalleEjemplo,
+        descargarReporteMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      fixture.nativeElement.querySelector('button').click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(descargarReporteMock).toHaveBeenCalledWith('evt-1');
+      expect(abrirVentanaSpy).toHaveBeenCalledWith('https://s3.amazonaws.com/reporte', '_blank');
+      abrirVentanaSpy.mockRestore();
+    });
+
+    it('muestra un mensaje de error sin romper el resto del panel si la generación falla', async () => {
+      const descargarReporteMock = vi.fn().mockResolvedValue({ exito: false, error: 'No se pudo generar el reporte' });
+      const { fixture } = configurarPrueba({
+        misEventos: [eventoPropio],
+        detalle: detalleEjemplo,
+        descargarReporteMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      fixture.nativeElement.querySelector('button').click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).toContain('No se pudo generar el reporte');
+      // El resto del panel sigue mostrándose — no se rompe la pantalla.
+      expect(fixture.nativeElement.textContent).toContain('Concierto de jazz');
+      expect(fixture.nativeElement.textContent).toContain('Ana Pérez');
+    });
   });
 });
