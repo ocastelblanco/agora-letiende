@@ -92,11 +92,23 @@ interface EtapaBoleteriaEntrada {
 }
 
 /**
- * Valida el arreglo de etapas y genera `etapaId` en el backend para cada una
- * — mismo criterio que `eventoId` (A08): ningún identificador se acepta del
- * cliente. Devuelve `null` si el arreglo es inválido.
+ * Valida el arreglo de etapas. El `etapaId` de cada etapa se decide así
+ * (TODO.md Tarea 2 — antes generaba `randomUUID()` siempre, huerfanizando
+ * `compras`/`boletas` en cada `PUT` que incluyera `etapas`): si `idsExistentes`
+ * fue provisto (solo ocurre en `actualizarEvento()`, nunca en `crearEvento()`)
+ * y la etapa trae un `etapaId` de tipo `string` no vacío que además pertenece
+ * a ese conjunto, se reutiliza tal cual — es una llave foránea estable, no un
+ * identificador de autorización, así que preservar el que ya trae el cliente
+ * es seguro siempre que se valide su pertenencia al evento. En cualquier otro
+ * caso (sin `idsExistentes`, sin `etapaId` en el payload, o un `etapaId` que
+ * no coincide con ninguno de los actuales del evento — dato inventado u
+ * obsoleto) se genera uno nuevo con `randomUUID()`. Devuelve `null` si el
+ * arreglo es inválido.
  */
-function normalizarEtapas(valor: unknown): EtapaBoleteriaEntrada[] | null {
+function normalizarEtapas(
+  valor: unknown,
+  idsExistentes?: ReadonlySet<string>,
+): EtapaBoleteriaEntrada[] | null {
   if (!Array.isArray(valor) || valor.length === 0) {
     return null;
   }
@@ -115,8 +127,16 @@ function normalizarEtapas(valor: unknown): EtapaBoleteriaEntrada[] | null {
     ) {
       return null;
     }
+    const etapaIdRecibido = registro['etapaId'];
+    const etapaId =
+      idsExistentes &&
+      typeof etapaIdRecibido === 'string' &&
+      etapaIdRecibido.length > 0 &&
+      idsExistentes.has(etapaIdRecibido)
+        ? etapaIdRecibido
+        : randomUUID();
     etapas.push({
-      etapaId: randomUUID(),
+      etapaId,
       nombre: registro['nombre'],
       precio: registro['precio'],
       cierraEn: registro['cierraEn'],
@@ -297,7 +317,29 @@ async function actualizarEvento(
     agregar('plazoComprobanteMinutos', '#plazoComprobanteMinutos', datos['plazoComprobanteMinutos']);
   }
   if (datos['etapas'] !== undefined) {
-    const etapas = normalizarEtapas(datos['etapas']);
+    // Lee el evento actual solo en este caso (no incondicional al inicio de
+    // la función: sería una lectura extra innecesaria para un PUT que no
+    // toca etapas) para poder validar a cuáles etapaId ya existentes puede
+    // aferrarse el payload del cliente — ver normalizarEtapas() (TODO.md
+    // Tarea 2). Mismo patrón que obtenerPanelEvento()/generarReporteEvento()
+    // en reportes.ts.
+    const eventoActual = await documentoDynamoDB.send(
+      new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
+    );
+    if (!eventoActual.Item) {
+      return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+    }
+    const etapasActuales = Array.isArray(eventoActual.Item['etapas'])
+      ? (eventoActual.Item['etapas'] as unknown[])
+      : [];
+    const idsExistentes = new Set<string>(
+      etapasActuales.flatMap((etapa) => {
+        const id = (etapa as Record<string, unknown> | null)?.['etapaId'];
+        return typeof id === 'string' ? [id] : [];
+      }),
+    );
+
+    const etapas = normalizarEtapas(datos['etapas'], idsExistentes);
     if (!etapas) {
       return respuestaJson(400, { mensaje: 'etapas inválidas' });
     }
