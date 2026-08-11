@@ -65,6 +65,17 @@ export const routes: Routes = [
     title: 'Venta en efectivo — Ágora',
   },
   {
+    path: 'evento/:slug/panel',
+    loadComponent: () =>
+      import('./features/panel/panel-evento.component').then((m) => m.PanelEventoComponent),
+    canActivate: [guardiaRol],
+    // Mismo criterio que /evento/:slug/puerta y /evento/:slug/efectivo:
+    // ruta dinámica por evento, no una sección fija de SECCIONES_NAVEGACION
+    // (esa es /panel, el selector, TODO.md Tarea 2).
+    data: { rolMinimo: 'productor' },
+    title: 'Panel — Ágora',
+  },
+  {
     path: 'comprobante/:token',
     loadComponent: () =>
       import('./features/evento/comprobante/comprobante.component').then(
@@ -124,6 +135,14 @@ export const routes: Routes = [
     canActivate: [guardiaRol],
     data: { rolMinimo: rolMinimoDe('/efectivo') },
     title: 'Venta en efectivo — Ágora',
+  },
+  {
+    path: 'panel',
+    loadComponent: () =>
+      import('./features/panel/seleccion-panel.component').then((m) => m.SeleccionPanelComponent),
+    canActivate: [guardiaRol],
+    data: { rolMinimo: rolMinimoDe('/panel') },
+    title: 'Panel — Ágora',
   },
   {
     path: 'admin/aprobaciones',

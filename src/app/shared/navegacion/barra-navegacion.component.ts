@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { PanelService } from '../../core/api/panel.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
 import { cumpleRolMinimo } from '../../core/models/usuario.model';
 import { SECCIONES_NAVEGACION } from './secciones-navegacion';
@@ -28,6 +29,7 @@ import { SECCIONES_NAVEGACION } from './secciones-navegacion';
 })
 export class BarraNavegacionComponent {
   private readonly servicioAuth = inject(ServicioAuth);
+  private readonly panelService = inject(PanelService);
   private readonly router = inject(Router);
 
   protected readonly usuarioActual = this.servicioAuth.usuarioActual;
@@ -59,10 +61,18 @@ export class BarraNavegacionComponent {
     this.menuAbierto.set(!this.menuAbierto());
   }
 
-  /** Cierra sesión (primer consumidor real de `ServicioAuth.cerrarSesion()`) y vuelve a `/login`. */
+  /**
+   * Cierra sesión (primer consumidor real de `ServicioAuth.cerrarSesion()`)
+   * y vuelve a `/login`. También limpia `PanelService` (`detalle()` guarda
+   * datos personales de clientes) — `CLAUDE.md` §5, A07: "limpia todo el
+   * estado reactivo (Signals) del cliente". No se limpia dentro de
+   * `ServicioAuth` porque `PanelService` ya lo inyecta a él, y la inyección
+   * inversa crearía una dependencia circular en el DI de Angular.
+   */
   protected async cerrarSesion(): Promise<void> {
     this.cerrarMenu();
     await this.servicioAuth.cerrarSesion();
+    this.panelService.limpiar();
     await this.router.navigateByUrl('/login');
   }
 }

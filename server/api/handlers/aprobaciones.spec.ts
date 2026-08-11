@@ -26,7 +26,13 @@ vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }
 vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
 vi.mock('../lib/enlaces-magicos', () => ({ hashearToken: hashearTokenMock }));
-vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+// exigirRol se mockea, pero tieneAccesoAlEvento se importa real (mismo
+// criterio que aforo.ts abajo) — es una función pura sin dependencias, y las
+// pruebas de listarPendientes() verifican su comportamiento real.
+vi.mock('../lib/autorizacion', async () => {
+  const real = await vi.importActual<typeof import('../lib/autorizacion')>('../lib/autorizacion');
+  return { ...real, exigirRol: exigirRolMock };
+});
 vi.mock('../services/notificaciones', () => ({
   CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
     this.enviar = enviarMock;
@@ -71,6 +77,13 @@ const permisosProductor = {
   email: 'productor@letiende.co',
   nombre: 'Productor',
   rol: 'productor' as const,
+  activo: true,
+};
+
+const permisosAdministrador = {
+  email: 'admin@letiende.co',
+  nombre: 'Admin',
+  rol: 'administrador' as const,
   activo: true,
 };
 
@@ -164,6 +177,31 @@ describe('GET /api/aprobaciones (autenticado)', () => {
 
     expect(JSON.parse(respuesta.body ?? 'null')).toEqual([]);
   });
+
+  it('con bypass de administrador, ve las compras en_revision de todos los eventos aunque no esté en productores', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosAdministrador });
+    sendMock.mockResolvedValueOnce({
+      Items: [
+        { eventoId: 'evt-propio', nombre: 'Concierto de jazz', productores: ['otro@letiende.co'] },
+        { eventoId: 'evt-ajeno', nombre: 'Otro evento', productores: ['alguien-mas@letiende.co'] },
+      ],
+    });
+    sendMock.mockResolvedValueOnce({
+      Items: [{ compraId: 'compra-1', cantidad: 2, montoTotal: 90000, creadaEn: '2026-08-08T00:00:00.000Z' }],
+    });
+    sendMock.mockResolvedValueOnce({
+      Items: [{ compraId: 'compra-2', cantidad: 1, montoTotal: 45000, creadaEn: '2026-08-08T00:00:00.000Z' }],
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '[]');
+    expect(cuerpo).toHaveLength(2);
+    // Query sobre ambos eventos, ninguno filtrado — a diferencia de un
+    // productor sin asignar (caso anterior, lista vacía).
+    expect(sendMock).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('validación del token (compartida por los tres endpoints de enlace mágico)', () => {
@@ -242,9 +280,12 @@ describe('POST /api/aprobaciones/:token/aprobar', () => {
     expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
     const comandoUpdate = sendMock.mock.calls[1]?.[0];
     expect(comandoUpdate.input).toMatchObject({
-      UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+      UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
       ConditionExpression: 'estado = :enRevision',
     });
+    // Defensa adicional: aunque comprobantes.ts ya debería haberlo quitado,
+    // un REMOVE de más nunca falla (MEMORY.md §7).
+    expect(comandoUpdate.input.UpdateExpression).toContain('REMOVE expiraEn');
   });
 
   it('emite las boletas con emitirBoletas (sin reimplementar boleteria.ts) y notifica al cliente con un enlace por boleta', async () => {
@@ -349,6 +390,13 @@ describe('POST /api/aprobaciones/:token/rechazar', () => {
       'compra_rechazada',
       { nombreEvento: 'Concierto de jazz', cantidad: 2, motivo: 'El comprobante no corresponde al monto' },
     );
+    const comandoUpdate = sendMock.mock.calls[1]?.[0];
+    expect(comandoUpdate.input).toMatchObject({
+      UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+      ConditionExpression: 'estado = :enRevision',
+    });
+    // Defensa adicional, mismo criterio que aprobarCompra (MEMORY.md §7).
+    expect(comandoUpdate.input.UpdateExpression).toContain('REMOVE expiraEn');
   });
 
   it('funciona sin motivo', async () => {

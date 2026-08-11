@@ -68,6 +68,10 @@ const entradas = [
   // cambia el motivo de empaquetado: esbuild ya resuelve ese import interno
   // sin problema.
   { entrada: 'dist-server/api/handlers/ventas-efectivo.js', salida: `${OUT_DIR}/ventas-efectivo.js` },
+  // reportes.ts (TODO.md Tarea 2, Panel de control básico) depende de
+  // firebase-admin (vía exigirRol) y documentoDynamoDB — mismo motivo de
+  // bundle que aprobaciones.ts/ventas-efectivo.ts.
+  { entrada: 'dist-server/api/handlers/reportes.js', salida: `${OUT_DIR}/reportes.js` },
 ];
 
 for (const { entrada, salida } of entradas) {

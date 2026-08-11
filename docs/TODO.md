@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (09/08/2026, continuación):** el usuario aprobó el **PR #21** (Venta en efectivo) como comentario en el propio PR ("Aprobado. Actualizar motor JIT y documentación como último commit antes de fusión"), mismo criterio ya usado varias veces: recalcular el motor JIT no espera al merge, solo a la validación/aprobación. Venta en efectivo (roadmap #14) pasa a completada (`MEMORY.md` §2). El slot libre lo ocupa **Panel de control básico** (roadmap #16, único ítem restante del backlog v1, ahora desbloqueado porque depende de Validación en puerta #13, ya fusionada) — especificación completa escrita, sin implementar todavía. Dominio personalizado (Tarea 1, roadmap #17) sigue activa sin cambios, todavía sin empezar.
+**Prioridad de selección aplicada (10/08/2026):** el PR #21 (Venta en efectivo) ya se fusionó a `main`. **Panel de control básico (Tarea 2) quedó implementada de punta a punta en esta sesión** — endpoint de métricas, selector `/panel`, `PanelEventoComponent`, infraestructura y las dos decisiones de diseño que la especificación dejaba abiertas (ver `MEMORY.md` §9 para el detalle completo, incluyendo un hallazgo real de una verificación independiente: `porEtapa` podía reportar $0 silenciosamente para eventos editados tras la venta, corregido en la misma sesión). Todos los ítems del DoD de Tarea 2 están marcados salvo la fusión misma — **PR #22 abierto, sin fusionar**, a la espera de validación del usuario en staging (mismo criterio de todas las tareas anteriores: no se recalcula el motor JIT ni se mueve a `MEMORY.md` §2 Completado hasta que el usuario valide/apruebe). Dominio personalizado (Tarea 1, roadmap #17) sigue activa sin cambios, todavía sin empezar.
 
 ---
 
@@ -74,15 +74,15 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 4. `PanelEventoComponent`: tabla de Angular Material con el patrón ya establecido, sin acción alguna que mute estado.
 
 **Definition of done:**
-- [ ] `GET /api/eventos/:eventoId/panel` responde solo a `exigirRol('productor')` **y** verificación de asignación al evento (o `administrador`) — nunca al rol a secas
-- [ ] Las métricas se calculan con `Query` sobre los GSIs ya provisionados (`eventoId-estado-index`, `eventoId-creadaEn-index`) — nunca `Scan`
-- [ ] No incluye exportación de archivo (XLSX/PDF) — explícitamente fuera de alcance, diferido a roadmap #21 (v2)
-- [ ] `docs/tech-specs.md` §5.1 corregido para reflejar que el endpoint de reportes/exportación es v2
-- [ ] El gap de `agora-auditoria` sin usar queda documentado en `MEMORY.md`, no resuelto a medias dentro de esta tarea
-- [ ] `npm run test:api` y `npm run test` en verde
-- [ ] `npm run build` sin errores
-- [ ] Auditoría de costos sin coincidencias nuevas
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+- [x] `GET /api/eventos/:eventoId/panel` responde solo a `exigirRol('productor')` **y** verificación de asignación al evento (o `administrador`) — nunca al rol a secas
+- [x] Las métricas se calculan con `Query` sobre los GSIs ya provisionados (`eventoId-estado-index`, `eventoId-creadaEn-index`) — nunca `Scan` (el único `Scan` de esta tarea vive en el endpoint *selector* `GET /api/eventos/panel`, sobre `agora-eventos`, mismo precedente ya establecido por `aprobaciones.ts`/`eventos.ts` — el DoD de "nunca Scan" aplica al endpoint de métricas, que sí cumple)
+- [x] No incluye exportación de archivo (XLSX/PDF) — explícitamente fuera de alcance, diferido a roadmap #21 (v2)
+- [x] `docs/tech-specs.md` §5.1 corregido para reflejar que el endpoint de reportes/exportación es v2
+- [x] El gap de `agora-auditoria` sin usar queda documentado en `MEMORY.md`, no resuelto a medias dentro de esta tarea
+- [x] `npm run test:api` y `npm run test` en verde
+- [x] `npm run build` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas
+- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (PR #22)
 
 ---
 

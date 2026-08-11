@@ -239,12 +239,17 @@ async function confirmarComprobante(token: string | undefined): Promise<APIGatew
   const tokenAprobacionExpiraEn = Math.floor(Date.now() / 1000) + SEGUNDOS_EXPIRACION_TOKEN_APROBACION;
 
   try {
+    // REMOVE expiraEn: la compra sale de "esperando_comprobante" (el único
+    // estado gobernado por ese TTL de plazo corto) hacia "en_revision", que
+    // ya vive bajo tokenAprobacionExpiraEn (24 h). Si el atributo de TTL
+    // queda pegado, DynamoDB termina borrando compras ya aprobadas
+    // (bug real verificado en staging, MEMORY.md §7).
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
         UpdateExpression:
-          'SET estado = :enRevision, tokenAprobacionHash = :tokenHash, tokenAprobacionExpiraEn = :tokenExpira',
+          'SET estado = :enRevision, tokenAprobacionHash = :tokenHash, tokenAprobacionExpiraEn = :tokenExpira REMOVE expiraEn',
         ConditionExpression: 'estado = :esperando',
         ExpressionAttributeValues: {
           ':enRevision': 'en_revision',

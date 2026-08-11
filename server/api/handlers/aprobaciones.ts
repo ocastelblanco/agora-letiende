@@ -13,7 +13,7 @@ import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { ErrorAforo, confirmarSillas, liberarSillas } from '../services/aforo';
 import { emitirBoletas } from '../services/boleteria';
 import { CanalCorreoSes } from '../services/notificaciones';
-import { exigirRol } from '../lib/autorizacion';
+import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 
 const canalNotificacion = new CanalCorreoSes();
@@ -117,25 +117,25 @@ async function validarTokenAprobacion(token: string | undefined): Promise<Result
 /**
  * `GET /api/aprobaciones` (`exigirRol('productor')`) — solo lectura: lista
  * las compras `en_revision` de los eventos donde el correo autenticado está
- * en `productores`, nunca por rol a secas (`CLAUDE.md` §5, A01). No expone
- * un token de acción por fila — el token de cada compra nunca se guarda en
- * claro (A07), así que la revisión/resolución sigue pasando por el enlace
- * que el productor ya recibió por correo (`aviso_comprobante`); esta lista
- * es un panorama, no un punto de acción directo (decisión de alcance
- * explícita, `TODO.md` Tarea 2).
+ * en `productores` (`tieneAccesoAlEvento`, `lib/autorizacion.ts` — misma
+ * función que usa `handlers/reportes.ts`, `TODO.md` Tarea 2), nunca por rol
+ * a secas (`CLAUDE.md` §5, A01). No expone un token de acción por fila — el
+ * token de cada compra nunca se guarda en claro (A07), así que la
+ * revisión/resolución sigue pasando por el enlace que el productor ya
+ * recibió por correo (`aviso_comprobante`); esta lista es un panorama, no un
+ * punto de acción directo (decisión de alcance explícita, `TODO.md` Tarea 2).
  */
 async function listarPendientes(evento: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const autorizacion = await exigirRol(evento, 'productor');
   if (!autorizacion.autorizado) {
     return autorizacion.respuesta;
   }
-  const email = autorizacion.permisos.email;
 
   const eventosResultado = await documentoDynamoDB.send(
     new ScanCommand({ TableName: process.env['TABLA_EVENTOS'] }),
   );
-  const eventosPropios = (eventosResultado.Items ?? []).filter(
-    (item) => Array.isArray(item['productores']) && item['productores'].includes(email),
+  const eventosPropios = (eventosResultado.Items ?? []).filter((item) =>
+    tieneAccesoAlEvento(item, autorizacion.permisos),
   );
 
   const listas = await Promise.all(
@@ -213,11 +213,15 @@ async function aprobarCompra(token: string | undefined): Promise<APIGatewayProxy
   const { compra } = validacion;
 
   try {
+    // REMOVE expiraEn: defensa adicional, mismo criterio que
+    // comprobantes.ts — comprobantes.ts ya lo quita al pasar a en_revision,
+    // pero un REMOVE sobre un atributo inexistente es un no-op, así que no
+    // hay riesgo de romper el camino feliz (MEMORY.md §7).
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+        UpdateExpression: 'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
         ConditionExpression: 'estado = :enRevision',
         ExpressionAttributeValues: {
           ':aprobada': 'aprobada',
@@ -313,11 +317,12 @@ async function rechazarCompra(
       : undefined;
 
   try {
+    // REMOVE expiraEn: misma defensa adicional que aprobarCompra arriba.
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora',
+        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
         ConditionExpression: 'estado = :enRevision',
         ExpressionAttributeValues: {
           ':rechazada': 'rechazada',

@@ -31,6 +31,12 @@ export const SECCIONES_NAVEGACION: SeccionNavegacion[] = [
   { etiqueta: 'Cartelera', ruta: '/', rolMinimo: 'portero' },
   { etiqueta: 'Efectivo', ruta: '/efectivo', rolMinimo: 'portero' },
   { etiqueta: 'Puerta', ruta: '/puerta', rolMinimo: 'portero' },
+  // 'Panel' va ANTES de 'Aprobaciones' a propósito (TODO.md Tarea 2): mismo
+  // criterio de `findLast` explicado arriba para 'Efectivo'/'Puerta' —
+  // 'Aprobaciones' sigue siendo la última sección de nivel 'productor', así
+  // que el destino tras iniciar sesión de un productor no cambia por
+  // agregar esta sección.
+  { etiqueta: 'Panel', ruta: '/panel', rolMinimo: 'productor' },
   { etiqueta: 'Aprobaciones', ruta: '/admin/aprobaciones', rolMinimo: 'productor' },
   { etiqueta: 'Eventos', ruta: '/admin/eventos', rolMinimo: 'administrador' },
   { etiqueta: 'Usuarios', ruta: '/admin/usuarios', rolMinimo: 'administrador' },

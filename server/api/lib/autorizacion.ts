@@ -43,3 +43,20 @@ export async function exigirRol(
 
   return { autorizado: true, permisos };
 }
+
+/**
+ * `true` si `email` está en el campo `productores` del evento, o si `rol` es
+ * `administrador` (bypass, CLAUDE.md §5 A01) — única función que resuelve
+ * "¿este productor está asignado a este evento puntual?", para que ningún
+ * handler nuevo repita esta comparación ad hoc (`listarPendientes()` en
+ * `aprobaciones.ts` y `handlers/reportes.ts`, TODO.md Tarea 2).
+ */
+export function tieneAccesoAlEvento(
+  eventoItem: Record<string, unknown>,
+  permisos: PermisosUsuario,
+): boolean {
+  if (permisos.rol === 'administrador') {
+    return true;
+  }
+  return Array.isArray(eventoItem['productores']) && eventoItem['productores'].includes(permisos.email);
+}
