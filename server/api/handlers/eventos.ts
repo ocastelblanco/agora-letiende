@@ -104,6 +104,13 @@ interface EtapaBoleteriaEntrada {
  * no coincide con ninguno de los actuales del evento — dato inventado u
  * obsoleto) se genera uno nuevo con `randomUUID()`. Devuelve `null` si el
  * arreglo es inválido.
+ *
+ * Un `etapaId` recibido solo se reutiliza si además no fue ya asignado a
+ * una etapa ANTERIOR de este mismo payload (`idsYaAsignados`) — sin este
+ * control, dos filas del payload con el mismo `etapaId` (bug del cliente o
+ * payload manipulado a mano) duplicarían la identidad de dos etapas
+ * distintas, rompiendo cualquier agregación que agrupe por `etapaId`
+ * (`reportes.ts`, `porEtapa`).
  */
 function normalizarEtapas(
   valor: unknown,
@@ -114,6 +121,7 @@ function normalizarEtapas(
   }
 
   const etapas: EtapaBoleteriaEntrada[] = [];
+  const idsYaAsignados = new Set<string>();
   for (const item of valor) {
     if (typeof item !== 'object' || item === null) {
       return null;
@@ -132,9 +140,11 @@ function normalizarEtapas(
       idsExistentes &&
       typeof etapaIdRecibido === 'string' &&
       etapaIdRecibido.length > 0 &&
-      idsExistentes.has(etapaIdRecibido)
+      idsExistentes.has(etapaIdRecibido) &&
+      !idsYaAsignados.has(etapaIdRecibido)
         ? etapaIdRecibido
         : randomUUID();
+    idsYaAsignados.add(etapaId);
     etapas.push({
       etapaId,
       nombre: registro['nombre'],

@@ -299,6 +299,28 @@ describe('handler de /api/eventos', () => {
         expect(etapaEnviada.etapaId).not.toBe('etapa-inventada');
       });
 
+      it('dos etapas del payload que reenvían el mismo etapaId existente no terminan con la misma identidad', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            etapas: [
+              { ...etapaValida, etapaId: 'et1' },
+              { ...etapaValida, nombre: 'General', etapaId: 'et1' },
+            ],
+          },
+        });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        const etapasEnviadas = comandoUpdate.input.ExpressionAttributeValues[':etapas'];
+        expect(etapasEnviadas[0].etapaId).toBe('et1');
+        expect(etapasEnviadas[1].etapaId).not.toBe('et1');
+        expect(typeof etapasEnviadas[1].etapaId).toBe('string');
+      });
+
       it('responde 404 y no llega al UpdateCommand si el eventoId no existe', async () => {
         sendMock.mockResolvedValueOnce({ Item: undefined });
 
