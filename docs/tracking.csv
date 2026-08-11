@@ -84,3 +84,5 @@ Backend,10/08/2026 18:20,10/08/2026 18:42,0:22:00,AI,Sonnet 5,Fix REMOVE expiraE
 Backend,10/08/2026 19:26,10/08/2026 19:42,0:16:00,AI,Sonnet 5,Investigacion en vivo del bug de datos reportado por el usuario inspeccion directa de DynamoDB en staging con aws-mcp para diagnosticar expiraEn TTL,Claude Code,cli,medium
 Specs definition,10/08/2026 20:15,10/08/2026 20:35,0:20:00,AI,Sonnet 5,Cierre de sesion tras fusion del PR 22 cierre del PR 23 redundante y recalculo del motor JIT con especificacion completa de Exportacion XLSX,Claude Code,cli,medium
 Backend,11/08/2026 11:35,11/08/2026 12:10,0:35:00,AI,Sonnet 5,Implementacion completa de exportacion de reportes en XLSX endpoint IAM S3 prefirmado boton de descarga y verificacion arquitectonica,Claude Code,cli,high
+Backend,11/08/2026 12:12,11/08/2026 12:25,0:13:00,AI,Sonnet 5,Ajuste de columnas del reporte XLSX quita total de compra renombra Valor agrega ID de compra para agrupar,Claude Code,cli,low
+Specs definition,11/08/2026 12:25,11/08/2026 12:52,0:27:00,AI,Sonnet 5,Recalculo del motor JIT y actualizacion de documentacion tras ajustes del reporte XLSX PR 25 pendiente de fusion,Claude Code,cli,medium
