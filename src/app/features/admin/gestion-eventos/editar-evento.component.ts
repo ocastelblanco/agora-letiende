@@ -387,6 +387,25 @@ export class EditarEventoComponent {
 
       if (resultado.exito) {
         this.snackBar.open('Evento actualizado correctamente.', 'Cerrar', { duration: 4000 });
+        // Sincroniza los etapaId con la respuesta del servidor (ALL_NEW):
+        // toda etapa nueva (etapaId vacío en el payload) recibe aquí el
+        // etapaId real que le asignó normalizarEtapas() en el backend. Sin
+        // esto, un segundo guardar() en la misma sesión de edición volvería
+        // a enviarla como "nueva" y el backend le generaría OTRO etapaId
+        // distinto, huerfanizando cualquier venta ya asociada al primero —
+        // el mismo bug que esta corrección existe para eliminar, reaparecido
+        // en una sesión de edición con guardados sucesivos. Se copian solo
+        // los etapaId por índice (no se llama precargarFormulario() completo)
+        // porque el backend conserva el orden del arreglo recibido
+        // (normalizarEtapas() itera `for (const item of valor)` sin
+        // reordenar) y así se evita reprocesar fechas/medios de pago que ya
+        // están correctos en el formulario tras un guardado exitoso.
+        this.etapas.controls.forEach((grupo, indice) => {
+          const etapaActualizada = resultado.evento.etapas[indice];
+          if (etapaActualizada) {
+            grupo.controls.etapaId.setValue(etapaActualizada.etapaId);
+          }
+        });
       } else {
         this.snackBar.open(resultado.error, 'Cerrar', { duration: 6000 });
       }
