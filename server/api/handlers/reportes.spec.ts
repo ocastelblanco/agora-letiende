@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as XLSX from 'xlsx';
 
 const { sendMock, exigirRolMock, clienteS3SendMock, getSignedUrlMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),
@@ -432,22 +433,33 @@ describe('GET /api/eventos/:eventoId/reportes', () => {
     );
     expect(Buffer.isBuffer(comandoSubida.input.Body)).toBe(true);
 
-    // getSignedUrl firma sobre la misma key recién subida, con vida corta.
+    // getSignedUrl firma sobre la misma key recién subida, con vida corta,
+    // y fuerza un nombre de archivo legible (`reporte-{slug}.xlsx`) en vez
+    // del UUID interno de la key (defecto 1 de la revisión de arquitectura).
     const [, comandoDescarga, opciones] = getSignedUrlMock.mock.calls[0] as [
       unknown,
-      { input: { Key: string } },
+      { input: { Key: string; ResponseContentDisposition?: string } },
       { expiresIn: number },
     ];
     expect(comandoDescarga.input.Key).toBe(comandoSubida.input.Key);
+    expect(comandoDescarga.input.ResponseContentDisposition).toBe(
+      'attachment; filename="reporte-concierto-jazz.xlsx"',
+    );
     expect(opciones.expiresIn).toBe(900);
   });
 
-  it('omite una boleta sin compra aprobada correspondiente, sin inventar datos de cliente', async () => {
+  it('emite una fila con "N/D" en las columnas de la compra si la boleta no tiene compra aprobada correspondiente, sin descartarla', async () => {
+    // Defecto 2 de la revisión de arquitectura: antes esta boleta huérfana
+    // se descartaba en silencio (`return []`), dejando el total de filas
+    // del .xlsx por debajo de `totalBoletas` sin ninguna señal de por qué.
     exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
     sendMock
       .mockResolvedValueOnce({ Item: eventoItem })
       .mockResolvedValueOnce({
-        Items: [...boletasParaReporte, { boletaId: 'b-huerfana', compraId: 'c-inexistente', etapaId: 'et-1', valorUnitario: 45000, estado: 'valida' }],
+        Items: [
+          ...boletasParaReporte,
+          { boletaId: 'b-huerfana', compraId: 'c-inexistente', etapaId: 'et-1', valorUnitario: 45000, estado: 'valida' },
+        ],
       })
       .mockResolvedValueOnce({ Items: comprasAprobadas });
     clienteS3SendMock.mockResolvedValueOnce({});
@@ -455,9 +467,24 @@ describe('GET /api/eventos/:eventoId/reportes', () => {
     const respuesta = await invocarReportes('evt-1', 'xlsx');
 
     expect(respuesta.statusCode).toBe(200);
-    // No lanza ni falla — la boleta huérfana simplemente no aparece en la
-    // hoja generada (verificado indirectamente: la subida a S3 sí ocurre).
-    expect(clienteS3SendMock).toHaveBeenCalledTimes(1);
+    const comandoSubida = clienteS3SendMock.mock.calls[0]?.[0] as { input: { Body: Buffer } };
+    const libro = XLSX.read(comandoSubida.input.Body, { type: 'buffer' });
+    const filas = XLSX.utils.sheet_to_json(libro.Sheets['Boletas']!) as Record<string, unknown>[];
+
+    // El número de filas siempre coincide con el número real de boletas del
+    // evento (4 = 3 normales + 1 huérfana) — nunca desaparece una fila.
+    expect(filas).toHaveLength(4);
+    const filaHuerfana = filas.find((fila) => fila['Cliente'] === 'N/D');
+    expect(filaHuerfana).toMatchObject({
+      Cliente: 'N/D',
+      Teléfono: 'N/D',
+      Correo: 'N/D',
+      'Fecha y hora de compra': 'N/D',
+      'Medio de pago': 'N/D',
+      'Valor unitario': 45000,
+      'Etapa de boletería': 'Preventa',
+      'Total de la compra': 'N/D',
+    });
   });
 });
 

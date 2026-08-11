@@ -308,26 +308,25 @@ async function generarReporteEvento(
 
   // Una fila por boleta, no por compra (PRD.md §5.6) — unidas por
   // `compraId`. Una boleta sin compra aprobada correspondiente (dato
-  // inconsistente, no debería ocurrir en la práctica) se omite en vez de
-  // inventar datos de cliente en el reporte.
-  const filas = boletas.flatMap((boleta) => {
+  // inconsistente, no debería ocurrir en la práctica) NUNCA se descarta:
+  // se emite igual, con las columnas que dependen de la compra marcadas
+  // como 'N/D'. Así el número de filas del .xlsx siempre coincide con
+  // `totalBoletas` (el mismo total que muestra el panel), y cualquier
+  // inconsistencia de datos queda visible en el propio reporte en vez de
+  // desaparecer en silencio.
+  const filas = boletas.map((boleta) => {
     const compra = comprasPorId.get(boleta.compraId);
-    if (!compra) {
-      return [];
-    }
-    return [
-      {
-        Cliente: compra.cliente?.nombre ?? '',
-        Teléfono: compra.cliente?.telefono ?? '',
-        Correo: compra.cliente?.correo ?? '',
-        'Fecha y hora de compra': fechaLegibleBogota(compra.creadaEn),
-        'Medio de pago': compra.medioPago ?? '',
-        'Valor unitario': boleta.valorUnitario,
-        'Etapa de boletería': nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada',
-        'Fecha y hora de ingreso': boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
-        'Total de la compra': compra.montoTotal,
-      },
-    ];
+    return {
+      Cliente: compra?.cliente?.nombre ?? 'N/D',
+      Teléfono: compra?.cliente?.telefono ?? 'N/D',
+      Correo: compra?.cliente?.correo ?? 'N/D',
+      'Fecha y hora de compra': compra ? fechaLegibleBogota(compra.creadaEn) : 'N/D',
+      'Medio de pago': compra?.medioPago ?? 'N/D',
+      'Valor unitario': boleta.valorUnitario,
+      'Etapa de boletería': nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada',
+      'Fecha y hora de ingreso': boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
+      'Total de la compra': compra?.montoTotal ?? 'N/D',
+    };
   });
 
   // Mismo patrón exacto que Babel (server/api/handlers/ventas.ts):
@@ -349,9 +348,19 @@ async function generarReporteEvento(
     }),
   );
 
+  // `ResponseContentDisposition` fuerza el nombre de archivo legible del
+  // reporte descargado (`reporte-{slug}.xlsx`) en vez del UUID interno de
+  // la `key` de S3 — el slug del evento ya es texto seguro para un nombre
+  // de archivo (kebab-case, sin espacios ni tildes, `handlers/eventos.ts`),
+  // así que no hace falta sanitizarlo aparte.
+  const nombreArchivo = `reporte-${eventoItem['slug'] ?? eventoId}.xlsx`;
   const url = await getSignedUrl(
     clienteS3,
-    new GetObjectCommand({ Bucket: process.env['BUCKET_COMPROBANTES'], Key: key }),
+    new GetObjectCommand({
+      Bucket: process.env['BUCKET_COMPROBANTES'],
+      Key: key,
+      ResponseContentDisposition: `attachment; filename="${nombreArchivo}"`,
+    }),
     { expiresIn: 900 },
   );
 
