@@ -91,10 +91,16 @@ export class PanelEventoComponent {
 
   /**
    * Pide la URL prefirmada del `.xlsx` (`PanelService.descargarReporte()`) y
-   * la abre en una pestaña nueva — la URL ya viene firmada por S3, así que
-   * no hace falta un segundo `fetch` ni encabezado `Authorization`. Un
-   * fallo se muestra como mensaje de error sin romper el resto del panel
-   * (sigue siendo mayormente de solo lectura).
+   * dispara la descarga con un `<a>` temporal — mismo patrón ya establecido
+   * en `EditarEventoComponent.descargarQr()`. No `window.open()`: si el
+   * navegador bloquea el popup, `window.open()` devuelve `null` sin ningún
+   * aviso y la descarga falla en silencio, sin que el usuario vea ningún
+   * error. No hace falta el atributo `download` ni un segundo `fetch`
+   * autenticado: la URL ya viene firmada por S3 con
+   * `ResponseContentDisposition: attachment` (`handlers/reportes.ts`), así
+   * que el propio navegador descarga el archivo con su nombre legible al
+   * navegar a esa URL. Un fallo se muestra como mensaje de error sin romper
+   * el resto del panel (sigue siendo mayormente de solo lectura).
    */
   protected async descargarReporte(): Promise<void> {
     const eventoId = this.eventoIdSignal();
@@ -108,7 +114,12 @@ export class PanelEventoComponent {
     const resultado = await this.panelService.descargarReporte(eventoId);
 
     if (resultado.exito) {
-      window.open(resultado.url, '_blank');
+      const enlace = document.createElement('a');
+      enlace.href = resultado.url;
+      enlace.rel = 'noopener';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
     } else {
       this.errorReporte.set(resultado.error);
     }

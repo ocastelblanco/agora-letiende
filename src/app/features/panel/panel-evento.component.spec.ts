@@ -152,9 +152,9 @@ describe('PanelEventoComponent', () => {
   });
 
   describe('descargarReporte', () => {
-    it('abre la URL prefirmada en una pestaña nueva al hacer click', async () => {
+    it('dispara la descarga con un <a> temporal al hacer click — no window.open (bloqueo de popups)', async () => {
       const descargarReporteMock = vi.fn().mockResolvedValue({ exito: true, url: 'https://s3.amazonaws.com/reporte' });
-      const abrirVentanaSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const clicSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
       const { fixture } = configurarPrueba({
         misEventos: [eventoPropio],
         detalle: detalleEjemplo,
@@ -167,8 +167,11 @@ describe('PanelEventoComponent', () => {
       fixture.detectChanges();
 
       expect(descargarReporteMock).toHaveBeenCalledWith('evt-1');
-      expect(abrirVentanaSpy).toHaveBeenCalledWith('https://s3.amazonaws.com/reporte', '_blank');
-      abrirVentanaSpy.mockRestore();
+      expect(clicSpy).toHaveBeenCalledTimes(1);
+      // El <a> se crea con la URL prefirmada como href y se remueve del DOM
+      // después del click — no queda un elemento huérfano.
+      expect(fixture.nativeElement.ownerDocument.querySelectorAll('a[href="https://s3.amazonaws.com/reporte"]').length).toBe(0);
+      clicSpy.mockRestore();
     });
 
     it('muestra un mensaje de error sin romper el resto del panel si la generación falla', async () => {
