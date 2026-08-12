@@ -46,7 +46,7 @@ Funciona, pero se rompe en cuatro puntos:
 |---|---|---|
 | **Cliente** | Cualquier persona que quiera asistir a un evento. No tiene cuenta ni la necesita. Llega desde un enlace, un código QR en un afiche o navegando la cartelera. | Entender rápido de qué se trata el evento y cuánto cuesta; comprar desde el celular sin registrarse; recibir su boleta en un canal que no se le pierda; tener certeza de que su compra quedó confirmada. |
 | **Portero** | Persona que recibe al público en la puerta el día del evento. Trabaja de pie, con prisa y con una fila esperando. | Validar una boleta en segundos; saber con claridad si es válida, si ya se usó o si no corresponde a ese evento; poder vender una boleta en efectivo en el momento a quien llegue sin comprar. |
-| **Productor** | Persona a cargo de un evento. Puede tener varios eventos activos a la vez y no siempre está frente a un computador. | Aprobar o rechazar comprobantes de pago sin fricción; ver en cualquier momento cuánto se ha vendido y cuánto queda; descargar la lista de asistentes para su propia gestión. |
+| **Productor** | Persona a cargo de un evento. Puede tener varios eventos activos a la vez y no siempre está frente a un computador. | Aprobar o rechazar comprobantes de pago sin fricción; ver en cualquier momento cuánto se ha vendido y cuánto queda; descargar la lista de asistentes para su propia gestión; ajustar ciertos parámetros operativos de sus propios eventos sin depender del administrador. |
 | **Administrador** | Integrante del equipo de Le Tiende con control total. | Crear y editar eventos con todos sus parámetros comerciales; gestionar quién tiene acceso y con qué rol; tener visibilidad completa de toda la operación de boletería. |
 
 **Jerarquía de permisos:** cada rol incluye todos los permisos del anterior. `portero` ⊂ `productor` ⊂ `administrador`.
@@ -57,10 +57,11 @@ Funciona, pero se rompe en cuatro puntos:
 | Vender boletas en efectivo | ✅ | ✅ | ✅ |
 | Aprobar comprobantes de pago | — | ✅ | ✅ |
 | Ver el panel de control y descargar reportes | — | ✅ | ✅ |
-| Crear y editar eventos | — | — | ✅ |
+| Editar campos operativos de sus propios eventos (máximo de boletas, plazo de comprobante, imagen, logo, descargar QR) | — | ✅ | ✅ |
+| Crear eventos, editar el resto de sus parámetros comerciales | — | — | ✅ |
 | Gestionar usuarios y sus roles | — | — | ✅ |
 
-Un `productor` ejerce sus permisos **solo sobre los eventos en los que está asignado como productor**. El `administrador` los ejerce sobre todos.
+Un `productor` ejerce sus permisos **solo sobre los eventos en los que está asignado como productor**; el resto de campos del evento los ve, pero de solo lectura. Un `portero` ejerce la venta en efectivo y la validación en puerta **solo sobre los eventos en los que está asignado como portero** — ambos perfiles suelen incluir personas ajenas al equipo permanente de Le Tiende, así que el acceso se limita explícitamente evento por evento, no por el rol a secas. El `administrador` ejerce sus permisos sobre todos los eventos. *(Ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 3-4; el código todavía no lo aplica al escribir esta actualización de `PRD.md`.)*
 
 ---
 
@@ -98,12 +99,12 @@ El administrador define, para cada evento:
 - Máximo de boletas por compra.
 - Medios de pago habilitados.
 - Plazo máximo para enviar el comprobante después de iniciada la compra (por defecto, 10 minutos).
-- Productor o productores a cargo (uno o varios; el administrador puede incluirse a sí mismo).
+- Productor o productores a cargo (uno o varios, obligatorio al menos uno; el administrador puede incluirse a sí mismo) y portero o porteros asignados (opcional, se pueden agregar luego al editar). Ambos se eligen de la lista de usuarios ya existentes en Ágora con ese rol — no se digitan por correo a mano, ya que el acceso de venta en efectivo y validación en puerta queda limitado exactamente a quienes se asignen aquí *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
 - Enlaces a redes sociales (opcional).
 
 Al crear el evento, el sistema genera automáticamente un **código QR con el enlace del evento**, descargable en formato vectorial y de imagen, para imprimir en afiches y volantes.
 
-El administrador puede editar cualquier dato del evento en cualquier momento.
+El administrador puede editar cualquier dato del evento en cualquier momento. Un productor asignado al evento puede editar únicamente el máximo de boletas por compra, el plazo del comprobante, la imagen y el logotipo, y descargar el código QR — el resto de los campos los ve de solo lectura *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 3)*.
 
 ### 5.3 Compra de boletas (v1)
 
@@ -162,7 +163,7 @@ Si el cliente no carga el comprobante dentro del plazo, la reserva se cancela y 
 
 ### 5.4 Venta en efectivo (v1)
 
-Cualquier integrante del equipo (portero, productor o administrador) puede registrar una venta en efectivo desde la página del evento: entra a **VENTA EN EFECTIVO**, ingresa los datos del cliente y confirma. El sistema emite las boletas de inmediato, sin pasar por comprobante ni aprobación. Sirve tanto para la venta presencial anticipada en la sede como para quien llega a la puerta el día del evento sin haber comprado.
+Cualquier integrante del equipo asignado al evento (portero, productor o administrador) puede registrar una venta en efectivo desde la página del evento: entra a **VENTA EN EFECTIVO**, ingresa los datos del cliente y confirma. El sistema emite las boletas de inmediato, sin pasar por comprobante ni aprobación. Sirve tanto para la venta presencial anticipada en la sede como para quien llega a la puerta el día del evento sin haber comprado. Un `portero` o `productor` solo ve, en el selector de eventos, aquellos en los que está asignado — no la lista completa de eventos publicados *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
 
 ### 5.5 Validación en la puerta (v1)
 
@@ -184,7 +185,7 @@ El sistema responde de inmediato con uno de estos veredictos:
    └── ❌ OTRO EVENTO → boleta legítima, pero de otra función
 ```
 
-Una boleta válida se marca como usada en el momento del escaneo y no puede volver a usarse. El contador de asistentes del panel de control se actualiza en el acto.
+Una boleta válida se marca como usada en el momento del escaneo y no puede volver a usarse. El contador de asistentes del panel de control se actualiza en el acto. Un `portero` solo ve, en el selector de eventos, aquellos en los que está asignado — mismo criterio de `5.4` *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
 
 ### 5.6 Panel de control del evento (v1 básico, v2 completo)
 
@@ -239,6 +240,8 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Venta en efectivo | **Alta** |
 | Código QR del evento para afiches | Media |
 | Panel de control básico (vendidas, disponibles, ingresados) | Media |
+
+Con el ciclo completo mínimo ya construido, el paso a producción de v1 exige una ronda de ajustes de endurecimiento y refinamiento previa a las pruebas UAT — no funcionalidades nuevas, sino correcciones de alcance de roles, reorganización de navegación y pulido de interfaz sobre lo ya construido. Ver `docs/plan-pre-produccion.md` para el desglose técnico completo (8 tareas: UI menor, reestructuración del menú, alcance de productor sobre sus eventos, y limitación de alcance de productor/portero por evento).
 
 ### v2 — Automatización y alcance comercial
 
