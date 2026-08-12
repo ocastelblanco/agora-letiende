@@ -26,7 +26,7 @@
           @if (detalleEvento.etapas.length > 0) {
             <h2 class="mb-2 text-lg font-semibold text-primary">Etapas de boletería</h2>
             <ul class="mb-6 divide-y divide-primary/10">
-              @for (etapa of detalleEvento.etapas; track etapa.etapaId) {
+              @for (etapa of etapasOrdenadas(); track etapa.etapaId) {
                 <li class="flex items-center justify-between py-2" [class.opacity-50]="etapaCerrada(etapa)">
                   <span class="flex items-center gap-2">
                     <span class="text-primary">{{ etapa.nombre }}</span>

@@ -57,6 +57,21 @@ export class DetalleEventoComponent {
     return evento ? etapaVigenteParaMostrar(evento.etapas) : null;
   });
 
+  /**
+   * Etapas en el orden real de cierre (por `cierraEn`), no en el orden en
+   * que vienen en `evento.etapas` (inserción/`orden` manual del formulario
+   * de administración) — la tabla pública "Etapas de boletería" debe
+   * reflejar cuándo cierra cada una realmente, mismo motivo que
+   * `etapaVigenteParaMostrar()`.
+   */
+  protected readonly etapasOrdenadas = computed(() => {
+    const evento = this.evento();
+    if (!evento) {
+      return [];
+    }
+    return [...evento.etapas].sort((a, b) => new Date(a.cierraEn).getTime() - new Date(b.cierraEn).getTime());
+  });
+
   constructor() {
     // Reacciona a cada cambio del Signal input `slug` — incluida la
     // reutilización de instancia descrita en el docstring de la clase.
