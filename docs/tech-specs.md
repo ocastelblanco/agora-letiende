@@ -705,6 +705,8 @@ Resumen operativo: se trabaja siempre en una rama `feature/*`, `fix/*`, `docs/*`
 
 Orden de implementación derivado de `PRD.md` §6, con las dependencias técnicas explícitas.
 
+**Ajustes pre-producción (12/08/2026, previo a UAT):** ronda de endurecimiento sobre el v1 ya construido, fuera de la numeración de este roadmap (no son funcionalidades nuevas, son correcciones de alcance y presentación sobre piezas ya numeradas abajo — principalmente #6 CRUD de eventos, #9 Compra y reserva, #14 Venta en efectivo, #13 Validación en puerta y #18 Menú de navegación). Desglose técnico completo, con archivos reales y decisiones de diseño, en `docs/plan-pre-produccion.md`. Cambios de arquitectura relevantes que introduce: campo `porteros: string[]` nuevo en `agora-eventos` (análogo a `productores`), generalización de `tieneAccesoAlEvento()` (`server/api/lib/autorizacion.ts`) para resolver pertenencia también por rol `portero`, y reestructuración de `SECCIONES_NAVEGACION`/`app.routes.ts` a un modelo de navegación de dos niveles con rutas anidadas reales.
+
 | # | Pieza | Archivos principales a crear | Depende de |
 |---|---|---|---|
 | 1 | Andamiaje del proyecto | `package.json`, `angular.json`, `tsconfig*.json`, `src/`, `.gitignore` | — |
