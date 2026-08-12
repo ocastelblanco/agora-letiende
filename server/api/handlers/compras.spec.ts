@@ -15,7 +15,7 @@ vi.mock('../services/notificaciones', () => ({
   }),
 }));
 
-const { handler } = await import('./compras');
+const { handler, etapaVigente } = await import('./compras');
 const { AforoInsuficienteError, EventoNoPublicadoError } = await import('../services/aforo');
 
 // aforo.ts sí se importa real (no se mockea el módulo completo) para poder
@@ -321,5 +321,35 @@ describe('GET /api/compras/:compraId/estado', () => {
     const respuesta = await invocar('GET', { rawPath: '/api/compras/no-existe/estado', compraId: 'no-existe' });
 
     expect(respuesta.statusCode).toBe(404);
+  });
+});
+
+describe('etapaVigente', () => {
+  it('ordena por cierraEn cronológico aunque contradiga a orden (caso real: etapa nueva agregada al final del formulario pero que cierra antes que una anterior)', () => {
+    // Escenario real reportado por el usuario en producción: A (orden 1) ya
+    // cerrada, B (orden 2) sería la "vigente" si se ordenara por orden. El
+    // admin agrega C al final del formulario (orden 3), pero su cierraEn es
+    // ANTERIOR al de B. Cronológicamente cierran en el orden A, C, B — como
+    // A ya cerró, la etapa vigente correcta es C, no B (que es lo que
+    // devolvía el cálculo anterior, ordenado por `orden`, cobrando el
+    // precio equivocado).
+    const etapas = [
+      { etapaId: 'A', nombre: 'Preventa', precio: 30000, orden: 1, cierraEn: '2026-08-01T00:00:00.000Z' },
+      { etapaId: 'B', nombre: 'General', precio: 60000, orden: 2, cierraEn: '2026-09-15T00:00:00.000Z' },
+      { etapaId: 'C', nombre: 'Última hora', precio: 45000, orden: 3, cierraEn: '2026-09-01T00:00:00.000Z' },
+    ];
+
+    const resultado = etapaVigente(etapas, AHORA);
+
+    expect(resultado?.etapaId).toBe('C');
+  });
+
+  it('devuelve null cuando todas las etapas ya cerraron, sin importar orden', () => {
+    const etapas = [
+      { etapaId: 'A', nombre: 'Preventa', precio: 30000, orden: 1, cierraEn: '2020-01-01T00:00:00.000Z' },
+      { etapaId: 'B', nombre: 'General', precio: 60000, orden: 2, cierraEn: '2020-02-01T00:00:00.000Z' },
+    ];
+
+    expect(etapaVigente(etapas, AHORA)).toBeNull();
   });
 });
