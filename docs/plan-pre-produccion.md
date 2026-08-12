@@ -13,7 +13,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ## Fase 1 — Ajustes menores de UI (bajo riesgo, rápidos)
 
-### T1 — Header y login: botón "Ingresar" e vínculo "Cartelera" `[activa como Tarea 1 de TODO.md]`
+### T1 — Header y login: botón "Ingresar" e vínculo "Cartelera" `[x] completada 12/08/2026, PR #30`
 
 **Origen:** tabla de ajustes menores, filas "Header" (×2) y "Login".
 
@@ -32,6 +32,8 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[activa como Tarea 2 de TODO.md]`
 
+*(sigue activa, sin cambios en esta recalculación)*
+
 **Origen:** tabla de ajustes menores, filas "Compra de boletas" y "Venta en efectivo".
 
 **Alcance:** en `ComprarComponent` (`comprar.component.html:47-61`) y `VentaEfectivoComponent` (mismo patrón, confirmar líneas reales al implementar), reemplazar el `<input type="number" formControlName="cantidad">` por un `<select formControlName="cantidad">` con opciones de `1` hasta `Math.min(evento.maxBoletasPorCompra, evento.sillasDisponibles)`. El texto *helper* pasa de "Máximo {N} por compra" a incluir también `Sillas disponibles: {SILLAS_DISPONIBLES}` (redacción exacta a confirmar, el documento de negocio la da literal).
@@ -44,7 +46,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T3 — Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug`
+### T3 — Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug` `[activa como Tarea 1 de TODO.md]`
 
 **Origen:** tabla de ajustes menores, filas "Card de evento detallado" (×2).
 

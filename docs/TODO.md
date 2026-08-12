@@ -2,34 +2,32 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (12/08/2026, recalculación completa a pedido del usuario):** con el PR #28 fusionado, Etapas de boletería con cierre automático (roadmap #23) queda completa — se elimina de este documento, su resumen ya vive en `MEMORY.md` §2. El usuario pidió explícitamente que **Dominio personalizado** (Tarea 1 anterior) pase detrás de las tareas de `docs/plan-pre-produccion.md`, para poder usar los **2 slots completos** del motor JIT en ese plan — Dominio personalizado pasa a Backlog, pausada, no eliminada. Las dos tareas activas ahora son **T1** y **T2** de `docs/plan-pre-produccion.md` (Fase 1, ajustes menores de UI — ambas sin dependencias entre sí ni con el resto del plan, listas para ejecutar en paralelo o en cualquier orden). Bold, WhatsApp y Google Calendar siguen en el backlog, sin cambios de fondo.
+**Prioridad de selección aplicada (12/08/2026, tercera recalculación del día):** T1 (header/login) quedó validada en vivo por el usuario ("todo funciona bien") y pasa a completada en `MEMORY.md` §2 pese a seguir sin fusionar (mismo criterio ya usado en sesiones anteriores). Sigue siendo la Fase 1 de `docs/plan-pre-produccion.md`: el slot libre lo ocupa **T3** (fecha límite de etapas + banner AGOTADO/CANCELADO), cuya única dependencia — el PR #28 fusionado — ya está satisfecha. T2 (selector de cantidad de boletas) sigue activa sin cambios, todavía sin empezar. T4 (colapsar etapas en editar evento) queda como candidato de la siguiente recalculación.
 
 ---
 
-## Tarea 1 — [FEATURE]: Header y login — botón "Ingresar" e vínculo "Cartelera"
+## Tarea 1 — [FEATURE]: Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug`
 
-**Origen:** `docs/ajustes-pre-producción.md` (documento de negocio de OCM), tabla de ajustes menores, filas "Header" (×2) y "Login" · `docs/plan-pre-produccion.md` Fase 1, T1.
+**Origen:** `docs/ajustes-pre-producción.md`, tabla de ajustes menores, filas "Card de evento detallado" (×2) · `docs/plan-pre-produccion.md` Fase 1, T3.
+
+**Dependencia ya satisfecha:** requiere el PR #28 (Etapas de boletería con cierre automático) fusionado — **ya lo está**. Ambos ajustes tocan `detalle-evento.component.html`/`.ts`, el mismo archivo que ese PR modificó extensamente (badges "Vigente"/"Cerrada", `etapasOrdenadas`, orden cronológico) — de ahí la dependencia, ya resuelta.
 
 **Alcance:**
-- `shared/navegacion/barra-navegacion.component.html`: el botón de texto "Ingresar" (visible sin sesión, línea ~13-18) pasa a ser un *icon button* (ícono de persona/login, sin texto), manteniendo el mismo `routerLink="/login"` y con `aria-label` explícito (sin texto visible, el ícono solo no basta para lectores de pantalla).
-- `shared/navegacion/secciones-navegacion.ts`: quitar la entrada `{ etiqueta: 'Cartelera', ruta: '/', rolMinimo: 'portero' }` del arreglo `SECCIONES_NAVEGACION` — deja de aparecer en el menú de usuarios autenticados (el logo del header ya enlaza a `/`, siempre visible). La ruta pública `/` no se toca, sigue existiendo y accesible para cualquiera (autenticado o no) vía URL o logo.
-- El botón "Ingresar" del header no debe verse en `/login` (se confunde con "Ingresar con Google", ya presente en esa pantalla).
+1. En la lista "Etapas de boletería" (el mismo `@for` que ya distingue vigente/cerrada desde el PR #28), agregar la fecha límite de cada etapa (`etapa.cierraEn`, formateada en hora de Bogotá — reutilizar `paraInputBogota` o una variante de solo-lectura ya usada en el resto del frontend, no reinventar el formateo).
+2. Si `detalleEvento.estado === 'agotado'`, superponer un aviso diagonal con el texto **AGOTADO** sobre la imagen del evento; si `estado === 'cancelado'`, el texto **CANCELADO**. Ambos estados ya existen en el modelo (`EstadoEvento`, `eventos.ts:27`) — esto es puramente de presentación, ningún cambio de backend.
 
-**Decisión a resolver al implementar, con el código real de `BarraNavegacionComponent`/`app.routes.ts` en pantalla:** cómo sabe el header en qué ruta está para ocultar el botón solo en `/login` — evaluar una señal reactiva sobre `Router.events` (`NavigationEnd`) convertida con `toSignal`, vs. un dato de ruta (`data: { ocultarAccesoEnHeader: true }` en la ruta `/login`) leído vía `ActivatedRoute`. Cualquiera de las dos es válida; elegir la que quede más simple con el patrón ya usado en el componente (que hoy no depende de la ruta actual para nada).
+**Decisión a resolver al implementar, no en abstracto:** qué mostrar si el evento no tiene `imagenUrl` — ¿el aviso diagonal igual se muestra sobre el espacio donde iría la imagen, o se omite del todo? Confirmar con el template real de `detalle-evento.component.html` en pantalla antes de decidir (hoy el bloque de imagen ya es condicional con `@if (detalleEvento.imagenUrl)`).
 
-**Verificar tras el cambio:** quitar "Cartelera" del arreglo no debe alterar `rutaDestinoParaRol()` para ningún rol — `portero` ya tiene "Efectivo"/"Puerta" como siguiente sección con `findLast`, así que el destino post-login no cambia. Correr `secciones-navegacion.spec.ts` y agregar un caso si no queda cubierto.
-
-**Archivos:** `barra-navegacion.component.html`/`.ts`/`.spec.ts`, `secciones-navegacion.ts`/`.spec.ts`, `app.routes.ts` (si se opta por `data`).
+**Archivos:** `detalle-evento.component.html`/`.ts`/`.spec.ts`.
 
 **Definition of done:**
-- [x] El botón "Ingresar" del header es un *icon button* accesible (`aria-label`), sin texto, en cualquier página sin sesión salvo `/login`
-- [x] "Cartelera" ya no aparece en el menú de un usuario autenticado, para ningún rol
-- [x] `rutaDestinoParaRol()` sigue devolviendo el mismo destino de siempre para los tres roles — verificado con test, no solo revisado a ojo
-- [x] `npm run test` en verde (222/222, sin impacto en `test:api`)
-- [x] `npm run build` sin errores
-- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (rama `feature/header-login-ajustes`)
-
-**Decisión tomada:** `Router.events` (`NavigationEnd`) + `toSignal`, con `initialValue: this.router.url` para cubrir el primer render antes de que llegue el primer evento — no la opción de `data` en la ruta, porque `BarraNavegacionComponent` no dependía de `ActivatedRoute` para nada más y ya inyecta `Router` directamente (mismo patrón que `cerrarSesion()`).
+- [ ] Cada etapa de la lista pública muestra su fecha límite de cierre, en hora de Bogotá
+- [ ] Un evento `agotado` muestra el aviso diagonal "AGOTADO" sobre la imagen (o donde correspondería si no hay imagen, según la decisión tomada)
+- [ ] Un evento `cancelado` muestra el aviso diagonal "CANCELADO", mismo criterio
+- [ ] Ningún otro estado (`borrador`/`publicado`/`finalizado`) muestra ningún aviso
+- [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
+- [ ] `npm run build` sin errores
+- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
 
 ---
 
@@ -58,7 +56,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, más grande que las tareas del plan de abajo y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
 
-**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Los 2 slots del motor JIT están ahora dedicados a T1/T2 de ese plan (Tarea 1/Tarea 2 activas arriba); las siguientes recalculaciones seguirán sacando T3-T8 en orden, sin volver al roadmap v2 normal hasta agotar el plan.
+**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Los 2 slots del motor JIT están ahora dedicados a T3/T2 de ese plan (Tarea 1/Tarea 2 activas arriba — T1 ya completada, ver `MEMORY.md` §2); las siguientes recalculaciones seguirán sacando T4-T8 en orden, sin volver al roadmap v2 normal hasta agotar el plan.
 
 ### Pausada, no eliminada — Dominio personalizado `agora.letiende.co`
 
