@@ -96,6 +96,20 @@ describe('VentaEfectivoComponent', () => {
     expect(opciones.length).toBe(4);
   });
 
+  it('el <select> de cantidad produce un valor number en el FormControl, no un string (regresión: bug real en staging con venta en efectivo)', async () => {
+    const { fixture } = configurarPrueba({});
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector('select#cantidad');
+    select.value = select.options[1].value; // selecciona la segunda opción (cantidad = 2)
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    const valorCantidad = fixture.componentInstance['formulario'].controls.cantidad.value;
+    expect(typeof valorCantidad).toBe('number');
+    expect(valorCantidad).toBe(2);
+  });
+
   it('no muestra el formulario si el evento no admite efectivo entre sus medios de pago', async () => {
     const { fixture } = configurarPrueba({
       evento: { ...eventoEjemplo, mediosPago: ['transferencia'] },

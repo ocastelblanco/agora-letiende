@@ -54,7 +54,7 @@
               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
             >
               @for (n of opcionesCantidad(); track n) {
-                <option [value]="n">{{ n }}</option>
+                <option [ngValue]="n">{{ n }}</option>
               }
             </select>
             <p class="mt-1 text-xs text-primary/60">
