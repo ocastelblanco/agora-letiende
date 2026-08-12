@@ -50,13 +50,15 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 4. `docs/tech-specs.md` §11: ya se agregó el ítem #23 en esta sesión: confirmar que la fila queda correcta una vez la implementación esté lista (archivos reales, no solo el nombre sugerido).
 
 **Definition of done:**
-- [ ] `DetalleEventoComponent` distingue visualmente la etapa vigente de las etapas ya cerradas — un cliente no ve un precio que ya no aplica sin ninguna indicación
-- [ ] `etapaVigenteParaMostrar()` vive en un solo lugar compartido, consumido por `ComprarComponent`, `VentaEfectivoComponent` y `DetalleEventoComponent` — cero copias duplicadas de la misma lógica
-- [ ] El cálculo del precio real en el backend (`etapaVigente()` de `compras.ts`) no se toca — este cambio es puramente de presentación, el servidor ya calculaba bien
-- [ ] Decisión sobre el JSON-LD (`offers`) tomada explícitamente, no ignorada
-- [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
-- [ ] `npm run build` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+- [x] `DetalleEventoComponent` distingue visualmente la etapa vigente de las etapas ya cerradas — un cliente no ve un precio que ya no aplica sin ninguna indicación (badge "Vigente"/`bg-tertiary`, badge "Cerrada" + atenuado + precio tachado, ninguna etapa se oculta)
+- [x] `etapaVigenteParaMostrar()` vive en un solo lugar compartido (`src/app/shared/utilidades/etapa-vigente.ts`), consumido por `ComprarComponent`, `VentaEfectivoComponent` y `DetalleEventoComponent` — cero copias duplicadas de la misma lógica
+- [x] El cálculo del precio real en el backend (`etapaVigente()` de `compras.ts`) no se toca — verificado por diff, ningún archivo bajo `server/` cambió
+- [x] Decisión sobre el JSON-LD (`offers`) tomada explícitamente: se filtra a solo la etapa vigente (omite `offers` por completo si ninguna está vigente, sin dejar un JSON-LD malformado) — documentado con comentario en el código
+- [x] `npm run test` en verde (216/216, sin impacto en `test:api`)
+- [x] `npm run build` sin errores
+- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (rama `feature/etapas-cierre-automatico-ui`)
+
+**Hallazgo no bloqueante de la verificación, fuera de alcance de esta tarea:** cuando TODAS las etapas de un evento ya cerraron, el botón "Comprar boletas" sigue visible (no depende de si hay etapa vigente), lo que puede llevar al cliente a un total de $0 y un `409` del backend. Comportamiento preexistente, no introducido por este cambio — candidato para una futura tarea del backlog, ver `MEMORY.md` §7.
 
 ---
 
