@@ -134,6 +134,13 @@ export class EditarEventoComponent {
     return this.formulario.controls.etapas;
   }
 
+  /** Colapsado por defecto — evita que el formulario de edición abra con una lista larga de etapas ya expandida. */
+  protected readonly etapasExpandido = signal(false);
+
+  protected alternarEtapasExpandido(): void {
+    this.etapasExpandido.update((v) => !v);
+  }
+
   /**
    * `true` en cuanto el administrador edita el campo `slug` a mano — a
    * partir de ahí, `actualizarSlugAutomatico()` deja de sobrescribirlo. Se
