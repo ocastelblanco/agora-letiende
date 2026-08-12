@@ -3,6 +3,7 @@ import { Meta, Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
 import type { EventoPublico } from '../../core/models/evento.model';
+import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 import { DetalleEventoComponent } from './detalle-evento.component';
 
 const eventoEjemplo: EventoPublico = {
@@ -90,6 +91,50 @@ describe('DetalleEventoComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Comprar boletas');
   });
 
+  it('no muestra ningún banner AGOTADO/CANCELADO cuando el evento está publicado', async () => {
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    expect(fixture.nativeElement.textContent).not.toContain('AGOTADO');
+    expect(fixture.nativeElement.textContent).not.toContain('CANCELADO');
+  });
+
+  it('muestra el banner "AGOTADO" cuando el evento está agotado', async () => {
+    const cargarEventoPorSlugMock = vi
+      .fn()
+      .mockResolvedValue({ exito: true, evento: { ...eventoEjemplo, estado: 'agotado', sillasDisponibles: 0 } });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    expect(fixture.nativeElement.textContent).toContain('AGOTADO');
+  });
+
+  it('muestra el banner "CANCELADO" cuando el evento está cancelado', async () => {
+    const cargarEventoPorSlugMock = vi
+      .fn()
+      .mockResolvedValue({ exito: true, evento: { ...eventoEjemplo, estado: 'cancelado' } });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    expect(fixture.nativeElement.textContent).toContain('CANCELADO');
+  });
+
+  it('muestra el banner "AGOTADO" aunque el evento no tenga imagenUrl', async () => {
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({
+      exito: true,
+      evento: { ...eventoEjemplo, imagenUrl: undefined, estado: 'agotado', sillasDisponibles: 0 },
+    });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    expect(fixture.nativeElement.textContent).toContain('AGOTADO');
+  });
+
   it('marca noEncontrado cuando el servicio responde sin éxito (404)', async () => {
     const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: false, error: 'no_encontrado' });
     const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
@@ -126,6 +171,17 @@ describe('DetalleEventoComponent', () => {
     expect(items[0].classList.contains('opacity-50')).toBe(true);
     expect(items[1].textContent).toContain('Vigente');
     expect(items[1].classList.contains('opacity-50')).toBe(false);
+  });
+
+  it('muestra la fecha límite de cada etapa en la lista de etapas', async () => {
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const fechaEsperada = paraInputBogota(eventoEjemplo.etapas[0].cierraEn).replace('T', ' ');
+    const items: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('ul li');
+    expect(items[0].textContent).toContain(`Cierra: ${fechaEsperada}`);
   });
 
   it('renderiza la tabla de etapas en orden cronológico por cierraEn, no en el orden del arreglo de entrada', async () => {

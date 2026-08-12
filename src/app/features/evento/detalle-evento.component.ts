@@ -108,6 +108,28 @@ export class DetalleEventoComponent {
     return new Date(etapa.cierraEn).getTime() <= Date.now();
   }
 
+  /** Fecha límite de cierre de una etapa, en hora de Bogotá (`CLAUDE.md` §4). */
+  protected etapaCierraEnLegible(etapa: EtapaBoleteria): string {
+    return paraInputBogota(etapa.cierraEn).replace('T', ' ');
+  }
+
+  /**
+   * Texto del banner diagonal AGOTADO/CANCELADO (`plan-pre-producción.md`
+   * T3) — información crítica para un visitante que podría estar a punto de
+   * intentar comprar, así que se muestra independientemente de si el evento
+   * tiene `imagenUrl` (ver decisión en el template).
+   */
+  protected readonly avisoEstado = computed(() => {
+    const evento = this.evento();
+    if (evento?.estado === 'agotado') {
+      return 'AGOTADO';
+    }
+    if (evento?.estado === 'cancelado') {
+      return 'CANCELADO';
+    }
+    return null;
+  });
+
   private actualizarMetadatos(evento: EventoPublico): void {
     const tituloPagina = `${evento.nombre} — Ágora`;
     const descripcion = evento.descripcion.slice(0, 200);
