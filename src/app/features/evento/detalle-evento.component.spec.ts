@@ -102,6 +102,61 @@ describe('DetalleEventoComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Evento no encontrado');
   });
 
+  it('distingue la etapa vigente ("Vigente") de una etapa ya cerrada ("Cerrada")', async () => {
+    const eventoConEtapas: EventoPublico = {
+      ...eventoEjemplo,
+      etapas: [
+        { etapaId: 'et1', nombre: 'Preventa', precio: 30000, cierraEn: '2000-01-01T00:00:00.000Z', orden: 1 },
+        { etapaId: 'et2', nombre: 'General', precio: 45000, cierraEn: '2099-01-01T00:00:00.000Z', orden: 2 },
+      ],
+    };
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoConEtapas });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+    const componente = fixture.componentInstance;
+
+    expect(componente['etapaVigente']()?.etapaId).toBe('et2');
+    expect(componente['etapaCerrada'](eventoConEtapas.etapas[0])).toBe(true);
+    expect(componente['etapaCerrada'](eventoConEtapas.etapas[1])).toBe(false);
+
+    const items: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('ul li');
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain('Cerrada');
+    expect(items[0].classList.contains('opacity-50')).toBe(true);
+    expect(items[1].textContent).toContain('Vigente');
+    expect(items[1].classList.contains('opacity-50')).toBe(false);
+  });
+
+  it('renderiza la tabla de etapas en orden cronológico por cierraEn, no en el orden del arreglo de entrada', async () => {
+    // Caso real reportado: A (orden 1, cierraEn 2026-08-01) ya cerrada, B
+    // (orden 2, cierraEn 2026-09-15) vigente "según orden", C se agrega al
+    // final del formulario (orden 3) pero cierraEn 2026-09-01, ANTES que B.
+    // El arreglo viene de la base de datos en orden de `orden` (A, B, C);
+    // la tabla debe mostrarlas cronológicamente: A, C, B.
+    const eventoConEtapasDesordenadas: EventoPublico = {
+      ...eventoEjemplo,
+      etapas: [
+        { etapaId: 'A', nombre: 'Preventa', precio: 30000, cierraEn: '2026-08-01T00:00:00.000Z', orden: 1 },
+        { etapaId: 'B', nombre: 'General', precio: 60000, cierraEn: '2026-09-15T00:00:00.000Z', orden: 2 },
+        { etapaId: 'C', nombre: 'Última hora', precio: 45000, cierraEn: '2026-09-01T00:00:00.000Z', orden: 3 },
+      ],
+    };
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoConEtapasDesordenadas });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+    const componente = fixture.componentInstance;
+
+    expect(componente['etapasOrdenadas']().map((etapa) => etapa.etapaId)).toEqual(['A', 'C', 'B']);
+
+    const items: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('ul li');
+    expect(items.length).toBe(3);
+    expect(items[0].textContent).toContain('Preventa');
+    expect(items[1].textContent).toContain('Última hora');
+    expect(items[2].textContent).toContain('General');
+  });
+
   it('actualiza title, description, Open Graph y Twitter Card', async () => {
     const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo });
     const { fixture } = configurarPrueba(cargarEventoPorSlugMock);

@@ -4,21 +4,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { EventosPublicosService } from '../../../core/api/eventos-publicos.service';
 import { VentaEfectivoRegistrada, VentasEfectivoService } from '../../../core/api/ventas-efectivo.service';
-import type { EtapaBoleteria, EventoPublico } from '../../../core/models/evento.model';
+import type { EventoPublico } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
-
-/**
- * Etapa vigente **solo para mostrar un estimado en pantalla** — mismo
- * criterio que `ComprarComponent` (`features/evento/comprar/`): el total
- * real siempre lo calcula y devuelve el servidor (`TODO.md` Tarea 2,
- * `CLAUDE.md` §5 A08), este cálculo nunca se envía ni se acepta como precio
- * final.
- */
-function etapaVigenteParaMostrar(etapas: EtapaBoleteria[]): EtapaBoleteria | null {
-  const ahora = Date.now();
-  const ordenadas = [...etapas].sort((a, b) => a.orden - b.orden);
-  return ordenadas.find((etapa) => new Date(etapa.cierraEn).getTime() > ahora) ?? null;
-}
+import { etapaVigenteParaMostrar } from '../../../shared/utilidades/etapa-vigente';
 
 /**
  * Ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`,

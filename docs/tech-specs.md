@@ -731,4 +731,4 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 20 | **v2** — WhatsApp | `services/canal-whatsapp.ts` | 9 |
 | 21 | **v2** — Exportación XLSX/PDF | Ampliación de `handlers/reportes.ts` | 16 |
 | 22 | **v2** — Google Calendar | `services/google-calendar.ts` | 6 |
-| 23 | **v2** — Etapas de boletería con cierre automático por fecha (interfaz pública) | Ampliación de `features/evento/detalle-evento.component.ts`, `shared/utilidades/etapa-vigente.ts` (nuevo) | 9, 14 |
+| 23 | **v2** — Etapas de boletería con cierre automático por fecha (interfaz pública) | `shared/utilidades/etapa-vigente.ts` (nuevo, `etapaVigenteParaMostrar` centralizada), ampliación de `features/evento/detalle-evento.component.ts`/`.html`; `features/evento/comprar/comprar.component.ts` y `features/evento/venta-efectivo/venta-efectivo.component.ts` migrados a consumirla | 9, 14 |
