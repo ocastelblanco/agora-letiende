@@ -88,14 +88,19 @@ export async function buscarEventoPublicadoPorSlug(slug: string): Promise<Evento
 }
 
 /**
- * La etapa vigente es, entre las etapas ordenadas por `orden`, la primera
- * cuyo `cierraEn` todavía no pasó (`TODO.md` Tarea 2) — el precio nunca se
- * acepta desde el cliente, se calcula siempre acá (`CLAUDE.md` §5, A08).
+ * La etapa vigente es, entre las etapas ordenadas cronológicamente por
+ * `cierraEn`, la primera cuyo `cierraEn` todavía no pasó (`TODO.md` Tarea 2)
+ * — el precio nunca se acepta desde el cliente, se calcula siempre acá
+ * (`CLAUDE.md` §5, A08). `orden` es solo la posición manual que el
+ * administrador le da a la etapa en el formulario y no necesariamente
+ * coincide con el orden real de cierre (una etapa agregada después puede
+ * cerrar antes que una ya existente): usarlo para este cálculo produce una
+ * etapa vigente incorrecta y, con ella, un precio cobrado incorrecto.
  * Exportada: `ventas-efectivo.ts` la reutiliza, nunca reimplementa el
  * cálculo de precio.
  */
 export function etapaVigente(etapas: EtapaBoleteria[], ahora: Date): EtapaBoleteria | null {
-  const ordenadas = [...etapas].sort((a, b) => a.orden - b.orden);
+  const ordenadas = [...etapas].sort((a, b) => new Date(a.cierraEn).getTime() - new Date(b.cierraEn).getTime());
   return ordenadas.find((etapa) => new Date(etapa.cierraEn).getTime() > ahora.getTime()) ?? null;
 }
 

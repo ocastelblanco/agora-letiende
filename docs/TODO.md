@@ -50,13 +50,17 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 4. `docs/tech-specs.md` §11: ya se agregó el ítem #23 en esta sesión: confirmar que la fila queda correcta una vez la implementación esté lista (archivos reales, no solo el nombre sugerido).
 
 **Definition of done:**
-- [ ] `DetalleEventoComponent` distingue visualmente la etapa vigente de las etapas ya cerradas — un cliente no ve un precio que ya no aplica sin ninguna indicación
-- [ ] `etapaVigenteParaMostrar()` vive en un solo lugar compartido, consumido por `ComprarComponent`, `VentaEfectivoComponent` y `DetalleEventoComponent` — cero copias duplicadas de la misma lógica
-- [ ] El cálculo del precio real en el backend (`etapaVigente()` de `compras.ts`) no se toca — este cambio es puramente de presentación, el servidor ya calculaba bien
-- [ ] Decisión sobre el JSON-LD (`offers`) tomada explícitamente, no ignorada
-- [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
-- [ ] `npm run build` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+- [x] `DetalleEventoComponent` distingue visualmente la etapa vigente de las etapas ya cerradas — un cliente no ve un precio que ya no aplica sin ninguna indicación (badge "Vigente"/`bg-tertiary`, badge "Cerrada" + atenuado + precio tachado, ninguna etapa se oculta)
+- [x] `etapaVigenteParaMostrar()` vive en un solo lugar compartido (`src/app/shared/utilidades/etapa-vigente.ts`), consumido por `ComprarComponent`, `VentaEfectivoComponent` y `DetalleEventoComponent` — cero copias duplicadas de la misma lógica
+- [x] El cálculo del precio real en el backend (`etapaVigente()` de `compras.ts`) no se toca — verificado por diff, ningún archivo bajo `server/` cambió
+- [x] Decisión sobre el JSON-LD (`offers`) tomada explícitamente: se filtra a solo la etapa vigente (omite `offers` por completo si ninguna está vigente, sin dejar un JSON-LD malformado) — documentado con comentario en el código
+- [x] `npm run test` en verde (216/216, sin impacto en `test:api`)
+- [x] `npm run build` sin errores
+- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (rama `feature/etapas-cierre-automatico-ui`)
+
+**Hallazgo no bloqueante de la verificación, fuera de alcance de esta tarea:** cuando TODAS las etapas de un evento ya cerraron, el botón "Comprar boletas" sigue visible (no depende de si hay etapa vigente), lo que puede llevar al cliente a un total de $0 y un `409` del backend. Comportamiento preexistente, no introducido por este cambio — candidato para una futura tarea del backlog, ver `MEMORY.md` §7.
+
+**Corrección adicional sobre el mismo PR, reportada por el usuario probando con datos reales de staging (12/08/2026):** `etapaVigente()`/`etapaVigenteParaMostrar()` ordenaban las etapas por `orden` (posición manual en el formulario) antes de buscar la primera no cerrada — pero `orden` no siempre coincide con el orden cronológico real de `cierraEn`. Ejemplo real: evento con etapa A (cerrada), B (vigente, `orden` 2) y una etapa C agregada después (`orden` 3, al final del formulario) cuyo `cierraEn` es cronológicamente ANTERIOR al de B — el cálculo saltaba a B en vez de reconocer que C era la vigente real, cobrando el precio equivocado. **Bug de dinero real, no solo de presentación** (verificado por el reviewer: cobraba $60.000 en vez de $45.000 en el escenario de prueba). Corregido ordenando por `cierraEn` cronológico en los tres puntos: `etapaVigente()` (backend, `compras.ts`), `etapaVigenteParaMostrar()` (utilitario compartido) y la tabla pública de `DetalleEventoComponent` (`etapasOrdenadas`, nuevo `computed`). Se propaga gratis a dos consumidores no tocados directamente: `ventas-efectivo.ts` (importa `etapaVigente` de `compras.ts`) y el JSON-LD de `DetalleEventoComponent`. El campo `orden` no se tocó — sigue existiendo, requerido, solo dejó de usarse como criterio de ordenamiento en estos tres lugares. **Fuera de alcance, documentado como hallazgo informativo, no corregido:** `reportes.ts` (`porEtapa`, el reporte XLSX) y el formulario de edición de admin todavía ordenan por posición del arreglo (`orden`) — el usuario no lo reportó para esos dos lugares, candidato a revisar si se vuelve a presentar el mismo patrón de bug ahí.
 
 ---
 
