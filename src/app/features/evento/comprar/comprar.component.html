@@ -48,16 +48,18 @@
             <label for="cantidad" class="mb-1 block text-sm font-semibold text-primary">
               Cantidad de boletas
             </label>
-            <input
+            <select
               id="cantidad"
-              type="number"
               formControlName="cantidad"
-              [max]="detalleEvento.maxBoletasPorCompra"
-              min="1"
               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-            />
+            >
+              @for (n of opcionesCantidad(); track n) {
+                <option [value]="n">{{ n }}</option>
+              }
+            </select>
             <p class="mt-1 text-xs text-primary/60">
-              Máximo {{ detalleEvento.maxBoletasPorCompra }} por compra.
+              Máximo {{ detalleEvento.maxBoletasPorCompra }} por compra. Sillas disponibles:
+              {{ detalleEvento.sillasDisponibles }}.
             </p>
           </div>
 

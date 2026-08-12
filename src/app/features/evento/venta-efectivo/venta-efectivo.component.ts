@@ -60,6 +60,21 @@ export class VentaEfectivoComponent {
     );
   });
 
+  /**
+   * Opciones del `<select>` de cantidad: 1..min(maxBoletasPorCompra, sillasDisponibles).
+   * Si `maxBoletasPorCompra` fuera 0 con sillas disponibles, el resultado es un
+   * `<select>` vacío — configuración de evento inválida, no responsabilidad de
+   * este componente (no se agrega manejo defensivo extra).
+   */
+  protected readonly opcionesCantidad = computed(() => {
+    const evento = this.evento();
+    if (!evento) {
+      return [];
+    }
+    const maximo = Math.min(evento.maxBoletasPorCompra, evento.sillasDisponibles);
+    return Array.from({ length: maximo }, (_, indice) => indice + 1);
+  });
+
   constructor() {
     effect(() => {
       const slug = this.slug();
