@@ -3,7 +3,9 @@ import type { EtapaBoleteria } from '../../core/models/evento.model';
 /**
  * Etapa vigente **solo para mostrar en pantalla** — mismo criterio que usa
  * `etapaVigente()` en el backend (`server/api/handlers/compras.ts`, primera
- * etapa por `orden` cuyo `cierraEn` todavía no ha pasado). El precio/total
+ * etapa ordenada cronológicamente por `cierraEn` que todavía no ha pasado;
+ * `orden` es solo la posición manual del formulario de administración y no
+ * necesariamente coincide con el orden real de cierre). El precio/total
  * real de una compra siempre lo calcula y devuelve el servidor
  * (`CLAUDE.md` §5 A08): este cálculo nunca se envía ni se acepta como el
  * precio final, es puramente de presentación.
@@ -16,6 +18,6 @@ import type { EtapaBoleteria } from '../../core/models/evento.model';
  */
 export function etapaVigenteParaMostrar(etapas: EtapaBoleteria[]): EtapaBoleteria | null {
   const ahora = Date.now();
-  const ordenadas = [...etapas].sort((a, b) => a.orden - b.orden);
+  const ordenadas = [...etapas].sort((a, b) => new Date(a.cierraEn).getTime() - new Date(b.cierraEn).getTime());
   return ordenadas.find((etapa) => new Date(etapa.cierraEn).getTime() > ahora) ?? null;
 }
