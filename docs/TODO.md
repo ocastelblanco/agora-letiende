@@ -22,12 +22,14 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 **Archivos:** `barra-navegacion.component.html`/`.ts`/`.spec.ts`, `secciones-navegacion.ts`/`.spec.ts`, `app.routes.ts` (si se opta por `data`).
 
 **Definition of done:**
-- [ ] El botón "Ingresar" del header es un *icon button* accesible (`aria-label`), sin texto, en cualquier página sin sesión salvo `/login`
-- [ ] "Cartelera" ya no aparece en el menú de un usuario autenticado, para ningún rol
-- [ ] `rutaDestinoParaRol()` sigue devolviendo el mismo destino de siempre para los tres roles — verificado con test, no solo revisado a ojo
-- [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
-- [ ] `npm run build` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+- [x] El botón "Ingresar" del header es un *icon button* accesible (`aria-label`), sin texto, en cualquier página sin sesión salvo `/login`
+- [x] "Cartelera" ya no aparece en el menú de un usuario autenticado, para ningún rol
+- [x] `rutaDestinoParaRol()` sigue devolviendo el mismo destino de siempre para los tres roles — verificado con test, no solo revisado a ojo
+- [x] `npm run test` en verde (222/222, sin impacto en `test:api`)
+- [x] `npm run build` sin errores
+- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (rama `feature/header-login-ajustes`)
+
+**Decisión tomada:** `Router.events` (`NavigationEnd`) + `toSignal`, con `initialValue: this.router.url` para cubrir el primer render antes de que llegue el primer evento — no la opción de `data` en la ruta, porque `BarraNavegacionComponent` no dependía de `ActivatedRoute` para nada más y ya inyecta `Router` directamente (mismo patrón que `cerrarSesion()`).
 
 ---
 
