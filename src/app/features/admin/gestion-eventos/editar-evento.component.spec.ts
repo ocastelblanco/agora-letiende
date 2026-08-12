@@ -176,6 +176,29 @@ describe('EditarEventoComponent', () => {
     });
   });
 
+  describe('colapso de "Etapas de boletería"', () => {
+    it('empieza colapsado (sin el FormArray de etapas visible en el DOM) y se expande al hacer click en el control', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      expect(componente['etapasExpandido']()).toBe(false);
+      expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).toBeNull();
+
+      const botones = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ) as HTMLButtonElement[];
+      const botonMostrar = botones.find((boton) => boton.textContent?.trim() === 'Mostrar');
+      expect(botonMostrar).toBeTruthy();
+
+      botonMostrar!.click();
+      fixture.detectChanges();
+
+      expect(componente['etapasExpandido']()).toBe(true);
+      expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).not.toBeNull();
+    });
+  });
+
   describe('modo editar (id = eventoId real)', () => {
     it('precarga el formulario y deshabilita slug y sillasTotales', async () => {
       const { fixture } = configurarPrueba({ eventos: [eventoExistente] });

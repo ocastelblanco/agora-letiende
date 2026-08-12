@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (12/08/2026, cuarta recalculación del día):** T2 (selector de cantidad de boletas) implementada, verificada (build + tests + verificación arquitectónica independiente, sin hallazgos) y pasa a completada en `MEMORY.md` §2, PR pendiente de apertura. El slot libre lo ocupa **T4** (colapsar "Etapas de boletería" en editar evento, `docs/plan-pre-produccion.md` Fase 1), sin dependencias técnicas. T3 (fecha límite de etapas + banner AGOTADO/CANCELADO) sigue activa sin cambios, todavía sin empezar.
+**Prioridad de selección aplicada (12/08/2026, quinta recalculación del día):** T4 (colapsar "Etapas de boletería" en editar evento) implementada, verificada (build + tests + verificación arquitectónica independiente, un hallazgo menor de accesibilidad corregido — `aria-expanded`) y pasa a completada en `MEMORY.md` §2, PR pendiente de apertura. Con T1/T2/T4 completadas, la Fase 1 de `docs/plan-pre-produccion.md` solo le falta **T3** (activa, sin cambios). El slot libre lo ocupa **T5** (menú de dos niveles con rutas anidadas reales, Fase 2 del plan), siguiente en el orden de ejecución confirmado por el usuario — es la tarea más grande y riesgosa de las dos primeras fases (toca el shell de navegación completo y el destino post-login de los tres roles), así que conviene arrancarla con margen de tiempo en vez de dejarla para el final.
 
 ---
 
@@ -31,20 +31,38 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Colapsar "Etapas de boletería" en el formulario de editar evento
+## Tarea 2 — [FEATURE]: Menú de dos niveles con rutas anidadas reales
 
-**Origen:** `docs/ajustes-pre-producción.md`, tabla de ajustes menores, fila "Editar evento" · `docs/plan-pre-produccion.md` Fase 1, T4.
+**Origen:** `docs/ajustes-pre-producción.md`, sección "Reestructuración del menú principal" · `docs/plan-pre-produccion.md` Fase 2, T5.
 
-**Alcance:** en `EditarEventoComponent`, la sección completa de "Etapas de boletería" (el `FormArray` de etapas, hoy siempre expandido) pasa a vivir dentro de un panel colapsable (colapsado por defecto — coherente con el objetivo general de reducir la extensión visual de las pantallas de administración, mismo espíritu que la reestructuración del menú de la Fase 2 del plan).
+**Alcance:** el menú de personal autenticado pasa de una lista plana (`SECCIONES_NAVEGACION`, hoy: Efectivo, Puerta, Panel, Aprobaciones, Eventos, Usuarios) a una jerarquía de dos niveles:
+1. **Taquilla** (cualquier rol autenticado, mínimo `portero`) — tabs: Efectivo, Puerta.
+2. **Mis Eventos** (`administrador`/`productor`) — tabs: Panel, Eventos, Aprobaciones.
+3. **Usuarios** (`administrador`) — sin tabs, como hoy.
 
-**Decisión a resolver al implementar, no en abstracto:** panel hecho a mano (`signal` + Tailwind, mismo patrón ya usado en el resto del componente, que no usa Angular Material más allá de `MatButtonModule`) vs. introducir `MatExpansionModule` por primera vez en el proyecto — dado que ningún otro componente usa expansion panels todavía y este formulario es 100% de inputs nativos, el patrón hecho a mano es más consistente con el resto del archivo. Confirmar con el template real de `editar-evento.component.html` en pantalla antes de decidir.
+**Diseño de rutas (a confirmar en detalle al implementar, esqueleto aquí):**
+- `/taquilla/efectivo` (hoy `/efectivo`, `SeleccionVentaEfectivoComponent`) y `/taquilla/puerta` (hoy `/puerta`, `SeleccionPuertaComponent`).
+- `/mis-eventos/panel` (hoy `/panel`), `/mis-eventos/eventos` (hoy `/admin/eventos`), `/mis-eventos/aprobaciones` (hoy `/admin/aprobaciones`).
+- `/admin/usuarios` puede quedar igual o pasar a `/usuarios` — decidir consistencia de prefijo al implementar.
+- Rutas dinámicas por evento (`/evento/:slug/efectivo`, `/evento/:slug/puerta`, `/evento/:slug/panel`) **no cambian**.
+- Redirects (`redirectTo`) desde las URLs viejas hacia las nuevas.
 
-**Archivos:** `editar-evento.component.html`/`.ts`/`.spec.ts`.
+**Cambios estructurales:**
+- `SECCIONES_NAVEGACION` deja de ser una lista plana — necesita un modelo de dos niveles (ej. `{ etiqueta, rolMinimo, tabs: [{ etiqueta, ruta }] }`). `BarraNavegacionComponent` y `rolMinimoDe()` (`app.routes.ts`) son los dos consumidores actuales de la fuente de verdad.
+- `rutaDestinoParaRol()`: debe seguir devolviendo una ruta de **hoja** (ej. `/mis-eventos/panel`, no `/mis-eventos` a secas) para que el login siga aterrizando exactamente donde aterriza hoy — mismo criterio de `findLast`/orden ascendente de rol ya documentado en el archivo.
+- `BarraNavegacionComponent`: la fila de tabs de segundo nivel solo se muestra para el grupo activo. Reutilizar el mismo patrón visual (`routerLink` + `routerLinkActive` con clases Tailwind) que ya usa la fila de primer nivel — **no** introducir `MatTabsModule` (el componente es eager-loaded en el shell de la app, decisión ya documentada en su docstring).
+- Componentes "hub" nuevos (`TaquillaComponent`/`MisEventosComponent`) si se decide que cada grupo tenga su propio componente contenedor con `<router-outlet>`, o resolverlo solo con rutas hijas de `app.routes.ts` — decisión de implementación a tomar con el código real en pantalla.
+
+**Archivos:** `secciones-navegacion.ts`/`.spec.ts`, `barra-navegacion.component.ts`/`.html`/`.spec.ts`, `app.routes.ts`, posibles componentes nuevos de "hub", y renombrado/movimiento de las carpetas de los selectores existentes si aplica.
+
+**Riesgo:** es la tarea más grande y sensible de la Fase 1-2 del plan — toca el shell de navegación completo, los guards de rol de cada ruta de personal, y el destino post-login de los tres roles. **Verificación arquitectónica independiente obligatoria antes de abrir el PR**, mismo criterio ya aplicado a cambios de autorización previos.
 
 **Definition of done:**
-- [ ] La sección "Etapas de boletería" vive dentro de un panel colapsable, colapsado por defecto
-- [ ] Ningún campo ni validación del `FormArray` de etapas cambia de comportamiento por estar colapsado (agregar/quitar etapa, validaciones, envío del formulario siguen funcionando igual)
-- [ ] El resto del formulario (nombre, fecha, sillas, medios de pago, etc.) no se ve afectado
+- [ ] Menú de personal reestructurado en Taquilla / Mis Eventos / Usuarios, con tabs de segundo nivel donde corresponde
+- [ ] Todas las rutas nuevas son reales y bookmarkeables (rutas anidadas de Angular, no solo agrupación visual)
+- [ ] Redirects desde las URLs viejas hacia las nuevas
+- [ ] `rutaDestinoParaRol()` sigue aterrizando cada rol exactamente donde aterriza hoy (verificado con test, no solo revisado a ojo)
+- [ ] Ningún guard de rol (`guardiaRol`) quedó más permisivo o más restrictivo de lo que era antes del cambio
 - [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
 - [ ] `npm run build` sin errores
 - [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
@@ -55,7 +73,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, más grande que las tareas del plan de abajo y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
 
-**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Los 2 slots del motor JIT están ahora dedicados a T3/T2 de ese plan (Tarea 1/Tarea 2 activas arriba — T1 ya completada, ver `MEMORY.md` §2); las siguientes recalculaciones seguirán sacando T4-T8 en orden, sin volver al roadmap v2 normal hasta agotar el plan.
+**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Los 2 slots del motor JIT están ahora dedicados a T3/T5 de ese plan (Tarea 1/Tarea 2 activas arriba — T1, T2 y T4 ya completadas, ver `MEMORY.md` §2); las siguientes recalculaciones seguirán sacando T6-T8 en orden tras cerrar T3/T5, sin volver al roadmap v2 normal hasta agotar el plan.
 
 ### Pausada, no eliminada — Dominio personalizado `agora.letiende.co`
 

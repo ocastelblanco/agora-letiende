@@ -158,55 +158,71 @@
         <div>
           <div class="mb-2 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
-            <button mat-stroked-button type="button" (click)="agregarEtapa()">
-              Agregar etapa
-            </button>
-          </div>
-
-          <div formArrayName="etapas" class="flex flex-col gap-4">
-            @for (grupo of etapas.controls; track grupo; let indice = $index) {
-              <div
-                [formGroupName]="indice"
-                class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
+            <div class="flex items-center gap-2">
+              <button mat-stroked-button type="button" (click)="agregarEtapa()">
+                Agregar etapa
+              </button>
+              <button
+                type="button"
+                class="text-xs font-semibold text-primary/60"
+                [attr.aria-expanded]="etapasExpandido()"
+                (click)="alternarEtapasExpandido()"
               >
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
-                  @if (etapas.length > 1) {
-                    <button
-                      mat-stroked-button
-                      color="warn"
-                      type="button"
-                      (click)="quitarEtapa(indice)"
-                    >
-                      Quitar
-                    </button>
-                  }
-                </div>
-
-                <input
-                  type="text"
-                  formControlName="nombre"
-                  placeholder="Nombre (ej. Preventa)"
-                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                />
-                <input
-                  type="number"
-                  formControlName="precio"
-                  placeholder="Precio en COP"
-                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                />
-                <p class="-mt-2 text-xs text-primary/60">
-                  {{ grupo.controls.precio.value | precio }}
-                </p>
-                <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
-                <input
-                  type="datetime-local"
-                  formControlName="cierraEn"
-                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                />
-              </div>
-            }
+                {{ etapasExpandido() ? 'Ocultar' : 'Mostrar' }}
+              </button>
+            </div>
           </div>
+
+          @if (!etapasExpandido()) {
+            <p class="text-xs text-primary/60">{{ etapas.length }} etapa(s) configurada(s).</p>
+          }
+
+          @if (etapasExpandido()) {
+            <div formArrayName="etapas" class="flex flex-col gap-4">
+              @for (grupo of etapas.controls; track grupo; let indice = $index) {
+                <div
+                  [formGroupName]="indice"
+                  class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
+                    @if (etapas.length > 1) {
+                      <button
+                        mat-stroked-button
+                        color="warn"
+                        type="button"
+                        (click)="quitarEtapa(indice)"
+                      >
+                        Quitar
+                      </button>
+                    }
+                  </div>
+
+                  <input
+                    type="text"
+                    formControlName="nombre"
+                    placeholder="Nombre (ej. Preventa)"
+                    class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                  />
+                  <input
+                    type="number"
+                    formControlName="precio"
+                    placeholder="Precio en COP"
+                    class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                  />
+                  <p class="-mt-2 text-xs text-primary/60">
+                    {{ grupo.controls.precio.value | precio }}
+                  </p>
+                  <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
+                  <input
+                    type="datetime-local"
+                    formControlName="cierraEn"
+                    class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                  />
+                </div>
+              }
+            </div>
+          }
         </div>
 
         <div class="flex flex-col gap-3">

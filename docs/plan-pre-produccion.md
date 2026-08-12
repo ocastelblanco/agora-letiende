@@ -30,7 +30,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[x] completada 12/08/2026, PR pendiente de apertura`
+### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[x] completada 12/08/2026, PR #31 fusionado`
 
 **Origen:** tabla de ajustes menores, filas "Compra de boletas" y "Venta en efectivo".
 
@@ -60,7 +60,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T4 — Colapsar "Etapas de boletería" en el formulario de editar evento `[activa como Tarea 2 de TODO.md]`
+### T4 — Colapsar "Etapas de boletería" en el formulario de editar evento `[x] completada 12/08/2026, PR pendiente de apertura`
 
 **Origen:** tabla de ajustes menores, fila "Editar evento".
 
@@ -74,7 +74,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ## Fase 2 — Reestructuración del menú principal
 
-### T5 — Menú de dos niveles con rutas anidadas reales
+### T5 — Menú de dos niveles con rutas anidadas reales `[activa como Tarea 2 de TODO.md]`
 
 **Origen:** sección "Reestructuración del menú principal" del documento de negocio.
 
