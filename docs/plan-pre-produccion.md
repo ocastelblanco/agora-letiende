@@ -30,7 +30,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[x] completada 12/08/2026, PR pendiente de apertura`
+### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[x] completada 12/08/2026, PR #31 fusionado`
 
 **Origen:** tabla de ajustes menores, filas "Compra de boletas" y "Venta en efectivo".
 
