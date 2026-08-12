@@ -27,8 +27,13 @@ export interface SeccionNavegacion {
 // y ocasional. Si se agrega una nueva sección de nivel 'portero' más
 // adelante, insertarla también antes de 'Puerta' para no cambiar este
 // destino sin una decisión explícita (`TODO.md` Tarea 2).
+//
+// 'Cartelera' (`/`) NO está en este arreglo (`TODO.md` Tarea 1, ajustes
+// pre-producción): el logo del header ya enlaza a `/` siempre, con o sin
+// sesión, así que repetirla aquí era redundante en el menú de personal
+// autenticado. La ruta pública `/` no se toca — sigue existiendo para
+// cualquiera vía URL o logo.
 export const SECCIONES_NAVEGACION: SeccionNavegacion[] = [
-  { etiqueta: 'Cartelera', ruta: '/', rolMinimo: 'portero' },
   { etiqueta: 'Efectivo', ruta: '/efectivo', rolMinimo: 'portero' },
   { etiqueta: 'Puerta', ruta: '/puerta', rolMinimo: 'portero' },
   // 'Panel' va ANTES de 'Aprobaciones' a propósito (TODO.md Tarea 2): mismo
@@ -54,9 +59,12 @@ export const SECCIONES_NAVEGACION: SeccionNavegacion[] = [
  * `'/'` (portero), reportado en vivo por el usuario probando el PR de
  * Validación en puerta (`MEMORY.md` §7).
  *
- * `findLast` (no `find`): con `find`, "Cartelera" (la primera del arreglo,
- * accesible para cualquier rol) siempre ganaría, rebotando incluso a un
- * administrador hacia `/`.
+ * `findLast` (no `find`): con `find`, la primera sección del arreglo
+ * accesible para cualquier rol (antes "Cartelera") siempre ganaría,
+ * rebotando incluso a un administrador hacia `/`. El razonamiento se
+ * mantiene aunque "Cartelera" ya no esté en el arreglo (`TODO.md` Tarea 1):
+ * cualquier sección futura de rol amplio tendría el mismo problema con
+ * `find`.
  */
 export function rutaDestinoParaRol(rol: Rol | null): string {
   if (!rol) {

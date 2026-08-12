@@ -1,5 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { PanelService } from '../../core/api/panel.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
 import { cumpleRolMinimo } from '../../core/models/usuario.model';
@@ -10,9 +12,8 @@ import { SECCIONES_NAVEGACION } from './secciones-navegacion';
  * visible**, con o sin sesión, para ofrecer siempre una forma de llegar a
  * `/login` (decisión de diseño explícita del usuario, ver `MEMORY.md`
  * sesión 06/08/2026 noche). Ya autenticado, muestra las secciones que el
- * rol actual cumple según `SECCIONES_NAVEGACION`, incluyendo "Cartelera"
- * para que el personal también pueda saltar a la interfaz pública desde el
- * mismo menú.
+ * rol actual cumple según `SECCIONES_NAVEGACION` (sin "Cartelera" —
+ * `TODO.md` Tarea 1 — el logo del header ya enlaza a `/` siempre).
  *
  * Sin `@Input()`: todo el estado sale de `ServicioAuth` inyectado
  * directamente. Sin Angular Material nuevo (`MatToolbar`/`MatSidenav`/
@@ -36,6 +37,23 @@ export class BarraNavegacionComponent {
 
   /** Controla el drawer móvil (`< 768px`) — oculto por defecto. */
   protected readonly menuAbierto = signal(false);
+
+  /**
+   * Ruta actual, vía `Router.events` (`NavigationEnd`) convertido con
+   * `toSignal` — Angular no expone la ruta activa como signal nativo
+   * todavía. Único consumo: ocultar el botón "Ingresar" en `/login`
+   * (`TODO.md` Tarea 1), donde se confunde con "Ingresar con Google".
+   */
+  private readonly rutaActual = toSignal(
+    this.router.events.pipe(
+      filter((evento) => evento instanceof NavigationEnd),
+      map((evento) => evento.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  /** `true` en `/login` — el botón "Ingresar" del header solo se oculta ahí. */
+  protected readonly enLogin = computed(() => this.rutaActual() === '/login');
 
   /** Secciones visibles para el rol actual — vacío sin sesión o sin rol resuelto. */
   protected readonly secciones = computed(() => {

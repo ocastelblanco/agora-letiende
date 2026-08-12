@@ -1,8 +1,20 @@
-import { rutaDestinoParaRol } from './secciones-navegacion';
+import { rutaDestinoParaRol, SECCIONES_NAVEGACION } from './secciones-navegacion';
+
+describe('SECCIONES_NAVEGACION', () => {
+  it('ya no incluye "Cartelera" — el logo del header ya enlaza a / siempre (TODO.md Tarea 1)', () => {
+    expect(SECCIONES_NAVEGACION.some((seccion) => seccion.etiqueta === 'Cartelera')).toBe(false);
+  });
+});
 
 describe('rutaDestinoParaRol', () => {
   it('devuelve / si no hay rol', () => {
     expect(rutaDestinoParaRol(null)).toBe('/');
+  });
+
+  it('sin "Cartelera" en el arreglo, rutaDestinoParaRol no cambia para portero/productor/administrador (TODO.md Tarea 1)', () => {
+    expect(rutaDestinoParaRol('portero')).toBe('/puerta');
+    expect(rutaDestinoParaRol('productor')).toBe('/admin/aprobaciones');
+    expect(rutaDestinoParaRol('administrador')).toBe('/admin/usuarios');
   });
 
   it('devuelve /puerta para portero (sección más específica que cumple, no la primera "Cartelera")', () => {
