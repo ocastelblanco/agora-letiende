@@ -1,20 +1,19 @@
 # Plan de ejecución — Ajustes pre-producción (previo a UAT y v1)
 
-Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de OCM) en tareas atómicas ejecutables. Escrito el 12/08/2026, con GitHub presentando problemas para fusionar PRs — este documento y las actualizaciones de `MEMORY.md`/`PRD.md`/`tech-specs.md`/`TODO.md` que lo acompañan quedan listos localmente para que, en cuanto se restablezca GitHub y se fusione el PR #28 (Tarea 2 actual, Etapas de boletería con cierre automático), el motor JIT de `TODO.md` empiece a sacar tareas de aquí en vez de continuar con el roadmap v2 normal (Bold/WhatsApp/Google Calendar quedan en pausa implícita mientras dure este plan).
+Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de OCM) en tareas atómicas ejecutables. Escrito el 12/08/2026, originalmente con GitHub presentando problemas para fusionar PRs (ya resuelto). El PR #28 (Etapas de boletería con cierre automático) ya se fusionó, y el usuario confirmó (12/08/2026) usar **ambos slots** del motor JIT de `TODO.md` para este plan — Dominio personalizado pasa a Backlog, pausada. **T1 y T2 son las Tarea 1/Tarea 2 activas de `TODO.md` en este momento.**
 
 **Decisiones ya confirmadas con el usuario, no reabrir:**
 - Los "tabs" de segundo nivel del menú son **rutas anidadas reales** de Angular (bookmarkeables), no solo una agrupación visual.
 - Este plan vive en un documento aparte; `TODO.md` sigue con su regla de **exactamente 2 tareas atómicas activas**, sacando de aquí en el orden de abajo.
 - **Orden de ejecución:** (1) ajustes menores de UI → (2) reestructuración del menú → (3) aumento de alcance del productor → (4) limitación de alcance de productor/portero por evento — el cambio más grande y más sensible en seguridad, al final, con más margen de tiempo antes de UAT.
 - **No hay fecha fija de UAT** — depende de cuándo el prototipo esté listo. El usuario fue explícito: **las 8 tareas de este documento deben completarse antes de cualquier prueba UAT**, no es un plan del que se pueda recortar alcance a mitad de camino.
-
-**Recomendación pendiente de confirmar con el usuario (no ejecutada todavía):** dado que no hay fecha fija pero sí la exigencia de completar todo antes de UAT, considerar pausar la Tarea 1 de `TODO.md` (Dominio personalizado — infraestructura, no bloquea UAT) y usar ambos slots del motor JIT para este plan hasta agotarlo. `TODO.md` no se tocó en ese sentido todavía; queda a la espera de que el usuario lo confirme.
+- **Confirmado (12/08/2026):** ambos slots del motor JIT dedicados a este plan — Dominio personalizado pausada en el Backlog de `TODO.md` hasta agotarlo.
 
 ---
 
 ## Fase 1 — Ajustes menores de UI (bajo riesgo, rápidos)
 
-### T1 — Header y login: botón "Ingresar" e vínculo "Cartelera"
+### T1 — Header y login: botón "Ingresar" e vínculo "Cartelera" `[activa como Tarea 1 de TODO.md]`
 
 **Origen:** tabla de ajustes menores, filas "Header" (×2) y "Login".
 
@@ -31,7 +30,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo)
+### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[activa como Tarea 2 de TODO.md]`
 
 **Origen:** tabla de ajustes menores, filas "Compra de boletas" y "Venta en efectivo".
 
@@ -168,9 +167,9 @@ La más grande y más sensible en seguridad de las cuatro fases — toca autoriz
 
 ---
 
-## Cómo continúa esto una vez se restablezca GitHub
+## Cómo sigue esto
 
-1. Fusionar el PR #28 (Tarea 2 actual, ya verificado y probado).
-2. Recalcular `TODO.md`: Tarea 2 pasa a **T1** de este plan (Fase 1). Confirmar con el usuario si Tarea 1 (Dominio personalizado) se pausa para usar ambos slots en este plan, o si sigue en paralelo.
+1. ~~Fusionar el PR #28~~ — hecho (12/08/2026).
+2. ~~Recalcular `TODO.md`~~ — hecho (12/08/2026): T1 y T2 son ahora la Tarea 1/Tarea 2 activas, Dominio personalizado pausada en el Backlog.
 3. Cada tarea de este documento se especifica con el nivel de detalle completo de `TODO.md` (Origen/Alcance/Decisiones/Archivos/DoD) recién al convertirse en la Tarea activa — este documento es el mapa de ruta, no el reemplazo de esa especificación.
-4. Al completar cada tarea, se mueve su resumen a `MEMORY.md` §2 (igual que siempre) y se tacha aquí (agregar `[x]`/fecha/PR a la cabecera de la sección correspondiente), sin borrar el contenido — este documento queda como registro histórico del plan completo, igual que `TODO.md` mueve las tareas completadas a `MEMORY.md` en vez de borrarlas.
+4. Al completar cada tarea, se mueve su resumen a `MEMORY.md` §2 (igual que siempre) y se marca aquí (agregar `[x]`/fecha/PR al título de la sección correspondiente), sin borrar el contenido — este documento queda como registro histórico del plan completo, igual que `TODO.md` mueve las tareas completadas a `MEMORY.md` en vez de borrarlas. Al terminar T2, la siguiente recalculación saca T3 (y T4 si cabe en el segundo slot) en el mismo orden de Fases.
