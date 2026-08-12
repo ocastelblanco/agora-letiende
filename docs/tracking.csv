@@ -102,3 +102,5 @@ Frontend,12/08/2026 12:12,12/08/2026 12:29,0:17:00,AI,Sonnet 5,Header: boton Ing
 Specs definition,12/08/2026 15:35,12/08/2026 15:55,0:20:00,AI,Sonnet 5,Recalculo del motor JIT tras validacion de T1 header/login pasa a T3 fecha limite de etapas y banner agotado cancelado,Claude Code,cli,medium
 Frontend,12/08/2026 15:56,12/08/2026 16:09,0:13:00,AI,Sonnet 5,Implementacion delegada del selector de cantidad de boletas en compra y venta en efectivo con verificacion arquitectonica,Claude Code,cli,medium
 Specs definition,12/08/2026 16:09,12/08/2026 16:14,0:05:00,AI,Sonnet 5,Recalculo del motor JIT tras cierre de T2 selector cantidad Tarea 2 pasa a T4 colapsar etapas apertura de PR,Claude Code,cli,low
+Frontend,12/08/2026 16:20,12/08/2026 17:15,0:55:00,AI,Sonnet 5,Implementacion delegada del panel colapsable de etapas en editar evento con verificacion arquitectonica y fix de aria-expanded,Claude Code,cli,medium
+Specs definition,12/08/2026 17:15,12/08/2026 17:32,0:17:00,AI,Sonnet 5,Recalculo del motor JIT tras cierre de T4 colapsar etapas Tarea 2 pasa a T5 menu de dos niveles apertura de PR,Claude Code,cli,low
