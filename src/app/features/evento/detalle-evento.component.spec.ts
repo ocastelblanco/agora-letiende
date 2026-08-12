@@ -102,6 +102,32 @@ describe('DetalleEventoComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Evento no encontrado');
   });
 
+  it('distingue la etapa vigente ("Vigente") de una etapa ya cerrada ("Cerrada")', async () => {
+    const eventoConEtapas: EventoPublico = {
+      ...eventoEjemplo,
+      etapas: [
+        { etapaId: 'et1', nombre: 'Preventa', precio: 30000, cierraEn: '2000-01-01T00:00:00.000Z', orden: 1 },
+        { etapaId: 'et2', nombre: 'General', precio: 45000, cierraEn: '2099-01-01T00:00:00.000Z', orden: 2 },
+      ],
+    };
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoConEtapas });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+    const componente = fixture.componentInstance;
+
+    expect(componente['etapaVigente']()?.etapaId).toBe('et2');
+    expect(componente['etapaCerrada'](eventoConEtapas.etapas[0])).toBe(true);
+    expect(componente['etapaCerrada'](eventoConEtapas.etapas[1])).toBe(false);
+
+    const items: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('ul li');
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain('Cerrada');
+    expect(items[0].classList.contains('opacity-50')).toBe(true);
+    expect(items[1].textContent).toContain('Vigente');
+    expect(items[1].classList.contains('opacity-50')).toBe(false);
+  });
+
   it('actualiza title, description, Open Graph y Twitter Card', async () => {
     const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo });
     const { fixture } = configurarPrueba(cargarEventoPorSlugMock);

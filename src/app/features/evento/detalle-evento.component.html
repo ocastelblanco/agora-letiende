@@ -27,9 +27,22 @@
             <h2 class="mb-2 text-lg font-semibold text-primary">Etapas de boletería</h2>
             <ul class="mb-6 divide-y divide-primary/10">
               @for (etapa of detalleEvento.etapas; track etapa.etapaId) {
-                <li class="flex items-center justify-between py-2">
-                  <span class="text-primary">{{ etapa.nombre }}</span>
-                  <span class="font-semibold text-primary">{{ etapa.precio | precio }}</span>
+                <li class="flex items-center justify-between py-2" [class.opacity-50]="etapaCerrada(etapa)">
+                  <span class="flex items-center gap-2">
+                    <span class="text-primary">{{ etapa.nombre }}</span>
+                    @if (etapa.etapaId === etapaVigente()?.etapaId) {
+                      <span class="rounded-full bg-tertiary px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+                        Vigente
+                      </span>
+                    } @else if (etapaCerrada(etapa)) {
+                      <span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary/60">
+                        Cerrada
+                      </span>
+                    }
+                  </span>
+                  <span class="font-semibold text-primary" [class.line-through]="etapaCerrada(etapa)">
+                    {{ etapa.precio | precio }}
+                  </span>
                 </li>
               }
             </ul>

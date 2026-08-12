@@ -1,10 +1,11 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
-import type { EventoPublico } from '../../core/models/evento.model';
+import type { EtapaBoleteria, EventoPublico } from '../../core/models/evento.model';
 import { PrecioPipe } from '../../shared/pipes/precio.pipe';
+import { etapaVigenteParaMostrar } from '../../shared/utilidades/etapa-vigente';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
 const URL_BASE_PUBLICA = 'https://agora.letiende.co';
@@ -46,6 +47,16 @@ export class DetalleEventoComponent {
   protected readonly cargando = signal(true);
   protected readonly noEncontrado = signal(false);
 
+  /**
+   * Etapa vigente para destacarla en el template (`TODO.md` Tarea 2) —
+   * mismo utilitario compartido que `ComprarComponent`/`VentaEfectivoComponent`.
+   * Aquí es solo presentación: esta página nunca envía un precio al backend.
+   */
+  protected readonly etapaVigente = computed(() => {
+    const evento = this.evento();
+    return evento ? etapaVigenteParaMostrar(evento.etapas) : null;
+  });
+
   constructor() {
     // Reacciona a cada cambio del Signal input `slug` — incluida la
     // reutilización de instancia descrita en el docstring de la clase.
@@ -75,6 +86,11 @@ export class DetalleEventoComponent {
   /** Fecha del evento en hora de Bogotá para mostrar en la página (`CLAUDE.md` §4). */
   protected fechaLegible(fechaHoraIso: string): string {
     return paraInputBogota(fechaHoraIso).replace('T', ' ');
+  }
+
+  /** `true` si `cierraEn` de la etapa ya pasó — para atenuarla en el template. */
+  protected etapaCerrada(etapa: EtapaBoleteria): boolean {
+    return new Date(etapa.cierraEn).getTime() <= Date.now();
   }
 
   private actualizarMetadatos(evento: EventoPublico): void {
@@ -131,14 +147,24 @@ export class DetalleEventoComponent {
     if (imagen) {
       jsonLd['image'] = [imagen];
     }
-    if (evento.etapas.length > 0) {
-      jsonLd['offers'] = evento.etapas.map((etapa) => ({
-        '@type': 'Offer',
-        name: etapa.nombre,
-        price: etapa.precio,
-        priceCurrency: 'COP',
-        url: urlEvento,
-      }));
+    // Decisión (`TODO.md` Tarea 2, punto 5): filtrar `offers` a la etapa
+    // vigente, no a todas. `schema.org/Offer.price` describe el precio al
+    // que un comprador puede acceder *ahora* — listar una preventa ya
+    // cerrada como oferta activa es información engañosa para un rastreador
+    // (y potencialmente reportable por Google como "precio no disponible"),
+    // no una mejora de SEO. Si ninguna etapa sigue vigente, se omite
+    // `offers` por completo en vez de anunciar un precio que ya no aplica.
+    const etapaVigente = etapaVigenteParaMostrar(evento.etapas);
+    if (etapaVigente) {
+      jsonLd['offers'] = [
+        {
+          '@type': 'Offer',
+          name: etapaVigente.nombre,
+          price: etapaVigente.precio,
+          priceCurrency: 'COP',
+          url: urlEvento,
+        },
+      ];
     }
 
     const script = this.documento.createElement('script');
