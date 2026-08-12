@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (12/08/2026, tercera recalculación del día):** T1 (header/login) quedó validada en vivo por el usuario ("todo funciona bien") y pasa a completada en `MEMORY.md` §2 pese a seguir sin fusionar (mismo criterio ya usado en sesiones anteriores). Sigue siendo la Fase 1 de `docs/plan-pre-produccion.md`: el slot libre lo ocupa **T3** (fecha límite de etapas + banner AGOTADO/CANCELADO), cuya única dependencia — el PR #28 fusionado — ya está satisfecha. T2 (selector de cantidad de boletas) sigue activa sin cambios, todavía sin empezar. T4 (colapsar etapas en editar evento) queda como candidato de la siguiente recalculación.
+**Prioridad de selección aplicada (12/08/2026, cuarta recalculación del día):** T2 (selector de cantidad de boletas) implementada, verificada (build + tests + verificación arquitectónica independiente, sin hallazgos) y pasa a completada en `MEMORY.md` §2, PR pendiente de apertura. El slot libre lo ocupa **T4** (colapsar "Etapas de boletería" en editar evento, `docs/plan-pre-produccion.md` Fase 1), sin dependencias técnicas. T3 (fecha límite de etapas + banner AGOTADO/CANCELADO) sigue activa sin cambios, todavía sin empezar.
 
 ---
 
@@ -31,21 +31,20 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 2 — [FEATURE]: Selector de cantidad de boletas (compra pública + venta en efectivo)
+## Tarea 2 — [FEATURE]: Colapsar "Etapas de boletería" en el formulario de editar evento
 
-**Origen:** `docs/ajustes-pre-producción.md`, tabla de ajustes menores, filas "Compra de boletas" y "Venta en efectivo" · `docs/plan-pre-produccion.md` Fase 1, T2.
+**Origen:** `docs/ajustes-pre-producción.md`, tabla de ajustes menores, fila "Editar evento" · `docs/plan-pre-produccion.md` Fase 1, T4.
 
-**Alcance:** en `ComprarComponent` (`comprar.component.html:47-61`) y `VentaEfectivoComponent` (mismo patrón — confirmar líneas reales al implementar, no asumirlas idénticas), reemplazar el `<input type="number" formControlName="cantidad">` por un `<select formControlName="cantidad">` con opciones de `1` hasta `Math.min(evento.maxBoletasPorCompra, evento.sillasDisponibles)`. El texto *helper* pasa de "Máximo {N} por compra" a incluir también las sillas disponibles: `Sillas disponibles: {SILLAS_DISPONIBLES}` (redacción literal del documento de negocio).
+**Alcance:** en `EditarEventoComponent`, la sección completa de "Etapas de boletería" (el `FormArray` de etapas, hoy siempre expandido) pasa a vivir dentro de un panel colapsable (colapsado por defecto — coherente con el objetivo general de reducir la extensión visual de las pantallas de administración, mismo espíritu que la reestructuración del menú de la Fase 2 del plan).
 
-**Decisión a resolver al implementar, no en abstracto:** confirmar que el `<select>` nuevo sigue disparando `totalEstimado()`/la validación de `cantidad` sin cambios (el valor sigue siendo un número, solo cambia el control de entrada — no debería requerir tocar los `computed`). Si `sillasDisponibles` o `maxBoletasPorCompra` es `0`, el desplegable queda con cero opciones — confirmar que `puedeComprar()` (`ComprarComponent`) y su equivalente en `VentaEfectivoComponent` ya ocultan el formulario completo en ese caso (probablemente sí, ambos ya condicionan la visibilidad), para que nunca se muestre un `<select>` vacío sin explicación.
+**Decisión a resolver al implementar, no en abstracto:** panel hecho a mano (`signal` + Tailwind, mismo patrón ya usado en el resto del componente, que no usa Angular Material más allá de `MatButtonModule`) vs. introducir `MatExpansionModule` por primera vez en el proyecto — dado que ningún otro componente usa expansion panels todavía y este formulario es 100% de inputs nativos, el patrón hecho a mano es más consistente con el resto del archivo. Confirmar con el template real de `editar-evento.component.html` en pantalla antes de decidir.
 
-**Archivos:** `comprar.component.html`/`.ts`/`.spec.ts`, `venta-efectivo.component.html`/`.ts`/`.spec.ts`.
+**Archivos:** `editar-evento.component.html`/`.ts`/`.spec.ts`.
 
 **Definition of done:**
-- [ ] El campo "Cantidad de boletas" es un desplegable de `1` a `min(maxBoletasPorCompra, sillasDisponibles)`, en `ComprarComponent` y en `VentaEfectivoComponent`
-- [ ] El texto *helper* muestra tanto el máximo por compra como las sillas disponibles
-- [ ] `totalEstimado()`/cálculo equivalente sigue funcionando sin cambios de comportamiento
-- [ ] Ningún camino deja ver un `<select>` vacío sin explicación cuando no hay sillas/cupo disponible
+- [ ] La sección "Etapas de boletería" vive dentro de un panel colapsable, colapsado por defecto
+- [ ] Ningún campo ni validación del `FormArray` de etapas cambia de comportamiento por estar colapsado (agregar/quitar etapa, validaciones, envío del formulario siguen funcionando igual)
+- [ ] El resto del formulario (nombre, fecha, sillas, medios de pago, etc.) no se ve afectado
 - [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
 - [ ] `npm run build` sin errores
 - [ ] Todo entregado en una rama con PR abierto — **sin fusionar**

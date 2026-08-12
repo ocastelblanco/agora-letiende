@@ -87,6 +87,15 @@ describe('ComprarComponent', () => {
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 
+  it('el select de cantidad tiene min(maxBoletasPorCompra, sillasDisponibles) opciones', async () => {
+    const { fixture } = configurarPrueba({});
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const opciones = fixture.nativeElement.querySelectorAll('select#cantidad option');
+    expect(opciones.length).toBe(4);
+  });
+
   it('no muestra el formulario si el evento está agotado', async () => {
     const { fixture } = configurarPrueba({
       evento: { ...eventoEjemplo, estado: 'agotado', sillasDisponibles: 0 },

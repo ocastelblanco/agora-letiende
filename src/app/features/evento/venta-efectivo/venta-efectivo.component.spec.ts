@@ -87,6 +87,15 @@ describe('VentaEfectivoComponent', () => {
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 
+  it('el select de cantidad tiene min(maxBoletasPorCompra, sillasDisponibles) opciones', async () => {
+    const { fixture } = configurarPrueba({});
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const opciones = fixture.nativeElement.querySelectorAll('select#cantidad option');
+    expect(opciones.length).toBe(4);
+  });
+
   it('no muestra el formulario si el evento no admite efectivo entre sus medios de pago', async () => {
     const { fixture } = configurarPrueba({
       evento: { ...eventoEjemplo, mediosPago: ['transferencia'] },

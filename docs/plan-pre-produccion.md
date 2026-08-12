@@ -30,9 +30,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[activa como Tarea 2 de TODO.md]`
-
-*(sigue activa, sin cambios en esta recalculación)*
+### T2 — Selector de cantidad de boletas (compra pública + venta en efectivo) `[x] completada 12/08/2026, PR pendiente de apertura`
 
 **Origen:** tabla de ajustes menores, filas "Compra de boletas" y "Venta en efectivo".
 
@@ -62,7 +60,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T4 — Colapsar "Etapas de boletería" en el formulario de editar evento
+### T4 — Colapsar "Etapas de boletería" en el formulario de editar evento `[activa como Tarea 2 de TODO.md]`
 
 **Origen:** tabla de ajustes menores, fila "Editar evento".
 
