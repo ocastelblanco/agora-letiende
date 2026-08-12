@@ -251,6 +251,96 @@ describe('handler de /api/eventos', () => {
 
       expect(respuesta.statusCode).toBe(404);
     });
+
+    describe('etapaId estable (TODO.md Tarea 2)', () => {
+      it('reenviar el etapaId de una etapa existente no genera uno nuevo', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { etapas: [{ ...etapaValida, etapaId: 'et1' }] },
+        });
+
+        expect(sendMock).toHaveBeenCalledTimes(2);
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':etapas'][0].etapaId).toBe('et1');
+      });
+
+      it('una etapa nueva (sin etapaId) recibe un etapaId nuevo generado por el backend', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { etapas: [{ ...etapaValida }] },
+        });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        const etapaEnviada = comandoUpdate.input.ExpressionAttributeValues[':etapas'][0];
+        expect(typeof etapaEnviada.etapaId).toBe('string');
+        expect(etapaEnviada.etapaId).not.toBe('et1');
+      });
+
+      it('un etapaId que no pertenece al evento (inventado/obsoleto) se descarta y se genera uno nuevo', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { etapas: [{ ...etapaValida, etapaId: 'etapa-inventada' }] },
+        });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        const etapaEnviada = comandoUpdate.input.ExpressionAttributeValues[':etapas'][0];
+        expect(etapaEnviada.etapaId).not.toBe('etapa-inventada');
+      });
+
+      it('dos etapas del payload que reenvían el mismo etapaId existente no terminan con la misma identidad', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            etapas: [
+              { ...etapaValida, etapaId: 'et1' },
+              { ...etapaValida, nombre: 'General', etapaId: 'et1' },
+            ],
+          },
+        });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        const etapasEnviadas = comandoUpdate.input.ExpressionAttributeValues[':etapas'];
+        expect(etapasEnviadas[0].etapaId).toBe('et1');
+        expect(etapasEnviadas[1].etapaId).not.toBe('et1');
+        expect(typeof etapasEnviadas[1].etapaId).toBe('string');
+      });
+
+      it('responde 404 y no llega al UpdateCommand si el eventoId no existe', async () => {
+        sendMock.mockResolvedValueOnce({ Item: undefined });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'inexistente',
+          cuerpo: { etapas: [etapaValida] },
+        });
+
+        expect(respuesta.statusCode).toBe(404);
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('un PUT sin etapas en el payload no hace ningún GetCommand extra', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1', nombre: 'X' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   describe('DELETE /api/eventos/:eventoId', () => {

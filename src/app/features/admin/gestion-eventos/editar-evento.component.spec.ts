@@ -189,6 +189,9 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.nombre.value).toBe('Concierto de jazz');
       expect(componente['formulario'].controls.mediosPago.controls.bold.value).toBe(true);
       expect(componente['etapas'].length).toBe(1);
+      // TODO.md Tarea 2: el etapaId real ya existente se preserva en el
+      // FormArray, no se deja vacío.
+      expect(componente['etapas'].at(0).controls.etapaId.value).toBe('et1');
     });
 
     it('marca eventoNoEncontrado cuando el eventoId no está en el listado', async () => {
@@ -222,6 +225,62 @@ describe('EditarEventoComponent', () => {
       expect(snackBarOpenMock).toHaveBeenCalledWith('Evento actualizado correctamente.', 'Cerrar', {
         duration: 4000,
       });
+      // TODO.md Tarea 2: etapasFormulario() reenvía el etapaId real ya
+      // precargado, en vez de dejar que el backend genere uno nuevo.
+      expect(datos.etapas[0].etapaId).toBe('et1');
+    });
+
+    it('regresión: un segundo guardar() tras agregarEtapa() reenvía el etapaId que el backend asignó en el primer guardado', async () => {
+      const eventoConEtapaNueva: Evento = {
+        ...eventoExistente,
+        etapas: [
+          ...eventoExistente.etapas,
+          {
+            etapaId: 'et2-generado-por-backend',
+            nombre: 'General',
+            precio: 30000,
+            cierraEn: '2026-09-10T00:00:00.000Z',
+            orden: 2,
+          },
+        ],
+      };
+      const actualizarEventoMock = vi
+        .fn()
+        .mockResolvedValueOnce({ exito: true, evento: eventoConEtapaNueva })
+        .mockResolvedValueOnce({ exito: true, evento: eventoConEtapaNueva });
+      const { fixture } = configurarPrueba({
+        eventos: [eventoExistente],
+        actualizarEventoMock,
+      });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      // Agrega una segunda etapa sin etapaId (como haría agregarEtapa() al
+      // administrador dar clic en "Agregar etapa") y guarda una primera vez.
+      componente['agregarEtapa']();
+      componente['etapas'].at(1).patchValue({
+        nombre: 'General',
+        precio: 30000,
+        cierraEn: '2026-09-09T19:00',
+      });
+      await componente['guardar']();
+
+      const primerPayload = actualizarEventoMock.mock.calls[0][1];
+      expect(primerPayload.etapas[1].etapaId).toBeUndefined();
+
+      // El formulario debe haberse sincronizado con el etapaId real que
+      // devolvió el backend en la respuesta ALL_NEW — sin recargar ni
+      // navegar entre medio.
+      expect(componente['etapas'].at(1).controls.etapaId.value).toBe(
+        'et2-generado-por-backend',
+      );
+
+      // Un segundo guardar() en la misma sesión debe reenviar ESE mismo
+      // etapaId, no uno vacío que el backend volvería a tratar como "nueva"
+      // (huerfanizando cualquier venta ya asociada a la primera).
+      await componente['guardar']();
+      const segundoPayload = actualizarEventoMock.mock.calls[1][1];
+      expect(segundoPayload.etapas[1].etapaId).toBe('et2-generado-por-backend');
     });
 
     it('subirImagen() sube el archivo y guarda la key con actualizarEvento()', async () => {

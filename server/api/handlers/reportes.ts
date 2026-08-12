@@ -181,11 +181,11 @@ async function obtenerPanelEvento(
   const etapas = (Array.isArray(eventoItem['etapas']) ? eventoItem['etapas'] : []) as EtapaEvento[];
 
   // Se agrupa por el etapaId propio de cada compra, no por `evento.etapas`:
-  // `normalizarEtapas()` (handlers/eventos.ts) genera un etapaId nuevo en
-  // cada PUT que incluya `etapas`, huerfanizando el etapaId de las compras
-  // ya existentes. Agrupar contra `evento.etapas` haría que esas ventas
-  // desaparezcan de `porEtapa` sin ningún error visible (bug preexistente en
-  // eventos.ts, fuera de alcance acá — este agrupamiento es defensivo).
+  // `normalizarEtapas()` (handlers/eventos.ts) ya preserva el etapaId real
+  // en cada `PUT` que incluya `etapas` (TODO.md Tarea 2, 11/08/2026), pero
+  // este agrupamiento se deja como defensa permanente para cualquier etapa
+  // huérfana histórica (datos de antes del fix) o legado sin migrar — así
+  // esas ventas nunca desaparecen de `porEtapa` sin ningún error visible.
   const nombresPorEtapaId = new Map(etapas.map((etapa) => [etapa.etapaId, etapa.nombre]));
   const idsEtapaEnCompras = new Set(comprasAprobadas.map((compra) => compra.etapaId));
   // Orden: primero las etapas conocidas en el orden declarado por el
