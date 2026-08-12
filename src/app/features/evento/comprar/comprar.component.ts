@@ -4,22 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { CompraCreada, ComprasService } from '../../../core/api/compras.service';
 import { EventosPublicosService } from '../../../core/api/eventos-publicos.service';
-import type { EtapaBoleteria, EventoPublico } from '../../../core/models/evento.model';
+import type { EventoPublico } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
+import { etapaVigenteParaMostrar } from '../../../shared/utilidades/etapa-vigente';
 import { paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
-
-/**
- * Etapa vigente **solo para mostrar un estimado en pantalla** — mismo
- * criterio que usa `compras.ts` en el backend (primera etapa por `orden`
- * cuyo `cierraEn` no ha pasado), pero el total real siempre lo calcula y
- * devuelve el servidor (`TODO.md` Tarea 2, `CLAUDE.md` §5 A08): este
- * cálculo nunca se envía ni se acepta como el precio final.
- */
-function etapaVigenteParaMostrar(etapas: EtapaBoleteria[]): EtapaBoleteria | null {
-  const ahora = Date.now();
-  const ordenadas = [...etapas].sort((a, b) => a.orden - b.orden);
-  return ordenadas.find((etapa) => new Date(etapa.cierraEn).getTime() > ahora) ?? null;
-}
 
 /**
  * Ruta pública `/evento/:slug/comprar` (`TODO.md` Tarea 2, `PRD.md` §5.3) —
