@@ -2,36 +2,13 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Prioridad de selección aplicada (12/08/2026, quinta recalculación del día):** T4 (colapsar "Etapas de boletería" en editar evento) implementada, verificada (build + tests + verificación arquitectónica independiente, un hallazgo menor de accesibilidad corregido — `aria-expanded`) y pasa a completada en `MEMORY.md` §2, PR pendiente de apertura. Con T1/T2/T4 completadas, la Fase 1 de `docs/plan-pre-produccion.md` solo le falta **T3** (activa, sin cambios). El slot libre lo ocupa **T5** (menú de dos niveles con rutas anidadas reales, Fase 2 del plan), siguiente en el orden de ejecución confirmado por el usuario — es la tarea más grande y riesgosa de las dos primeras fases (toca el shell de navegación completo y el destino post-login de los tres roles), así que conviene arrancarla con margen de tiempo en vez de dejarla para el final.
+**Prioridad de selección aplicada (12/08/2026, sexta recalculación del día):** T3 (fecha límite de etapas + banner AGOTADO/CANCELADO) implementada, verificada (build + tests + verificación arquitectónica independiente, sin hallazgos) y pasa a completada en `MEMORY.md` §2, PR pendiente de apertura. Con esto, la **Fase 1 completa** de `docs/plan-pre-produccion.md` (T1-T4) queda terminada. T5 (menú de dos niveles) pasa de Tarea 2 a **Tarea 1**, sin cambios de alcance.
+
+**Nota sobre el slot 2, deliberadamente sin tarea del plan por ahora:** T6, T7 y T8 (Fases 3-4) tienen dependencia dura y encadenada — T6 depende de T5 (asume las rutas `/mis-eventos/eventos*`), T7 depende de T6, T8 depende de T7 — así que ninguna de las tres puede empezar antes de que T5 se fusione. Como el usuario ya definió explícitamente (12/08/2026) que Bold/WhatsApp/Google Calendar/Dominio personalizado quedan detrás de las 8 tareas del plan **mientras dure el plan**, no se rellena el slot con un ítem del roadmap v2 solo para mantener la cuenta de "2 tareas" — sería trabajo especulativo sobre una tarea que ya se sabe bloqueada. El slot 2 se reactiva con T6 en cuanto T5 se fusione a `main`.
 
 ---
 
-## Tarea 1 — [FEATURE]: Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug`
-
-**Origen:** `docs/ajustes-pre-producción.md`, tabla de ajustes menores, filas "Card de evento detallado" (×2) · `docs/plan-pre-produccion.md` Fase 1, T3.
-
-**Dependencia ya satisfecha:** requiere el PR #28 (Etapas de boletería con cierre automático) fusionado — **ya lo está**. Ambos ajustes tocan `detalle-evento.component.html`/`.ts`, el mismo archivo que ese PR modificó extensamente (badges "Vigente"/"Cerrada", `etapasOrdenadas`, orden cronológico) — de ahí la dependencia, ya resuelta.
-
-**Alcance:**
-1. En la lista "Etapas de boletería" (el mismo `@for` que ya distingue vigente/cerrada desde el PR #28), agregar la fecha límite de cada etapa (`etapa.cierraEn`, formateada en hora de Bogotá — reutilizar `paraInputBogota` o una variante de solo-lectura ya usada en el resto del frontend, no reinventar el formateo).
-2. Si `detalleEvento.estado === 'agotado'`, superponer un aviso diagonal con el texto **AGOTADO** sobre la imagen del evento; si `estado === 'cancelado'`, el texto **CANCELADO**. Ambos estados ya existen en el modelo (`EstadoEvento`, `eventos.ts:27`) — esto es puramente de presentación, ningún cambio de backend.
-
-**Decisión a resolver al implementar, no en abstracto:** qué mostrar si el evento no tiene `imagenUrl` — ¿el aviso diagonal igual se muestra sobre el espacio donde iría la imagen, o se omite del todo? Confirmar con el template real de `detalle-evento.component.html` en pantalla antes de decidir (hoy el bloque de imagen ya es condicional con `@if (detalleEvento.imagenUrl)`).
-
-**Archivos:** `detalle-evento.component.html`/`.ts`/`.spec.ts`.
-
-**Definition of done:**
-- [ ] Cada etapa de la lista pública muestra su fecha límite de cierre, en hora de Bogotá
-- [ ] Un evento `agotado` muestra el aviso diagonal "AGOTADO" sobre la imagen (o donde correspondería si no hay imagen, según la decisión tomada)
-- [ ] Un evento `cancelado` muestra el aviso diagonal "CANCELADO", mismo criterio
-- [ ] Ningún otro estado (`borrador`/`publicado`/`finalizado`) muestra ningún aviso
-- [ ] `npm run test` en verde (sin impacto en `test:api`, no se toca backend)
-- [ ] `npm run build` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
-
----
-
-## Tarea 2 — [FEATURE]: Menú de dos niveles con rutas anidadas reales
+## Tarea 1 — [FEATURE]: Menú de dos niveles con rutas anidadas reales
 
 **Origen:** `docs/ajustes-pre-producción.md`, sección "Reestructuración del menú principal" · `docs/plan-pre-produccion.md` Fase 2, T5.
 
@@ -69,11 +46,19 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
+## Tarea 2 — sin asignar, bloqueada por dependencia dura sobre la Tarea 1
+
+No hay una segunda tarea atómica del plan que se pueda trabajar en paralelo con la Tarea 1 en este momento: T6 (Fase 3, siguiente en `docs/plan-pre-produccion.md`) depende explícitamente de que T5 (Tarea 1 de arriba) esté fusionada — asume las rutas `/mis-eventos/eventos*` que T5 crea. T7 depende de T6, T8 depende de T7. Ver la nota de la cabecera de este documento para el razonamiento completo de por qué este slot no se rellena con un ítem del roadmap v2 mientras tanto.
+
+**Se reactiva automáticamente con T6 en cuanto la Tarea 1 (T5) se fusione a `main`.**
+
+---
+
 ## Backlog
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, más grande que las tareas del plan de abajo y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
 
-**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Los 2 slots del motor JIT están ahora dedicados a T3/T5 de ese plan (Tarea 1/Tarea 2 activas arriba — T1, T2 y T4 ya completadas, ver `MEMORY.md` §2); las siguientes recalculaciones seguirán sacando T6-T8 en orden tras cerrar T3/T5, sin volver al roadmap v2 normal hasta agotar el plan.
+**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Fase 1 completa (T1-T4, ver `MEMORY.md` §2). El motor JIT tiene ahora **T5 activa como Tarea 1**; el slot de Tarea 2 queda deliberadamente sin tarea del plan (ver nota de cabecera) hasta que T5 se fusione y desbloquee T6 — las siguientes recalculaciones seguirán sacando T6-T8 en orden, sin volver al roadmap v2 normal hasta agotar el plan.
 
 ### Pausada, no eliminada — Dominio personalizado `agora.letiende.co`
 
