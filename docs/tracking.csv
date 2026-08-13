@@ -113,3 +113,4 @@ Specs definition,12/08/2026 19:35,12/08/2026 19:42,0:07:00,AI,Sonnet 5,Actualiza
 Cloud infraestructure,12/08/2026 19:42,12/08/2026 20:10,0:28:00,AI,Sonnet 5,Investigacion de gap de CI GitHub Actions no disparaba el deploy tras push a PR 33 cierre reapertura y commit vacio para forzar nuevo run,Claude Code,cli,medium
 Cloud infraestructure,12/08/2026 20:10,12/08/2026 20:30,0:20:00,AI,Sonnet 5,Resolucion de conflicto de fusion en tracking.csv entre PR 33 y PR 34 y verificacion del deploy exitoso a staging tras el push,Claude Code,cli,low
 Specs definition,12/08/2026 20:30,12/08/2026 21:00,0:30:00,AI,Sonnet 5,Limpieza local tras fusion del PR 33 y actualizacion completa de TODO y MEMORY cierre de sesion con narrativa del dia y proxima tarea sugerida T5,Claude Code,cli,medium
+Frontend,13/08/2026 08:55,13/08/2026 09:41,0:46:00,AI,Sonnet 5,Implementa menu de dos niveles con rutas anidadas Tarea 1 verificacion arquitectonica y abre PR 36,Claude Code,cli,high
