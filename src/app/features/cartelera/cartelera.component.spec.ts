@@ -81,4 +81,31 @@ describe('CarteleraComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('No se pudieron cargar los eventos.');
   });
+
+  it('no muestra ningún banner AGOTADO/CANCELADO cuando el evento está publicado', () => {
+    const { fixture } = configurarPrueba({ eventos: [eventoEjemplo] });
+
+    expect(fixture.nativeElement.textContent).not.toContain('AGOTADO');
+    expect(fixture.nativeElement.textContent).not.toContain('CANCELADO');
+  });
+
+  it('muestra el banner "AGOTADO" cuando algún evento del listado está agotado', () => {
+    const { fixture } = configurarPrueba({ eventos: [{ ...eventoEjemplo, estado: 'agotado' }] });
+
+    expect(fixture.nativeElement.textContent).toContain('AGOTADO');
+  });
+
+  it('muestra el banner "CANCELADO" cuando algún evento del listado está cancelado', () => {
+    const { fixture } = configurarPrueba({ eventos: [{ ...eventoEjemplo, estado: 'cancelado' }] });
+
+    expect(fixture.nativeElement.textContent).toContain('CANCELADO');
+  });
+
+  it('muestra el banner "AGOTADO" aunque el evento no tenga imagenUrl', () => {
+    const { fixture } = configurarPrueba({
+      eventos: [{ ...eventoEjemplo, imagenUrl: undefined, estado: 'agotado' }],
+    });
+
+    expect(fixture.nativeElement.textContent).toContain('AGOTADO');
+  });
 });

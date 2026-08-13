@@ -1,6 +1,8 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
+import type { EventoPublico } from '../../core/models/evento.model';
+import { avisoEstadoEvento } from '../../shared/utilidades/aviso-estado-evento';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
 /**
@@ -28,5 +30,14 @@ export class CarteleraComponent implements OnInit {
   /** Fecha de evento en hora de Bogotá para mostrar en la tarjeta (`CLAUDE.md` §4). */
   protected fechaLegible(fechaHoraIso: string): string {
     return paraInputBogota(fechaHoraIso).replace('T', ' ');
+  }
+
+  /**
+   * Texto del banner diagonal AGOTADO/CANCELADO para la tarjeta de un evento
+   * (`docs/plan-pre-producción.md` T3) — mismo utilitario que usa
+   * `DetalleEventoComponent`.
+   */
+  protected avisoEstado(evento: EventoPublico): 'AGOTADO' | 'CANCELADO' | null {
+    return avisoEstadoEvento(evento.estado);
   }
 }

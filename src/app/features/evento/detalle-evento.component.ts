@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
 import type { EtapaBoleteria, EventoPublico } from '../../core/models/evento.model';
 import { PrecioPipe } from '../../shared/pipes/precio.pipe';
+import { avisoEstadoEvento } from '../../shared/utilidades/aviso-estado-evento';
 import { etapaVigenteParaMostrar } from '../../shared/utilidades/etapa-vigente';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
@@ -121,13 +122,7 @@ export class DetalleEventoComponent {
    */
   protected readonly avisoEstado = computed(() => {
     const evento = this.evento();
-    if (evento?.estado === 'agotado') {
-      return 'AGOTADO';
-    }
-    if (evento?.estado === 'cancelado') {
-      return 'CANCELADO';
-    }
-    return null;
+    return evento ? avisoEstadoEvento(evento.estado) : null;
   });
 
   private actualizarMetadatos(evento: EventoPublico): void {
