@@ -44,7 +44,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T3 — Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug` `[x] completada 12/08/2026, PR pendiente de apertura`
+### T3 — Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug` `[x] completada 12/08/2026, PR #33 fusionado (extendido al banner de la cartelera)`
 
 **Origen:** tabla de ajustes menores, filas "Card de evento detallado" (×2).
 
