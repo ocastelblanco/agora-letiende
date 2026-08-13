@@ -143,8 +143,8 @@ functions:
     role: !GetAtt EventosLambdaRole.Arn
     description: >-
       CRUD de agora-eventos, URL de carga de activos y QR de marketing
-      (GET /api/eventos/:eventoId/qr), exclusivo de administrador
-      (TODO.md Tarea 1).
+      (GET /api/eventos/:eventoId/qr). Administrador sin restricción;
+      productor asignado edita alcance acotado (TODO.md Tarea 1, T6).
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}

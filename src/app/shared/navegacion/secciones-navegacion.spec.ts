@@ -8,15 +8,16 @@ describe('GRUPOS_NAVEGACION', () => {
     expect(TABS_NAVEGACION_PLANOS.some((tab) => tab.etiqueta === 'Cartelera')).toBe(false);
   });
 
-  it('el tab "Eventos" del grupo "Mis Eventos" sigue exigiendo administrador, pese a estar agrupado junto a tabs de productor', () => {
+  // Cambio de alcance DELIBERADO de TODO.md Tarea 1 (T6) respecto de la
+  // tarea anterior (T5): el productor ahora ve y accede a la lista de sus
+  // propios eventos, así que 'Eventos' pasó de exigir 'administrador' a
+  // 'productor'.
+  it('el tab "Eventos" del grupo "Mis Eventos" exige productor (TODO.md Tarea 1, T6)', () => {
     const grupoMisEventos = GRUPOS_NAVEGACION.find((grupo) => grupo.etiqueta === 'Mis Eventos');
     const tabEventos = grupoMisEventos?.tabs.find((tab) => tab.etiqueta === 'Eventos');
 
-    expect(tabEventos?.rolMinimo).toBe('administrador');
-    // Un productor no cumple ese rolMinimo — la agrupación visual con
-    // 'Panel'/'Aprobaciones' (ambos 'productor') no relaja la autorización
-    // real de 'Eventos', que sigue viviendo en el tab, no en el grupo.
-    expect(cumpleRolMinimo('productor', tabEventos!.rolMinimo)).toBe(false);
+    expect(tabEventos?.rolMinimo).toBe('productor');
+    expect(cumpleRolMinimo('productor', tabEventos!.rolMinimo)).toBe(true);
   });
 });
 

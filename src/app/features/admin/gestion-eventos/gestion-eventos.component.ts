@@ -1,20 +1,25 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { firstValueFrom } from 'rxjs';
+import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
 import type { Evento } from '../../../core/models/evento.model';
 import { ConfirmarDialogComponent } from '../../../shared/dialogos/confirmar-dialog.component';
 import { paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
 
 /**
- * Ruta protegida `/mis-eventos/eventos` (`guardiaRol`, `data: { rolMinimo: 'administrador' }`
- * en `app.routes.ts`; `tech-specs.md` §4.2, `TODO.md` Tarea 1) — lista de
- * `agora-eventos`. La creación y edición viven en `EditarEventoComponent`
- * (`/mis-eventos/eventos/nuevo` y `/mis-eventos/eventos/:id`).
+ * Ruta protegida `/mis-eventos/eventos` (`guardiaRol`,
+ * `data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') }` = `'productor'`
+ * en `app.routes.ts`; `tech-specs.md` §4.2, `TODO.md` Tarea 1, T6) — lista de
+ * `agora-eventos`. Un `administrador` ve todos los eventos; un `productor`
+ * solo los suyos (el backend ya filtra, `listarEventos()` en
+ * `server/api/handlers/eventos.ts`). La creación y edición viven en
+ * `EditarEventoComponent` (`/mis-eventos/eventos/nuevo`, exclusiva de
+ * administrador, y `/mis-eventos/eventos/:id`).
  *
  * `MatDialogModule` deliberadamente NO está en los `imports` de este
  * componente: su propia plantilla nunca usa directivas `mat-dialog-*` (esas
@@ -31,6 +36,10 @@ export class GestionEventosComponent implements OnInit {
   private readonly eventosService = inject(EventosService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly servicioAuth = inject(ServicioAuth);
+
+  /** Crear/eliminar eventos son exclusivos de administrador (TODO.md Tarea 1, T6). */
+  protected readonly esAdministrador = computed(() => this.servicioAuth.rol() === 'administrador');
 
   protected readonly columnas = ['nombre', 'fechaHora', 'sillas', 'estado', 'acciones'];
   protected readonly errorCarga = this.eventosService.error;

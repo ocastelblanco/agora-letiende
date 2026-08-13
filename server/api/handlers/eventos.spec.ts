@@ -7,7 +7,14 @@ const { exigirRolMock, sendMock, clienteS3SendMock, getSignedUrlMock } = vi.hois
   getSignedUrlMock: vi.fn(),
 }));
 
-vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+// `tieneAccesoAlEvento` se reexporta desde la implementación real
+// (`importOriginal`) — es lógica pura sin dependencias externas, así que no
+// hace falta (ni conviene) reimplementarla a mano en el mock; solo
+// `exigirRol` se reemplaza por el mock controlado desde cada test.
+vi.mock('../lib/autorizacion', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/autorizacion')>();
+  return { ...real, exigirRol: exigirRolMock };
+});
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
@@ -25,6 +32,13 @@ const permisosAdmin = {
   email: 'admin@letiende.co',
   nombre: 'Admin',
   rol: 'administrador' as const,
+  activo: true,
+};
+
+const permisosProductor = {
+  email: 'productor@letiende.co',
+  nombre: 'Productor',
+  rol: 'productor' as const,
   activo: true,
 };
 
@@ -407,6 +421,13 @@ describe('handler de /api/eventos', () => {
   });
 
   describe('POST /api/eventos/:eventoId/activos/url-carga', () => {
+    // TODO.md Tarea 1 (T6): generarUrlCargaActivo ahora lee el evento primero
+    // para verificar tieneAccesoAlEvento — como admin tiene bypass, alcanza
+    // con que el ítem exista.
+    beforeEach(() => {
+      sendMock.mockResolvedValue({ Item: { eventoId: 'e1' } });
+    });
+
     it('devuelve una URL prefirmada y una key bajo el prefijo del evento', async () => {
       getSignedUrlMock.mockResolvedValue('https://s3.example.com/presignada');
 
@@ -518,5 +539,179 @@ describe('handler de /api/eventos', () => {
     const respuesta = await invocar('PATCH');
 
     expect(respuesta.statusCode).toBe(405);
+  });
+
+  describe('Alcance de productor (TODO.md Tarea 1, T6)', () => {
+    beforeEach(() => {
+      exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosProductor });
+    });
+
+    describe('GET /api/eventos', () => {
+      it('como productor, solo devuelve los eventos donde está en productores', async () => {
+        sendMock.mockResolvedValue({
+          Items: [
+            { eventoId: 'e1', productores: ['productor@letiende.co'] },
+            { eventoId: 'e2', productores: ['otro@letiende.co'] },
+            { eventoId: 'e3', productores: ['productor@letiende.co', 'otro@letiende.co'] },
+          ],
+        });
+
+        const respuesta = await invocar('GET');
+
+        expect(respuesta.statusCode).toBe(200);
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.map((e: { eventoId: string }) => e.eventoId)).toEqual(['e1', 'e3']);
+      });
+
+      it('como administrador, sigue devolviendo todos los eventos (regresión)', async () => {
+        exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosAdmin });
+        sendMock.mockResolvedValue({
+          Items: [
+            { eventoId: 'e1', productores: ['productor@letiende.co'] },
+            { eventoId: 'e2', productores: ['otro@letiende.co'] },
+          ],
+        });
+
+        const respuesta = await invocar('GET');
+
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.map((e: { eventoId: string }) => e.eventoId)).toEqual(['e1', 'e2']);
+      });
+    });
+
+    describe('PUT /api/eventos/:eventoId', () => {
+      it('productor asignado, solo con campos permitidos: éxito', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', productores: ['productor@letiende.co'] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1', maxBoletasPorCompra: 6 } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { maxBoletasPorCompra: 6 },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+      });
+
+      it('productor con un campo no permitido en el payload: 403, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { nombre: 'Otro nombre' },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('productor con "etapas" en el payload (no permitido): 403, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { etapas: [etapaValida] },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('productor con "estado" en el payload (no permitido): 403, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { estado: 'publicado' },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('productor NO asignado al evento: 403', async () => {
+        sendMock.mockResolvedValueOnce({ Item: { eventoId: 'e1', productores: ['otro@letiende.co'] } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { maxBoletasPorCompra: 6 },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+      });
+
+      it('productor, evento inexistente: 404', async () => {
+        sendMock.mockResolvedValueOnce({ Item: undefined });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'inexistente',
+          cuerpo: { maxBoletasPorCompra: 6 },
+        });
+
+        expect(respuesta.statusCode).toBe(404);
+      });
+    });
+
+    describe('POST /api/eventos (crear)', () => {
+      it('como productor: 403, sin llegar a DynamoDB', async () => {
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('DELETE /api/eventos/:eventoId', () => {
+      it('como productor: 403, sin llegar a DynamoDB', async () => {
+        const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('POST /api/eventos/:eventoId/activos/url-carga', () => {
+      it('productor asignado: éxito', async () => {
+        sendMock.mockResolvedValueOnce({ Item: { eventoId: 'e1', productores: ['productor@letiende.co'] } });
+        getSignedUrlMock.mockResolvedValue('https://s3.example.com/presignada');
+
+        const respuesta = await invocar('POST', {
+          rawPath: '/api/eventos/e1/activos/url-carga',
+          eventoId: 'e1',
+          cuerpo: { tipo: 'imagen', tipoMime: 'image/png', tamano: 1024 },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+      });
+
+      it('productor NO asignado: 403, sin generar URL prefirmada', async () => {
+        sendMock.mockResolvedValueOnce({ Item: { eventoId: 'e1', productores: ['otro@letiende.co'] } });
+
+        const respuesta = await invocar('POST', {
+          rawPath: '/api/eventos/e1/activos/url-carga',
+          eventoId: 'e1',
+          cuerpo: { tipo: 'imagen', tipoMime: 'image/png', tamano: 1024 },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(getSignedUrlMock).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('GET /api/eventos/:eventoId/qr', () => {
+      it('productor asignado: éxito', async () => {
+        sendMock.mockResolvedValue({
+          Item: { eventoId: 'e1', slug: 'concierto-jazz', productores: ['productor@letiende.co'] },
+        });
+
+        const respuesta = await invocar('GET', { rawPath: '/api/eventos/e1/qr', eventoId: 'e1' });
+
+        expect(respuesta.statusCode).toBe(200);
+      });
+
+      it('productor NO asignado: 403', async () => {
+        sendMock.mockResolvedValue({
+          Item: { eventoId: 'e1', slug: 'concierto-jazz', productores: ['otro@letiende.co'] },
+        });
+
+        const respuesta = await invocar('GET', { rawPath: '/api/eventos/e1/qr', eventoId: 'e1' });
+
+        expect(respuesta.statusCode).toBe(403);
+      });
+    });
   });
 });

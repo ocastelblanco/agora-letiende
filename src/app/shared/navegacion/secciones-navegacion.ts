@@ -9,12 +9,11 @@ export interface TabNavegacion {
 
 /**
  * Un grupo de nivel 1 del menú de navegación de personal autenticado — NO
- * tiene un `rolMinimo` propio: cada tab conserva el suyo individual. Esto es
- * crítico para "Eventos" (dentro del grupo "Mis Eventos"): sigue exigiendo
- * `administrador` aunque quede agrupado visualmente junto a "Panel" y
- * "Aprobaciones" (`productor`) — darle al grupo un solo rolMinimo compartido
- * volvería "Eventos" accesible a cualquier productor, una fuga de
- * autorización real, no cosmética.
+ * tiene un `rolMinimo` propio: cada tab conserva el suyo individual. Cada tab
+ * declara su propio piso de acceso independientemente de sus vecinos del
+ * mismo grupo — así, por ejemplo, si un tab futuro necesitara ser más
+ * restrictivo que el resto de su grupo, sigue pudiendo hacerlo sin que el
+ * grupo se lo impida.
  */
 export interface GrupoNavegacion {
   etiqueta: string;
@@ -64,12 +63,15 @@ export const GRUPOS_NAVEGACION: GrupoNavegacion[] = [
       // 'Efectivo'/'Puerta' — 'Aprobaciones' sigue siendo el último tab de
       // rol 'productor' que un productor cumple, así que el destino tras
       // iniciar sesión de un productor no cambia por agregar este grupo.
-      // 'Eventos' exige 'administrador' (más restrictivo que 'productor')
-      // pese a quedar agrupado visualmente entre 'Panel' y 'Aprobaciones' —
-      // ver el docstring de `GrupoNavegacion` sobre por qué el rolMinimo es
-      // siempre del tab, nunca del grupo.
+      // 'Eventos' pasó de exigir 'administrador' a 'productor' — cambio de
+      // alcance DELIBERADO de TODO.md Tarea 1 (T6): el productor ahora ve y
+      // edita (campos acotados, ver server/api/handlers/eventos.ts) la lista
+      // de sus propios eventos. La restricción a 'administrador' que las
+      // tareas anteriores protegían con cuidado era correcta para el alcance
+      // de ENTONCES; este cambio de alcance está autorizado explícitamente
+      // por la tarea actual.
       { etiqueta: 'Panel', ruta: '/mis-eventos/panel', rolMinimo: 'productor' },
-      { etiqueta: 'Eventos', ruta: '/mis-eventos/eventos', rolMinimo: 'administrador' },
+      { etiqueta: 'Eventos', ruta: '/mis-eventos/eventos', rolMinimo: 'productor' },
       { etiqueta: 'Aprobaciones', ruta: '/mis-eventos/aprobaciones', rolMinimo: 'productor' },
     ],
   },

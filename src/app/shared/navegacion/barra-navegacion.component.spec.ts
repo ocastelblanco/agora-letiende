@@ -140,6 +140,12 @@ describe('BarraNavegacionComponent', () => {
     expect(texto).not.toContain('Aprobaciones');
   });
 
+  // Estas dos pruebas siguen vigentes sin cambios tras TODO.md Tarea 1 (T6):
+  // "Eventos" pasó a exigir 'productor' (antes 'administrador'), pero el
+  // invariante que se prueba aquí es otro — este componente (header) nunca
+  // renderiza un enlace de NIVEL 2 para ningún rol, solo el link de grupo
+  // "Mis Eventos" (nivel 1). El acceso real de un productor a "Eventos" se
+  // prueba en mis-eventos.component.spec.ts (el hub que sí tiene nivel 2).
   it('regresión de autorización: un productor NUNCA tiene un enlace navegable a "Eventos" en el header, ni siquiera navegando a /mis-eventos/panel — el header ya no tiene nivel 2 (rediseño), solo el link de grupo "Mis Eventos"', async () => {
     const usuario = {
       displayName: 'Paula Productora',

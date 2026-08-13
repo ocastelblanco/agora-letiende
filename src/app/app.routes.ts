@@ -165,6 +165,39 @@ export const routes: Routes = [
         data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') },
         title: 'Eventos — Ágora',
       },
+      // 'eventos/nuevo' (literal) va SIEMPRE antes de 'eventos/:id'
+      // (paramétrica) — Angular hace matching de `children` en orden de
+      // arreglo, así que si quedara después la ruta paramétrica capturaría
+      // 'nuevo' como valor de `:id` (mismo criterio que las 6 entradas de
+      // compatibilidad al final de este archivo). `rolMinimo: 'administrador'`
+      // queda hardcodeado a propósito (TODO.md Tarea 1, T6): crear un evento
+      // es exclusivo de administrador, pero no hay un tab de navegación
+      // separado del que derivarlo con `rolMinimoDeRuta` — la única entrada de
+      // `GRUPOS_NAVEGACION` para esta sección es '/mis-eventos/eventos' (la
+      // lista), no 'crear'.
+      // `data.id: 'nuevo'` es necesario porque esta ruta, a diferencia de
+      // 'eventos/:id', no tiene ningún parámetro `:id` real en su path: el
+      // input `id` de `EditarEventoComponent` (Signal input poblado por
+      // `withComponentInputBinding()`, ver app.config.ts) necesita el valor
+      // `'nuevo'` desde algún lado. Antes de T6 existía una única ruta
+      // `eventos/:id` que también capturaba el literal `'nuevo'` como
+      // parámetro real, así que `id()` lo recibía naturalmente; al separar
+      // las dos rutas, sin esta clave `RoutedComponentInputBinder` llama
+      // `setInput('id', undefined)` en cada navegación aquí (mezcla
+      // `data` + `params`, y esta ruta no tiene ninguno de los dos para
+      // `id`), lo que hacía que el componente entrara en modo EDICIÓN con
+      // `eventoId: undefined` y mostrara "No se encontró ese evento." — bug
+      // real reportado en vivo al hacer clic en "Crear evento".
+      {
+        path: 'eventos/nuevo',
+        loadComponent: () =>
+          import('./features/admin/gestion-eventos/editar-evento.component').then(
+            (m) => m.EditarEventoComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: 'administrador', id: 'nuevo' },
+        title: 'Crear evento — Ágora',
+      },
       {
         path: 'eventos/:id',
         loadComponent: () =>
@@ -172,6 +205,9 @@ export const routes: Routes = [
             (m) => m.EditarEventoComponent,
           ),
         canActivate: [guardiaRol],
+        // Un productor asignado al evento también puede editarlo (TODO.md
+        // Tarea 1, T6) — hereda 'productor' en cuanto se cambie el
+        // `rolMinimo` del tab 'Eventos' en secciones-navegacion.ts.
         data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') },
         title: 'Editar evento — Ágora',
       },

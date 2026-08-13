@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { merge } from 'rxjs';
+import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
 import { DatosEtapaBoleteria, Evento, MedioPago } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
@@ -23,13 +24,16 @@ const MEDIOS_PAGO: readonly { valor: MedioPago; etiqueta: string }[] = [
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 /**
- * Ruta protegida `/mis-eventos/eventos/nuevo` y `/mis-eventos/eventos/:id`
- * (`guardiaRol`, `data: { rolMinimo: 'administrador' }` en `app.routes.ts`;
- * `TODO.md` Tarea 1) — alta y edición de `agora-eventos` en un único
- * componente, distinguidos por el parámetro de ruta `id` (`'nuevo'` = modo
- * crear). `sillasTotales` solo se fija al crear — la edición nunca la toca
- * (motor de aforo, roadmap #8, todavía no existe; ver
- * `server/api/handlers/eventos.ts`).
+ * Rutas protegidas `/mis-eventos/eventos/nuevo` (exclusiva de
+ * `administrador`, `data: { rolMinimo: 'administrador' }`) y
+ * `/mis-eventos/eventos/:id` (`administrador` o `productor` asignado al
+ * evento, `data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') }`) en
+ * `app.routes.ts` (`TODO.md` Tarea 1, T6) — alta y edición de
+ * `agora-eventos` en un único componente, distinguidos por el parámetro de
+ * ruta `id` (`'nuevo'` = modo crear; un productor nunca llega a ese modo,
+ * solo a la edición de un evento donde está asignado). `sillasTotales` solo
+ * se fija al crear — la edición nunca la toca (motor de aforo, roadmap #8,
+ * todavía no existe; ver `server/api/handlers/eventos.ts`).
  *
  * El parámetro `id` se recibe como Signal input (`withComponentInputBinding()`
  * en `app.config.ts`), no leyendo `ActivatedRoute.snapshot` una sola vez:
@@ -64,6 +68,10 @@ export class EditarEventoComponent {
   private readonly eventosService = inject(EventosService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly servicioAuth = inject(ServicioAuth);
+
+  /** `true` si el usuario actual es productor — acota qué campos puede editar (TODO.md Tarea 1, T6). */
+  protected readonly esProductor = computed(() => this.servicioAuth.rol() === 'productor');
 
   protected readonly mediosPagoDisponibles = MEDIOS_PAGO;
 
@@ -308,6 +316,27 @@ export class EditarEventoComponent {
       });
       this.etapas.push(grupo);
     }
+
+    // Un productor solo puede editar maxBoletasPorCompra y
+    // plazoComprobanteMinutos (más imagenKey/logotipoKey, que no son
+    // controles de este formulario) — el resto de campos se deshabilita
+    // aquí como espejo en UI de lo que el backend ya rechaza
+    // (server/api/handlers/eventos.ts, CAMPOS_EDITABLES_PRODUCTOR, TODO.md
+    // Tarea 1, T6). DEBE ejecutarse DESPUÉS del bucle de arriba: cada
+    // `this.etapas.push(grupo)` reevalúa el estado disabled/enabled de todo
+    // el FormArray según sus hijos (que nacen habilitados), así que
+    // deshabilitar `etapas` ANTES del bucle queda deshecho por el primer
+    // `push()` (bug real: el productor veía "Etapas de boletería" editable
+    // pese al `.disable()` de arriba).
+    if (this.esProductor()) {
+      this.formulario.controls.nombre.disable();
+      this.formulario.controls.descripcion.disable();
+      this.formulario.controls.fechaHora.disable();
+      this.formulario.controls.productoresTexto.disable();
+      this.formulario.controls.estado.disable();
+      this.formulario.controls.mediosPago.disable();
+      this.etapas.disable();
+    }
   }
 
   private mediosPagoSeleccionados(): MedioPago[] {
@@ -380,17 +409,30 @@ export class EditarEventoComponent {
         return;
       }
 
-      const resultado = await this.eventosService.actualizarEvento(eventoId, {
-        nombre: valores.nombre,
-        descripcion: valores.descripcion,
-        fechaHora: desdeInputBogota(valores.fechaHora),
-        maxBoletasPorCompra: valores.maxBoletasPorCompra,
-        plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
-        etapas: this.etapasFormulario(),
-        mediosPago: this.mediosPagoSeleccionados(),
-        productores: this.productoresFormulario(),
-        estado: valores.estado as Evento['estado'],
-      });
+      // Un productor solo puede enviar los 4 campos que el backend le
+      // permite editar (server/api/handlers/eventos.ts,
+      // CAMPOS_EDITABLES_PRODUCTOR) — cualquier otro campo en el payload lo
+      // rechaza con 403, así que el payload es parcial en ese caso (TODO.md
+      // Tarea 1, T6).
+      const resultado = await this.eventosService.actualizarEvento(
+        eventoId,
+        this.esProductor()
+          ? {
+              maxBoletasPorCompra: valores.maxBoletasPorCompra,
+              plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
+            }
+          : {
+              nombre: valores.nombre,
+              descripcion: valores.descripcion,
+              fechaHora: desdeInputBogota(valores.fechaHora),
+              maxBoletasPorCompra: valores.maxBoletasPorCompra,
+              plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
+              etapas: this.etapasFormulario(),
+              mediosPago: this.mediosPagoSeleccionados(),
+              productores: this.productoresFormulario(),
+              estado: valores.estado as Evento['estado'],
+            },
+      );
 
       if (resultado.exito) {
         this.snackBar.open('Evento actualizado correctamente.', 'Cerrar', { duration: 4000 });

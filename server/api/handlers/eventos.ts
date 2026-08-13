@@ -16,7 +16,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
 import { generarQrPng, generarQrSvg } from '../services/qr';
-import { exigirRol } from '../lib/autorizacion';
+import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
+import type { PermisosUsuario } from '../lib/resolver-permisos';
 import { respuestaJson } from '../lib/http';
 
 // URL de producción fija (no por stage): el QR es un activo de marketing
@@ -175,11 +176,19 @@ function normalizarProductores(valor: unknown): string[] | null {
   return correos.length === valor.length ? correos : null;
 }
 
-async function listarEventos(): Promise<APIGatewayProxyResultV2> {
+/**
+ * `GET /api/eventos` — un `administrador` ve todos los eventos; un
+ * `productor` solo los que tiene asignados en `productores`
+ * (`tieneAccesoAlEvento`, que ya incluye el bypass de `administrador` — no
+ * se duplica esa rama aquí, TODO.md Tarea 1).
+ */
+async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxyResultV2> {
   const resultado = await documentoDynamoDB.send(
     new ScanCommand({ TableName: process.env['TABLA_EVENTOS'] }),
   );
-  return respuestaJson(200, resultado.Items ?? []);
+  const items = resultado.Items ?? [];
+  const visibles = items.filter((item) => tieneAccesoAlEvento(item as Record<string, unknown>, permisos));
+  return respuestaJson(200, visibles);
 }
 
 async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
@@ -265,16 +274,33 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
 }
 
 /**
+ * Campos que un `productor` puede editar de un evento donde está asignado
+ * (TODO.md Tarea 1, T6) — cualquier otro campo en el payload de un
+ * productor se rechaza con 403 antes de tocar DynamoDB. Un `administrador`
+ * no tiene esta restricción.
+ */
+const CAMPOS_EDITABLES_PRODUCTOR = new Set([
+  'maxBoletasPorCompra',
+  'plazoComprobanteMinutos',
+  'imagenKey',
+  'logotipoKey',
+]);
+
+/**
  * Campos editables por `PUT /api/eventos/:eventoId`. Deliberadamente
  * excluye `eventoId`, `slug`, `sillasTotales`, `sillasDisponibles` y
  * `sillasReservadas` — el aforo (incluida cualquier resta/reasignación de
  * `sillasTotales`) es responsabilidad exclusiva del motor de aforo
  * (roadmap #8, todavía no existe); hasta entonces esos campos solo se
- * editan internamente, nunca vía este endpoint (TODO.md Tarea 1).
+ * editan internamente, nunca vía este endpoint (TODO.md Tarea 1). Un
+ * `administrador` puede editar cualquiera de los campos de abajo; un
+ * `productor` asignado al evento solo los de `CAMPOS_EDITABLES_PRODUCTOR`
+ * (TODO.md Tarea 1, T6).
  */
 async function actualizarEvento(
   eventoId: string | undefined,
   evento: APIGatewayProxyEventV2,
+  permisos: PermisosUsuario,
 ): Promise<APIGatewayProxyResultV2> {
   if (!eventoId) {
     return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
@@ -285,6 +311,29 @@ async function actualizarEvento(
     return respuestaJson(400, { mensaje: 'Cuerpo inválido' });
   }
   const datos = (cuerpo ?? {}) as Record<string, unknown>;
+
+  // Un productor solo puede editar 4 campos puntuales, y solo en un evento
+  // donde está asignado (TODO.md Tarea 1, T6) — se verifica ANTES de
+  // procesar el resto del payload para no hacer ningún trabajo de validación
+  // sobre campos que de todas formas se van a rechazar.
+  if (permisos.rol !== 'administrador') {
+    const campoNoPermitido = Object.keys(datos).find(
+      (campo) => !CAMPOS_EDITABLES_PRODUCTOR.has(campo),
+    );
+    if (campoNoPermitido) {
+      return respuestaJson(403, { mensaje: `No autorizado para editar el campo "${campoNoPermitido}"` });
+    }
+
+    const eventoActual = await documentoDynamoDB.send(
+      new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
+    );
+    if (!eventoActual.Item) {
+      return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+    }
+    if (!tieneAccesoAlEvento(eventoActual.Item, permisos)) {
+      return respuestaJson(403, { mensaje: 'No estás asignado a este evento' });
+    }
+  }
 
   const asignaciones: string[] = [];
   const nombresAtributos: Record<string, string> = {};
@@ -427,9 +476,20 @@ async function actualizarEvento(
 async function generarUrlCargaActivo(
   eventoId: string | undefined,
   evento: APIGatewayProxyEventV2,
+  permisos: PermisosUsuario,
 ): Promise<APIGatewayProxyResultV2> {
   if (!eventoId) {
     return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
+  }
+
+  const eventoActual = await documentoDynamoDB.send(
+    new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
+  );
+  if (!eventoActual.Item) {
+    return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+  }
+  if (!tieneAccesoAlEvento(eventoActual.Item, permisos)) {
+    return respuestaJson(403, { mensaje: 'No autorizado' });
   }
 
   const cuerpo = leerCuerpo(evento);
@@ -544,6 +604,7 @@ async function eliminarEvento(eventoId: string | undefined): Promise<APIGatewayP
 async function generarQrEvento(
   eventoId: string | undefined,
   evento: APIGatewayProxyEventV2,
+  permisos: PermisosUsuario,
 ): Promise<APIGatewayProxyResultV2> {
   if (!eventoId) {
     return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
@@ -561,6 +622,9 @@ async function generarQrEvento(
   const slug = resultado.Item?.['slug'];
   if (typeof slug !== 'string') {
     return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+  }
+  if (!tieneAccesoAlEvento(resultado.Item as Record<string, unknown>, permisos)) {
+    return respuestaJson(403, { mensaje: 'No autorizado' });
   }
 
   const url = `${URL_BASE_PRODUCCION}/evento/${slug}`;
@@ -592,16 +656,21 @@ async function generarQrEvento(
 /**
  * `GET/POST /api/eventos`, `PUT/DELETE /api/eventos/:eventoId`,
  * `POST /api/eventos/:eventoId/activos/url-carga`,
- * `GET /api/eventos/:eventoId/qr` — CRUD de `agora-eventos`, exclusivo de
- * `administrador` (tech-specs.md §5.1, TODO.md Tarea 1).
+ * `GET /api/eventos/:eventoId/qr` — CRUD de `agora-eventos` (tech-specs.md
+ * §5.1, TODO.md Tarea 1). `administrador` y `productor` pasan el gate del
+ * rol; `portero` sigue completamente bloqueado. Crear y eliminar eventos
+ * siguen siendo exclusivos de `administrador`; el resto de operaciones se
+ * acota por evento — ver `actualizarEvento`, `generarUrlCargaActivo` y
+ * `generarQrEvento` (T6).
  */
 export const handler: APIGatewayProxyHandlerV2 = async (
   evento: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> => {
-  const autorizacion = await exigirRol(evento, 'administrador');
+  const autorizacion = await exigirRol(evento, 'productor');
   if (!autorizacion.autorizado) {
     return autorizacion.respuesta;
   }
+  const { permisos } = autorizacion;
 
   const eventoId = evento.pathParameters?.['eventoId'];
   const esCargaDeActivo = (evento.rawPath ?? '').endsWith('/activos/url-carga');
@@ -609,19 +678,30 @@ export const handler: APIGatewayProxyHandlerV2 = async (
 
   try {
     if (esCargaDeActivo && evento.requestContext.http.method === 'POST') {
-      return await generarUrlCargaActivo(eventoId, evento);
+      return await generarUrlCargaActivo(eventoId, evento, permisos);
     }
     if (esQr && evento.requestContext.http.method === 'GET') {
-      return await generarQrEvento(eventoId, evento);
+      return await generarQrEvento(eventoId, evento, permisos);
+    }
+
+    // Crear y eliminar eventos son exclusivos de administrador — el chequeo
+    // vive aquí, antes de despachar, para que crearEvento()/eliminarEvento()
+    // nunca se invoquen para un productor (TODO.md Tarea 1, T6).
+    if (
+      (evento.requestContext.http.method === 'POST' ||
+        evento.requestContext.http.method === 'DELETE') &&
+      permisos.rol !== 'administrador'
+    ) {
+      return respuestaJson(403, { mensaje: 'No autorizado' });
     }
 
     switch (evento.requestContext.http.method) {
       case 'GET':
-        return await listarEventos();
+        return await listarEventos(permisos);
       case 'POST':
         return await crearEvento(evento);
       case 'PUT':
-        return await actualizarEvento(eventoId, evento);
+        return await actualizarEvento(eventoId, evento, permisos);
       case 'DELETE':
         return await eliminarEvento(eventoId);
       default:
