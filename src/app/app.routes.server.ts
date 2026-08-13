@@ -62,6 +62,21 @@ export const serverRoutes: ServerRoute[] = [
     path: 'mis-eventos/eventos/:id',
     renderMode: RenderMode.Client,
   },
+  // Las rutas padre de los hubs de dos niveles ('taquilla', 'mis-eventos')
+  // también deben ser explícitas: su único hijo de path vacío hace
+  // `redirectTo` a una hoja protegida por guardiaRol ('puerta'/'aprobaciones'
+  // respectivamente), así que dependen de la sesión de Firebase igual que esa
+  // hoja. Sin esta entrada caían en el wildcard '**' de abajo y Angular
+  // congelaba en build time el resultado del guard fallido sin sesión real
+  // (verificado inspeccionando dist/agora-letiende/prerendered-routes.json).
+  {
+    path: 'taquilla',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'mis-eventos',
+    renderMode: RenderMode.Client,
+  },
   {
     path: 'taquilla/puerta',
     renderMode: RenderMode.Client,
@@ -122,6 +137,10 @@ export const serverRoutes: ServerRoute[] = [
   },
   {
     path: 'admin/eventos',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'admin/eventos/:id',
     renderMode: RenderMode.Client,
   },
   {

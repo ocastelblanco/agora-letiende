@@ -140,24 +140,7 @@ describe('BarraNavegacionComponent', () => {
     expect(texto).not.toContain('Aprobaciones');
   });
 
-  it('administrador en /mis-eventos/eventos: la fila de tabs de nivel 2 aparece con Panel, Eventos y Aprobaciones, y Taquilla NO muestra su fila (no está activo)', async () => {
-    const usuario = { displayName: 'Ana Admin', email: 'ana@letiende.co', photoURL: null } as User;
-    const { fixture } = configurarPrueba(usuario, 'administrador', undefined, undefined, RUTAS_PERSONAL);
-    const router = TestBed.inject(Router);
-
-    await router.navigateByUrl('/mis-eventos/eventos');
-    fixture.detectChanges();
-    const texto = fixture.nativeElement.textContent as string;
-
-    expect(texto).toContain('Panel');
-    expect(texto).toContain('Eventos');
-    expect(texto).toContain('Aprobaciones');
-    // Taquilla (Efectivo/Puerta) no está activo — su fila de tabs de nivel 2
-    // no debe aparecer.
-    expect(texto).not.toContain('Efectivo');
-  });
-
-  it('regresión de autorización: un productor NUNCA tiene un enlace navegable a "Eventos", ni siquiera navegando a /mis-eventos/panel (fila de nivel 2 lista solo Panel y Aprobaciones)', async () => {
+  it('regresión de autorización: un productor NUNCA tiene un enlace navegable a "Eventos" en el header, ni siquiera navegando a /mis-eventos/panel — el header ya no tiene nivel 2 (rediseño), solo el link de grupo "Mis Eventos"', async () => {
     const usuario = {
       displayName: 'Paula Productora',
       email: 'paula@letiende.co',
@@ -170,8 +153,7 @@ describe('BarraNavegacionComponent', () => {
     fixture.detectChanges();
     const texto = fixture.nativeElement.textContent as string;
 
-    expect(texto).toContain('Panel');
-    expect(texto).toContain('Aprobaciones');
+    expect(texto).toContain('Mis Eventos');
     // No se puede usar `texto.not.toContain('Eventos')`: el grupo se llama
     // literalmente "Mis Eventos", que contiene esa subcadena. Se prueba en
     // cambio que ningún `<a>` real de la nav tenga ese texto exacto ni ese
@@ -205,8 +187,7 @@ describe('BarraNavegacionComponent', () => {
     const drawer = fixture.nativeElement.querySelector('.md\\:hidden nav[aria-label="Navegación principal"]');
     expect(drawer).toBeTruthy();
     const textoDrawer = (drawer as HTMLElement).textContent as string;
-    expect(textoDrawer).toContain('Panel');
-    expect(textoDrawer).toContain('Aprobaciones');
+    expect(textoDrawer).toContain('Mis Eventos');
 
     const enlacesDrawer = Array.from(
       drawer!.querySelectorAll('a') as NodeListOf<HTMLAnchorElement>,

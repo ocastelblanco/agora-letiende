@@ -4,19 +4,22 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/ro
 import { filter, map } from 'rxjs';
 import { PanelService } from '../../core/api/panel.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
-import { cumpleRolMinimo } from '../../core/models/usuario.model';
-import { GRUPOS_NAVEGACION } from './secciones-navegacion';
+import { GRUPOS_NAVEGACION, tabsVisiblesDeGrupo } from './secciones-navegacion';
 
 /**
  * Barra de navegación de toda la app (`TODO.md` Tarea 1) — **siempre
  * visible**, con o sin sesión, para ofrecer siempre una forma de llegar a
  * `/login` (decisión de diseño explícita del usuario, ver `MEMORY.md`
- * sesión 06/08/2026 noche). Ya autenticado, muestra una jerarquía de dos
- * niveles (grupo → tabs) armada a partir de `GRUPOS_NAVEGACION` (sin
- * "Cartelera" — `TODO.md` Tarea 1 — el logo del header ya enlaza a `/`
- * siempre), filtrando cada tab por su propio `rolMinimo` individual — el
- * grupo en sí nunca tiene un rol propio, ver el docstring de
- * `GrupoNavegacion` en `secciones-navegacion.ts`.
+ * sesión 06/08/2026 noche). Ya autenticado, muestra SOLO el nivel 1 (grupo)
+ * armado a partir de `GRUPOS_NAVEGACION` (sin "Cartelera" — `TODO.md`
+ * Tarea 1 — el logo del header ya enlaza a `/` siempre), filtrando cada tab
+ * por su propio `rolMinimo` individual — el grupo en sí nunca tiene un rol
+ * propio, ver el docstring de `GrupoNavegacion` en `secciones-navegacion.ts`.
+ * El nivel 2 (Efectivo/Puerta, Panel/Eventos/Aprobaciones) YA NO vive en el
+ * header (rediseño a pedido del usuario tras probar la v1 de dos niveles):
+ * ahora vive en el cuerpo, como pestañas de Angular Material ligadas al
+ * router (`mat-tab-nav-bar`), dentro de `TaquillaComponent`/
+ * `MisEventosComponent`.
  *
  * Sin `@Input()`: todo el estado sale de `ServicioAuth` inyectado
  * directamente. Sin Angular Material nuevo (`MatToolbar`/`MatSidenav`/
@@ -71,7 +74,7 @@ export class BarraNavegacionComponent {
     }
     return GRUPOS_NAVEGACION.map((grupo) => ({
       etiqueta: grupo.etiqueta,
-      tabs: grupo.tabs.filter((tab) => cumpleRolMinimo(rolActual, tab.rolMinimo)),
+      tabs: tabsVisiblesDeGrupo(grupo.etiqueta, rolActual),
     })).filter((grupo) => grupo.tabs.length > 0);
   });
 

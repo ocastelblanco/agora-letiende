@@ -122,3 +122,15 @@ export function rolMinimoDeRuta(ruta: string): Rol {
   }
   return tab.rolMinimo;
 }
+
+/** Tabs de un grupo que el rol dado alcanza — usado tanto por BarraNavegacionComponent (nivel 1) como por los componentes hub (nivel 2, mat-tab-nav-bar). */
+export function tabsVisiblesDeGrupo(etiquetaGrupo: string, rol: Rol | null): TabNavegacion[] {
+  if (!rol) {
+    return [];
+  }
+  const grupo = GRUPOS_NAVEGACION.find((g) => g.etiqueta === etiquetaGrupo);
+  if (!grupo) {
+    throw new Error(`No hay un grupo de navegación "${etiquetaGrupo}".`);
+  }
+  return grupo.tabs.filter((tab) => cumpleRolMinimo(rol, tab.rolMinimo));
+}
