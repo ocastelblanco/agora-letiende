@@ -2,9 +2,25 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Router, provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
 import type { Evento } from '../../../core/models/evento.model';
+import type { Rol } from '../../../core/models/usuario.model';
 import { EditarEventoComponent } from './editar-evento.component';
+
+// `servicio-auth.ts` (importado transitivamente vía ServicioAuth) importa
+// el SDK real de Firebase a nivel de módulo — mismo motivo de mock que en
+// el resto de specs que tocan ServicioAuth (ver gestion-usuarios.component.spec.ts).
+vi.mock('firebase/app', () => ({ initializeApp: vi.fn(() => ({})) }));
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn(),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  GoogleAuthProvider: vi.fn(function () {
+    return { setCustomParameters: vi.fn() };
+  }),
+}));
 
 const eventoExistente: Evento = {
   eventoId: 'e1',
@@ -33,6 +49,7 @@ function configurarPrueba(opciones: {
   actualizarEventoMock?: ReturnType<typeof vi.fn>;
   subirActivoMock?: ReturnType<typeof vi.fn>;
   descargarQrMock?: ReturnType<typeof vi.fn>;
+  rol?: Rol | null;
 }) {
   const cargarEventosMock = vi.fn().mockResolvedValue(undefined);
 
@@ -50,6 +67,12 @@ function configurarPrueba(opciones: {
           actualizarEvento: opciones.actualizarEventoMock ?? vi.fn(),
           subirActivo: opciones.subirActivoMock ?? vi.fn(),
           descargarQr: opciones.descargarQrMock ?? vi.fn(),
+        },
+      },
+      {
+        provide: ServicioAuth,
+        useValue: {
+          rol: () => opciones.rol ?? 'administrador',
         },
       },
     ],
@@ -382,6 +405,45 @@ describe('EditarEventoComponent', () => {
           'Cerrar',
           { duration: 6000 },
         );
+      });
+    });
+  });
+
+  describe('modo editar con rol productor', () => {
+    it('deshabilita el FormArray de etapas tras precargar el formulario (regresión: etapas.disable() se deshacía a sí mismo)', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente], rol: 'productor' });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['etapas'].disabled).toBe(true);
+      expect(componente['formulario'].controls.nombre.disabled).toBe(true);
+      expect(componente['formulario'].controls.descripcion.disabled).toBe(true);
+      expect(componente['formulario'].controls.fechaHora.disabled).toBe(true);
+      expect(componente['formulario'].controls.productoresTexto.disabled).toBe(true);
+      expect(componente['formulario'].controls.estado.disabled).toBe(true);
+      expect(componente['formulario'].controls.mediosPago.disabled).toBe(true);
+    });
+
+    it('guardar() envía únicamente los campos que el productor puede editar', async () => {
+      const actualizarEventoMock = vi
+        .fn()
+        .mockResolvedValue({ exito: true, evento: eventoExistente });
+      const { fixture } = configurarPrueba({
+        eventos: [eventoExistente],
+        actualizarEventoMock,
+        rol: 'productor',
+      });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      await componente['guardar']();
+
+      expect(actualizarEventoMock).toHaveBeenCalledTimes(1);
+      const [eventoId, datos] = actualizarEventoMock.mock.calls[0];
+      expect(eventoId).toBe('e1');
+      expect(datos).toEqual({
+        maxBoletasPorCompra: eventoExistente.maxBoletasPorCompra,
+        plazoComprobanteMinutos: eventoExistente.plazoComprobanteMinutos,
       });
     });
   });

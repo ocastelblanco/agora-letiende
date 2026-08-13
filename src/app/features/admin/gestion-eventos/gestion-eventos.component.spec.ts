@@ -5,8 +5,24 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of } from 'rxjs';
 import { EventosService } from '../../../core/api/eventos.service';
+import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import type { Evento } from '../../../core/models/evento.model';
+import type { Rol } from '../../../core/models/usuario.model';
 import { GestionEventosComponent } from './gestion-eventos.component';
+
+// `servicio-auth.ts` (importado transitivamente vía ServicioAuth) importa
+// el SDK real de Firebase a nivel de módulo — mismo motivo de mock que en
+// el resto de specs que tocan ServicioAuth (ver gestion-usuarios.component.spec.ts).
+vi.mock('firebase/app', () => ({ initializeApp: vi.fn(() => ({})) }));
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn(),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  GoogleAuthProvider: vi.fn(function () {
+    return { setCustomParameters: vi.fn() };
+  }),
+}));
 
 const eventoEjemplo: Evento = {
   eventoId: 'e1',
@@ -32,6 +48,7 @@ function configurarPrueba(opciones: {
   error?: boolean;
   eliminarEventoMock?: ReturnType<typeof vi.fn>;
   dialogAfterClosed?: unknown;
+  rol?: Rol | null;
 }) {
   const cargarEventosMock = vi.fn().mockResolvedValue(undefined);
 
@@ -46,6 +63,12 @@ function configurarPrueba(opciones: {
           error: () => opciones.error ?? false,
           cargarEventos: cargarEventosMock,
           eliminarEvento: opciones.eliminarEventoMock ?? vi.fn(),
+        },
+      },
+      {
+        provide: ServicioAuth,
+        useValue: {
+          rol: () => opciones.rol ?? 'administrador',
         },
       },
     ],
@@ -140,6 +163,24 @@ describe('GestionEventosComponent', () => {
         'Cerrar',
         { duration: 6000 },
       );
+    });
+  });
+
+  describe('acciones exclusivas de administrador', () => {
+    it('con rol productor: no muestra "Crear evento" ni "Eliminar" en el DOM', () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoEjemplo], rol: 'productor' });
+      const texto = fixture.nativeElement.textContent as string;
+
+      expect(texto).not.toContain('Crear evento');
+      expect(texto).not.toContain('Eliminar');
+    });
+
+    it('con rol administrador: sí muestra "Crear evento" y "Eliminar" en el DOM', () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoEjemplo], rol: 'administrador' });
+      const texto = fixture.nativeElement.textContent as string;
+
+      expect(texto).toContain('Crear evento');
+      expect(texto).toContain('Eliminar');
     });
   });
 });

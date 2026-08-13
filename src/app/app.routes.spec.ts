@@ -18,8 +18,15 @@ const ROL_MINIMO_ESPERADO: Record<string, Rol> = {
   'taquilla/efectivo': 'portero',
   'taquilla/puerta': 'portero',
   'mis-eventos/panel': 'productor',
-  'mis-eventos/eventos': 'administrador',
-  'mis-eventos/eventos/:id': 'administrador',
+  // 'Eventos' pasó de exigir 'administrador' a 'productor' — cambio de
+  // alcance deliberado de TODO.md Tarea 1 (T6): un productor asignado a un
+  // evento ahora ve la lista y edita campos puntuales de ese evento.
+  // 'eventos/nuevo' (crear) sigue siendo exclusivo de administrador —
+  // hardcodeado en app.routes.ts, no derivado de GRUPOS_NAVEGACION (no hay
+  // un tab separado de "crear evento").
+  'mis-eventos/eventos': 'productor',
+  'mis-eventos/eventos/nuevo': 'administrador',
+  'mis-eventos/eventos/:id': 'productor',
   'mis-eventos/aprobaciones': 'productor',
   usuarios: 'administrador',
 };
@@ -49,4 +56,27 @@ describe('routes — rolMinimo de las rutas de personal', () => {
       expect(data?.rolMinimo).toBe(rolEsperado);
     });
   }
+});
+
+describe('routes — orden de "eventos/nuevo" antes de "eventos/:id"', () => {
+  // El Router de Angular hace matching de `children` por ORDEN DE ARREGLO,
+  // no por especificidad de path. Si alguien invirtiera estas dos entradas
+  // en app.routes.ts, la ruta paramétrica 'eventos/:id' capturaría 'nuevo'
+  // como valor de `:id` — un productor asignado a un evento terminaría en
+  // el componente en "modo crear" con el guard de 'eventos/:id'
+  // (rolMinimo: 'productor') en vez del guard exclusivo de administrador de
+  // 'eventos/nuevo'. Esta prueba mira el arreglo real, no un Map indexado
+  // por path (que no distingue orden), para que sí atrape esa inversión.
+  it('el índice de "eventos/nuevo" es menor que el de "eventos/:id" dentro de los children de "mis-eventos"', () => {
+    const hubMisEventos = routes.find((ruta) => ruta.path === 'mis-eventos');
+    expect(hubMisEventos?.children).toBeTruthy();
+
+    const hijos = hubMisEventos!.children!;
+    const indiceNuevo = hijos.findIndex((ruta) => ruta.path === 'eventos/nuevo');
+    const indiceId = hijos.findIndex((ruta) => ruta.path === 'eventos/:id');
+
+    expect(indiceNuevo).toBeGreaterThanOrEqual(0);
+    expect(indiceId).toBeGreaterThanOrEqual(0);
+    expect(indiceNuevo).toBeLessThan(indiceId);
+  });
 });

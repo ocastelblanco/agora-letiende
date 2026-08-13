@@ -159,9 +159,11 @@
           <div class="mb-2 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
             <div class="flex items-center gap-2">
-              <button mat-stroked-button type="button" (click)="agregarEtapa()">
-                Agregar etapa
-              </button>
+              @if (!esProductor()) {
+                <button mat-stroked-button type="button" (click)="agregarEtapa()">
+                  Agregar etapa
+                </button>
+              }
               <button
                 type="button"
                 class="text-xs font-semibold text-primary/60"
@@ -186,7 +188,7 @@
                 >
                   <div class="flex items-center justify-between">
                     <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
-                    @if (etapas.length > 1) {
+                    @if (!esProductor() && etapas.length > 1) {
                       <button
                         mat-stroked-button
                         color="warn"

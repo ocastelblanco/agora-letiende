@@ -45,15 +45,19 @@ function configurarPrueba(rol: Rol | null): ComponentFixture<MisEventosComponent
 }
 
 describe('MisEventosComponent', () => {
-  it('productor (el rol menos restrictivo del grupo) ve exactamente Panel y Aprobaciones — NUNCA "Eventos"', () => {
+  // Cambio de alcance DELIBERADO de TODO.md Tarea 1 (T6) respecto de la
+  // tarea anterior (T5): antes, "Eventos" exigía 'administrador' y un
+  // productor nunca lo veía en este hub; ahora exige 'productor'
+  // (secciones-navegacion.ts), así que un productor SÍ ve las 3 tabs, igual
+  // que un administrador — el productor puede editar campos puntuales de
+  // sus propios eventos (server/api/handlers/eventos.ts).
+  it('productor ve las 3 tabs del grupo, incluida "Eventos" (TODO.md Tarea 1, T6)', () => {
     const fixture = configurarPrueba('productor');
 
     const tabs = Array.from(
       fixture.nativeElement.querySelectorAll('a[mat-tab-link]') as NodeListOf<HTMLAnchorElement>,
     );
-    expect(tabs.map((a) => a.textContent?.trim())).toEqual(['Panel', 'Aprobaciones']);
-    expect(tabs.map((a) => a.textContent?.trim())).not.toContain('Eventos');
-    expect(tabs.map((a) => a.getAttribute('href'))).not.toContain('/mis-eventos/eventos');
+    expect(tabs.map((a) => a.textContent?.trim())).toEqual(['Panel', 'Eventos', 'Aprobaciones']);
   });
 
   it('administrador ve todas las tabs del grupo, incluida "Eventos"', () => {
