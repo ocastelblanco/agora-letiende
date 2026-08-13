@@ -109,7 +109,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ## Fase 3 — Aumento de alcance del productor
 
-### T6 — El productor puede editar campos puntuales de sus propios eventos `[activa como Tarea 1 de TODO.md]`
+### T6 — El productor puede editar campos puntuales de sus propios eventos `[x] completada 13/08/2026, PR #37 abierto, pendiente de fusión humana`
 
 **Origen:** sección "Ajustes a la lógica de negocio → Aumento de alcance de productor" del documento de negocio.
 
@@ -136,7 +136,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 La más grande y más sensible en seguridad de las cuatro fases — toca autorización real sobre dos rutas de dinero/control de acceso físico (venta en efectivo, validación en puerta). Dividida en dos tareas para no mezclar "cambio de modelo de datos y formulario" con "cambio de autorización en producción".
 
-### T7 — Modelo de datos y formulario: selección de productores/porteros por evento
+### T7 — Modelo de datos y formulario: selección de productores/porteros por evento `[activa como Tarea 1 de TODO.md]`
 
 **Origen:** sección "Ajustes a la lógica de negocio → Limitación de alcance de productores y porteros" del documento de negocio.
 
@@ -149,6 +149,10 @@ La más grande y más sensible en seguridad de las cuatro fases — toca autoriz
 **Archivos:** `server/api/handlers/eventos.ts`/`.spec.ts` (modelo + validación), `evento.model.ts`, `editar-evento.component.ts`/`.html`/`.spec.ts`.
 
 **Dependencias:** T6 (comparte el mismo componente y varios de los mismos campos del formulario — hacerlas en el mismo PR o en PRs consecutivos inmediatos para no generar conflictos de fusión sobre `editar-evento.component.ts`).
+
+**Resultado real de T6, anotado aquí porque T7 depende de él:** T6 se implementó exactamente como estaba especificado (matriz de permisos por sub-ruta), verificado en 2 rondas por un agente `architect` independiente sin fuga de autorización. Encontró y se corrigió un bug real de frontend (el `FormArray` de "Etapas de boletería" se re-habilitaba solo tras `push()`, deshaciendo un `disable()` previo) y, ya con el PR abierto, el usuario reportó un segundo bug real en vivo: `/mis-eventos/eventos/nuevo` no mostraba el formulario de creación — causa raíz confirmada leyendo el Router real de Angular (`RoutedComponentInputBinder`): al separar esa ruta de `eventos/:id` (necesario para poder darle un `rolMinimo` distinto a cada una), la ruta nueva se quedó sin ningún parámetro `:id` real, y el Signal input `id` de `EditarEventoComponent` recibía `undefined` en vez de `'nuevo'`. Corregido con `data: { id: 'nuevo' }` como hotfix en el mismo PR #37. Detalle completo en `MEMORY.md` §2/§7/§9 (sesión 13/08/2026).
+
+**Recordatorio para quien implemente T7:** `EditarEventoComponent` ya tiene `esProductor()` (computed sobre `ServicioAuth.rol()`) y el patrón de deshabilitar campos no editables en `precargarFormulario()` — los selectores nuevos de `productores`/`porteros` deben seguir ese mismo patrón (deshabilitados para productor, no ocultos), no reinventar la detección de rol.
 
 ---
 
@@ -177,3 +181,4 @@ La más grande y más sensible en seguridad de las cuatro fases — toca autoriz
 4. Al completar cada tarea, se mueve su resumen a `MEMORY.md` §2 (igual que siempre) y se marca aquí (agregar `[x]`/fecha/PR al título de la sección correspondiente), sin borrar el contenido — este documento queda como registro histórico del plan completo, igual que `TODO.md` mueve las tareas completadas a `MEMORY.md` en vez de borrarlas. Al terminar T2, la siguiente recalculación saca T3 (y T4 si cabe en el segundo slot) en el mismo orden de Fases.
 5. ~~Completar Fase 1 (T1-T4)~~ — hecho (12/08/2026): PR #30/#31/#32/#33 fusionados, más el hotfix fuera de ciclo PR #34 (`MEMORY.md` §2/§7).
 6. ~~T5 (menú de dos niveles)~~ — hecho (13/08/2026): implementada, rediseñada a pedido del usuario (Material Tabs en el cuerpo en vez de segundo nivel en el header, ver nota bajo T5 arriba) y verificada en 2 rondas — **PR #36 abierto, validado en vivo, pendiente de fusión humana**. A pedido explícito del usuario, esta recalculación se hizo antes de la fusión, mismo criterio ya usado con los PRs #25/#26/#30. La Tarea 1 de `TODO.md` pasa a **T6**; el slot de Tarea 2 sigue vacío hasta que T6 se fusione (desbloquea T7).
+7. ~~T6 (productor edita sus eventos)~~ — hecho (13/08/2026): implementada, verificada en 2 rondas (autorización completa, sin fuga) y con 2 bugs reales corregidos (uno de frontend encontrado por la verificación, uno de routing reportado en vivo por el usuario tras abrir el PR — ver nota bajo T7 arriba) — **PR #37 abierto, validado en vivo, pendiente de fusión humana**. Misma recalculación antes de la fusión. La Tarea 1 de `TODO.md` pasa a **T7**; el slot de Tarea 2 sigue vacío hasta que T7 se fusione (desbloquea T8, la última tarea del plan).
