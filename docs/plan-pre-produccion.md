@@ -74,7 +74,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ## Fase 2 — Reestructuración del menú principal
 
-### T5 — Menú de dos niveles con rutas anidadas reales `[activa como Tarea 1 de TODO.md]`
+### T5 — Menú de dos niveles con rutas anidadas reales `[x] completada 13/08/2026, PR #36 abierto, pendiente de fusión humana`
 
 **Origen:** sección "Reestructuración del menú principal" del documento de negocio.
 
@@ -103,11 +103,13 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 **Dependencias:** ninguna técnica, pero conviene hacerla antes de T6 (que asume las nuevas rutas `/mis-eventos/eventos*`).
 
+**Resultado real, distinto del esqueleto de arriba en un punto — anotado para que quede constancia, no para reabrir la decisión:** se implementó una primera versión con el segundo nivel de tabs dentro del header (siguiendo al pie de la letra "no introducir `MatTabsModule`" de este documento). El usuario la probó en vivo y pidió explícitamente un rediseño: el header quedó **solo con el primer nivel** (Taquilla/Mis Eventos/Usuarios), y el segundo nivel pasó al **cuerpo** de cada grupo como Angular Material Tabs ligadas al router (`mat-tab-nav-bar`/`mat-tab-nav-panel`, patrón oficial "tabs used with the router"), en dos componentes hub nuevos (`TaquillaComponent`/`MisEventosComponent`). La razón original para evitar Material en `BarraNavegacionComponent` (que es eager-loaded, y un módulo de Material ahí pesaría el bundle inicial de páginas públicas) sigue siendo válida y sigue aplicando — el header no ganó ningún import de Material nuevo, la excepción es exclusiva de los dos hubs, que son lazy-loaded por ruta como cualquier otro componente de personal. Detalle completo, incluida la verificación de las dos rondas y el bug de redirects encontrado en el camino, en `MEMORY.md` §2/§7/§9 (sesión 13/08/2026).
+
 ---
 
 ## Fase 3 — Aumento de alcance del productor
 
-### T6 — El productor puede editar campos puntuales de sus propios eventos
+### T6 — El productor puede editar campos puntuales de sus propios eventos `[activa como Tarea 1 de TODO.md]`
 
 **Origen:** sección "Ajustes a la lógica de negocio → Aumento de alcance de productor" del documento de negocio.
 
@@ -173,3 +175,5 @@ La más grande y más sensible en seguridad de las cuatro fases — toca autoriz
 2. ~~Recalcular `TODO.md`~~ — hecho (12/08/2026): T1 y T2 son ahora la Tarea 1/Tarea 2 activas, Dominio personalizado pausada en el Backlog.
 3. Cada tarea de este documento se especifica con el nivel de detalle completo de `TODO.md` (Origen/Alcance/Decisiones/Archivos/DoD) recién al convertirse en la Tarea activa — este documento es el mapa de ruta, no el reemplazo de esa especificación.
 4. Al completar cada tarea, se mueve su resumen a `MEMORY.md` §2 (igual que siempre) y se marca aquí (agregar `[x]`/fecha/PR al título de la sección correspondiente), sin borrar el contenido — este documento queda como registro histórico del plan completo, igual que `TODO.md` mueve las tareas completadas a `MEMORY.md` en vez de borrarlas. Al terminar T2, la siguiente recalculación saca T3 (y T4 si cabe en el segundo slot) en el mismo orden de Fases.
+5. ~~Completar Fase 1 (T1-T4)~~ — hecho (12/08/2026): PR #30/#31/#32/#33 fusionados, más el hotfix fuera de ciclo PR #34 (`MEMORY.md` §2/§7).
+6. ~~T5 (menú de dos niveles)~~ — hecho (13/08/2026): implementada, rediseñada a pedido del usuario (Material Tabs en el cuerpo en vez de segundo nivel en el header, ver nota bajo T5 arriba) y verificada en 2 rondas — **PR #36 abierto, validado en vivo, pendiente de fusión humana**. A pedido explícito del usuario, esta recalculación se hizo antes de la fusión, mismo criterio ya usado con los PRs #25/#26/#30. La Tarea 1 de `TODO.md` pasa a **T6**; el slot de Tarea 2 sigue vacío hasta que T6 se fusione (desbloquea T7).

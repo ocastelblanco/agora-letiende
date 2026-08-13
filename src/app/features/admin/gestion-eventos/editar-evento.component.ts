@@ -23,7 +23,7 @@ const MEDIOS_PAGO: readonly { valor: MedioPago; etiqueta: string }[] = [
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 /**
- * Ruta protegida `/admin/eventos/nuevo` y `/admin/eventos/:id`
+ * Ruta protegida `/mis-eventos/eventos/nuevo` y `/mis-eventos/eventos/:id`
  * (`guardiaRol`, `data: { rolMinimo: 'administrador' }` en `app.routes.ts`;
  * `TODO.md` Tarea 1) — alta y edición de `agora-eventos` en un único
  * componente, distinguidos por el parámetro de ruta `id` (`'nuevo'` = modo
@@ -33,7 +33,7 @@ const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/web
  *
  * El parámetro `id` se recibe como Signal input (`withComponentInputBinding()`
  * en `app.config.ts`), no leyendo `ActivatedRoute.snapshot` una sola vez:
- * al navegar de `/admin/eventos/nuevo` a `/admin/eventos/{eventoId}` tras
+ * al navegar de `/mis-eventos/eventos/nuevo` a `/mis-eventos/eventos/{eventoId}` tras
  * crear un evento, Angular **reutiliza la misma instancia** de este
  * componente (misma definición de ruta, solo cambia el parámetro) y nunca
  * vuelve a ejecutar el constructor ni `ngOnInit` — un `snapshot` leído una
@@ -74,7 +74,7 @@ export class EditarEventoComponent {
    * Refleja `id() === 'nuevo'`, pero es un Signal escribible (no `computed`)
    * a propósito: `guardar()` lo actualiza **directamente** al crear un
    * evento con éxito, en vez de depender por completo de que la
-   * re-navegación a `/admin/eventos/{eventoId}` dispare de vuelta el
+   * re-navegación a `/mis-eventos/eventos/{eventoId}` dispare de vuelta el
    * `effect()` de abajo. Los dos caminos son redundantes cuando ambos
    * funcionan (el segundo simplemente repite la misma transición sin
    * efecto visible), pero la actualización directa no depende de la
@@ -368,7 +368,7 @@ export class EditarEventoComponent {
           this.modoCrear.set(false);
           this.eventoId.set(resultado.evento.eventoId);
           this.precargarFormulario(resultado.evento);
-          await this.router.navigate(['/admin/eventos', resultado.evento.eventoId]);
+          await this.router.navigate(['/mis-eventos/eventos', resultado.evento.eventoId]);
         } else {
           this.snackBar.open(resultado.error, 'Cerrar', { duration: 6000 });
         }

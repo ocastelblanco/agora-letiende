@@ -11,10 +11,10 @@ import { ConfirmarDialogComponent } from '../../../shared/dialogos/confirmar-dia
 import { paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
 
 /**
- * Ruta protegida `/admin/eventos` (`guardiaRol`, `data: { rolMinimo: 'administrador' }`
+ * Ruta protegida `/mis-eventos/eventos` (`guardiaRol`, `data: { rolMinimo: 'administrador' }`
  * en `app.routes.ts`; `tech-specs.md` §4.2, `TODO.md` Tarea 1) — lista de
  * `agora-eventos`. La creación y edición viven en `EditarEventoComponent`
- * (`/admin/eventos/nuevo` y `/admin/eventos/:id`).
+ * (`/mis-eventos/eventos/nuevo` y `/mis-eventos/eventos/:id`).
  *
  * `MatDialogModule` deliberadamente NO está en los `imports` de este
  * componente: su propia plantilla nunca usa directivas `mat-dialog-*` (esas

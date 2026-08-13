@@ -49,10 +49,10 @@ describe('LoginComponent', () => {
     await Promise.resolve();
 
     expect(iniciarSesionConGoogleMock).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith('/puerta');
+    expect(navigateSpy).toHaveBeenCalledWith('/taquilla/puerta');
   });
 
-  it('navega a /admin/usuarios para un administrador', async () => {
+  it('navega a /usuarios para un administrador', async () => {
     const { fixture } = configurarPrueba(undefined, 'administrador');
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
@@ -62,7 +62,7 @@ describe('LoginComponent', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(navigateSpy).toHaveBeenCalledWith('/admin/usuarios');
+    expect(navigateSpy).toHaveBeenCalledWith('/usuarios');
   });
 
   it('muestra el mensaje de ErrorInicioSesion sin exponer detalles internos', async () => {

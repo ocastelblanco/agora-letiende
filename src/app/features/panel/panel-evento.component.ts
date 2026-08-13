@@ -7,7 +7,7 @@ import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 /**
  * Ruta protegida `/evento/:slug/panel` (`guardiaRol`, mínimo `productor`,
  * `TODO.md` Tarea 2 — Panel de control básico, `PRD.md` §5.6). Se llega acá
- * desde `SeleccionPanelComponent` (`/panel`) o por enlace directo.
+ * desde `SeleccionPanelComponent` (`/mis-eventos/panel`) o por enlace directo.
  *
  * Resuelve `slug` → `eventoId` con `PanelService.misEventos()`
  * (`GET /api/eventos/panel`) — deliberadamente **no** con

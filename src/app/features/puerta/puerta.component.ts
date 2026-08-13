@@ -7,7 +7,7 @@ import type { EventoPublico } from '../../core/models/evento.model';
 /**
  * Ruta protegida `/evento/:slug/puerta` (`guardiaRol`, mínimo `portero`,
  * `TODO.md` Tarea 2 — Validación en puerta, `docs/DESIGN.md` §8). Se llega
- * acá desde `SeleccionPuertaComponent` (`/puerta`) o por enlace directo.
+ * acá desde `SeleccionPuertaComponent` (`/taquilla/puerta`) o por enlace directo.
  *
  * El acceso a la cámara se dispara **solo** desde el manejador de click del
  * botón "Escanear" — nunca automáticamente al cargar la página

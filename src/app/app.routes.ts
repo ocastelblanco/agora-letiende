@@ -1,22 +1,7 @@
 import { Routes } from '@angular/router';
 import { guardiaInvitado } from './core/guardias/guardia-invitado';
 import { guardiaRol } from './core/guardias/guardia-rol';
-import { SECCIONES_NAVEGACION } from './shared/navegacion/secciones-navegacion';
-
-/**
- * `rolMinimo` de las rutas `admin/*` se deriva de `SECCIONES_NAVEGACION`
- * (única fuente de verdad, `TODO.md` Tarea 1) en vez de declararse dos
- * veces. Lanza en tiempo de carga del módulo si la sección esperada no
- * existe — un error de configuración así debe fallar ruidosamente, no
- * silenciarse detrás de un `undefined`.
- */
-function rolMinimoDe(ruta: string): string {
-  const seccion = SECCIONES_NAVEGACION.find((s) => s.ruta === ruta);
-  if (!seccion) {
-    throw new Error(`No hay una sección de navegación para la ruta "${ruta}".`);
-  }
-  return seccion.rolMinimo;
-}
+import { rolMinimoDeRuta } from './shared/navegacion/secciones-navegacion';
 
 export const routes: Routes = [
   {
@@ -38,7 +23,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/evento/comprar/comprar.component').then((m) => m.ComprarComponent),
     // RenderMode.Client (app.routes.server.ts): formulario interactivo sin
-    // valor de SEO, mismo criterio que /admin/* (TODO.md Tarea 2).
+    // valor de SEO, mismo criterio que las rutas protegidas de personal
+    // (TODO.md Tarea 2).
     title: 'Comprar boletas — Ágora',
   },
   {
@@ -46,8 +32,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/puerta/puerta.component').then((m) => m.PuertaComponent),
     canActivate: [guardiaRol],
-    // No usa rolMinimoDe: es una ruta dinámica por evento, no una sección
-    // fija de SECCIONES_NAVEGACION (esa es /puerta, el selector).
+    // No usa rolMinimoDeRuta: es una ruta dinámica por evento, no un tab
+    // fijo de GRUPOS_NAVEGACION (ese es /taquilla/puerta, el selector).
     data: { rolMinimo: 'portero' },
     title: 'Puerta — Ágora',
   },
@@ -59,7 +45,7 @@ export const routes: Routes = [
       ),
     canActivate: [guardiaRol],
     // Mismo criterio que /evento/:slug/puerta: ruta dinámica por evento, no
-    // una sección fija de SECCIONES_NAVEGACION (esa es /efectivo, el
+    // un tab fijo de GRUPOS_NAVEGACION (ese es /taquilla/efectivo, el
     // selector, TODO.md Tarea 2).
     data: { rolMinimo: 'portero' },
     title: 'Venta en efectivo — Ágora',
@@ -70,8 +56,8 @@ export const routes: Routes = [
       import('./features/panel/panel-evento.component').then((m) => m.PanelEventoComponent),
     canActivate: [guardiaRol],
     // Mismo criterio que /evento/:slug/puerta y /evento/:slug/efectivo:
-    // ruta dinámica por evento, no una sección fija de SECCIONES_NAVEGACION
-    // (esa es /panel, el selector, TODO.md Tarea 2).
+    // ruta dinámica por evento, no un tab fijo de GRUPOS_NAVEGACION
+    // (ese es /mis-eventos/panel, el selector, TODO.md Tarea 2).
     data: { rolMinimo: 'productor' },
     title: 'Panel — Ágora',
   },
@@ -107,71 +93,168 @@ export const routes: Routes = [
     title: 'Ingresar — Ágora',
   },
   {
-    path: 'admin/usuarios',
+    path: 'usuarios',
     loadComponent: () =>
       import('./features/admin/gestion-usuarios/gestion-usuarios.component').then(
         (m) => m.GestionUsuariosComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/usuarios') },
+    data: { rolMinimo: rolMinimoDeRuta('/usuarios') },
     title: 'Usuarios — Ágora',
   },
+  // Hub de "Taquilla" (cuerpo con Angular Material Tabs ligadas al router,
+  // `TaquillaComponent`) — reemplaza al header como lugar del nivel 2
+  // (rediseño a pedido del usuario). Las rutas hijas y sus guards son
+  // idénticos a los que existían como rutas planas, solo reubicados; el
+  // redirect del hijo vacío usa el último tab de 'Taquilla'
+  // (`secciones-navegacion.ts`), mismo criterio que `ultimoTab`.
   {
-    path: 'puerta',
+    path: 'taquilla',
     loadComponent: () =>
-      import('./features/puerta/seleccion-puerta.component').then(
-        (m) => m.SeleccionPuertaComponent,
-      ),
-    canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/puerta') },
-    title: 'Puerta — Ágora',
+      import('./features/taquilla/taquilla.component').then((m) => m.TaquillaComponent),
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'puerta' },
+      {
+        path: 'efectivo',
+        loadComponent: () =>
+          import('./features/evento/venta-efectivo/seleccion-venta-efectivo.component').then(
+            (m) => m.SeleccionVentaEfectivoComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: rolMinimoDeRuta('/taquilla/efectivo') },
+        title: 'Venta en efectivo — Ágora',
+      },
+      {
+        path: 'puerta',
+        loadComponent: () =>
+          import('./features/puerta/seleccion-puerta.component').then(
+            (m) => m.SeleccionPuertaComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: rolMinimoDeRuta('/taquilla/puerta') },
+        title: 'Puerta — Ágora',
+      },
+    ],
   },
+  // Hub de "Mis Eventos" (`MisEventosComponent`) — mismo criterio que el hub
+  // de "Taquilla" de arriba. El redirect del hijo vacío usa el último tab de
+  // 'Mis Eventos' ('Aprobaciones', ver `secciones-navegacion.ts`).
   {
-    path: 'efectivo',
+    path: 'mis-eventos',
     loadComponent: () =>
-      import('./features/evento/venta-efectivo/seleccion-venta-efectivo.component').then(
-        (m) => m.SeleccionVentaEfectivoComponent,
-      ),
-    canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/efectivo') },
-    title: 'Venta en efectivo — Ágora',
+      import('./features/mis-eventos/mis-eventos.component').then((m) => m.MisEventosComponent),
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'aprobaciones' },
+      {
+        path: 'panel',
+        loadComponent: () =>
+          import('./features/panel/seleccion-panel.component').then(
+            (m) => m.SeleccionPanelComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/panel') },
+        title: 'Panel — Ágora',
+      },
+      {
+        path: 'eventos',
+        loadComponent: () =>
+          import('./features/admin/gestion-eventos/gestion-eventos.component').then(
+            (m) => m.GestionEventosComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') },
+        title: 'Eventos — Ágora',
+      },
+      {
+        path: 'eventos/:id',
+        loadComponent: () =>
+          import('./features/admin/gestion-eventos/editar-evento.component').then(
+            (m) => m.EditarEventoComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') },
+        title: 'Editar evento — Ágora',
+      },
+      {
+        path: 'aprobaciones',
+        loadComponent: () =>
+          import('./features/aprobaciones/lista-aprobaciones.component').then(
+            (m) => m.ListaAprobacionesComponent,
+          ),
+        canActivate: [guardiaRol],
+        data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/aprobaciones') },
+        title: 'Aprobaciones — Ágora',
+      },
+    ],
   },
-  {
-    path: 'panel',
-    loadComponent: () =>
-      import('./features/panel/seleccion-panel.component').then((m) => m.SeleccionPanelComponent),
-    canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/panel') },
-    title: 'Panel — Ágora',
-  },
-  {
-    path: 'admin/aprobaciones',
-    loadComponent: () =>
-      import('./features/aprobaciones/lista-aprobaciones.component').then(
-        (m) => m.ListaAprobacionesComponent,
-      ),
-    canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/aprobaciones') },
-    title: 'Aprobaciones — Ágora',
-  },
-  {
-    path: 'admin/eventos',
-    loadComponent: () =>
-      import('./features/admin/gestion-eventos/gestion-eventos.component').then(
-        (m) => m.GestionEventosComponent,
-      ),
-    canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/eventos') },
-    title: 'Eventos — Ágora',
-  },
+  // Redirects de las URLs viejas hacia las nuevas (menú de dos niveles) —
+  // los `path` de abajo quedaron libres al renombrar las rutas reales de
+  // arriba, así que no colisionan. `redirectTo` es ABSOLUTO (con `/`
+  // inicial) en los 6 casos: `@angular/ssr` resuelve `redirectTo` relativo
+  // distinto que el Router del navegador (`resolveRedirectTo` en
+  // `node_modules/@angular/ssr/fesm2022/ssr.mjs` concatena el prefijo del
+  // propio `path` en vez de reiniciar el matching desde la raíz), lo que
+  // producía bucles infinitos (`admin/usuarios` → `admin/usuarios`) y 404
+  // (`admin/aprobaciones` → `admin/mis-eventos/aprobaciones`) verificados con
+  // curl contra el servidor SSR compilado — no un problema teórico.
+  { path: 'admin/usuarios', redirectTo: '/usuarios' },
+  { path: 'puerta', redirectTo: '/taquilla/puerta' },
+  { path: 'efectivo', redirectTo: '/taquilla/efectivo' },
+  { path: 'panel', redirectTo: '/mis-eventos/panel' },
+  { path: 'admin/aprobaciones', redirectTo: '/mis-eventos/aprobaciones' },
+  // `pathMatch: 'full'` es obligatorio aquí (a diferencia de las otras 5
+  // entradas de esta lista, que no tienen un hermano más específico debajo):
+  // sin él, el Router del navegador hace matching de `path` por PREFIJO por
+  // defecto, así que esta entrada de 2 segmentos coincidía con CUALQUIER URL
+  // que empezara por `admin/eventos/…` — incluyendo `/admin/eventos/xyz999`
+  // de 3 segmentos — y redirigía a la lista perdiendo el id, sin que el
+  // Router llegara siquiera a intentar la entrada `admin/eventos/:id` de
+  // abajo (verificado en `ng serve`: con `pathMatch` por defecto,
+  // `router.navigateByUrl('/admin/eventos/xyz999')` terminaba en
+  // `/mis-eventos/eventos`, la lista; agregando `pathMatch: 'full'` en
+  // memoria sobre `router.config` y repitiendo la navegación, terminó
+  // correctamente en `/mis-eventos/eventos/xyz999` con `params: { id:
+  // 'xyz999' }`). Este bug es independiente del mecanismo de sustitución de
+  // `redirectTo` documentado abajo: sin este `pathMatch`, ninguna solución de
+  // la entrada `admin/eventos/:id` — string o función — llega a ejecutarse
+  // nunca para una URL de 3 segmentos.
+  { path: 'admin/eventos', pathMatch: 'full', redirectTo: '/mis-eventos/eventos' },
+  // Entrada separada y explícita para `/admin/eventos/:id`: a diferencia del
+  // Router del navegador, `@angular/ssr` NO hace matching por prefijo aquí
+  // (verificado con curl: sin esta entrada, `/admin/eventos/abc123` daba 404
+  // directo, no heredaba el redirect de `admin/eventos` de arriba).
+  //
+  // El destino es una FUNCIÓN (`RedirectFunction`), no un string, porque no
+  // existe un string único que funcione en los dos motores de redirect que
+  // Angular usa para esta app:
+  //   - `redirectTo: '/mis-eventos/eventos/:id'` (con dos puntos) funciona en
+  //     el Router del navegador (sustituye bien vía `posParams`), pero el
+  //     "camino rápido" de redirect estático de `@angular/ssr`
+  //     (`buildPathWithParams` en `node_modules/@angular/ssr/fesm2022/ssr.mjs`)
+  //     solo sustituye segmentos `*` literales — nunca interpreta `:id` — así
+  //     que en SSR el redirect quedaba apuntando literalmente a
+  //     `/mis-eventos/eventos/:id` sin sustituir (verificado con curl).
+  //   - `redirectTo: '/mis-eventos/eventos/*'` (con asterisco) sí funciona en
+  //     el fast-path de SSR, pero el Router del navegador
+  //     (`createSegments`/`findOrReturn` en
+  //     `node_modules/@angular/router/fesm2022/_router-chunk.mjs`) NO le da
+  //     ningún significado especial a `*` — solo sabe sustituir segmentos que
+  //     empiezan con `:` — así que en navegación client-side (por ejemplo,
+  //     "atrás"/"adelante" del navegador con la SPA ya hidratada) el usuario
+  //     terminaba silenciosamente en `/mis-eventos/eventos` (la lista),
+  //     perdiendo el id, sin error visible (verificado en `ng serve` con
+  //     `router.navigateByUrl('/admin/eventos/xyz999')` e inspeccionando
+  //     `router.routerState.snapshot`).
+  // Una función se evalúa con los params ya resueltos en ambos motores, así
+  // que es correcta en los dos casos sin ambigüedad — a costa de que el
+  // fast-path de SSR ya no puede emitir el 302 estático más rápido para esta
+  // ruta puntual: cae a un render `RenderMode.Client` normal que redirige del
+  // lado del cliente (un hop más lento, pero correcto; probado: 200 sin
+  // `Location` en vez de 302 directo). Es una URL vieja y de compatibilidad
+  // (bookmark/enlace externo, no hay ningún `routerLink` interno que apunte
+  // aquí), así que ese costo es aceptable.
   {
     path: 'admin/eventos/:id',
-    loadComponent: () =>
-      import('./features/admin/gestion-eventos/editar-evento.component').then(
-        (m) => m.EditarEventoComponent,
-      ),
-    canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/eventos') },
-    title: 'Editar evento — Ágora',
+    redirectTo: (redirectData) => `/mis-eventos/eventos/${redirectData.params['id']}`,
   },
 ];

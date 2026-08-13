@@ -19,8 +19,8 @@ export const appConfig: ApplicationConfig = {
     // withComponentInputBinding(): el Router asigna los parámetros de ruta a
     // Signal inputs del componente en CADA navegación, incluso cuando
     // Angular reutiliza la misma instancia por coincidir la misma
-    // definición de ruta (ej. navegar de /admin/eventos/nuevo a
-    // /admin/eventos/{eventoId} tras crear un evento) — sin esto, un
+    // definición de ruta (ej. navegar de /mis-eventos/eventos/nuevo a
+    // /mis-eventos/eventos/{eventoId} tras crear un evento) — sin esto, un
     // componente reutilizado queda con el parámetro "congelado" en su valor
     // de construcción (gotcha real, ver MEMORY.md §7).
     provideRouter(routes, withComponentInputBinding()),

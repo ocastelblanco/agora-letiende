@@ -230,9 +230,9 @@ agora/
 | `/evento/:slug/panel` | `PanelEventoComponent` | Equipo | `GuardiaAuth` + rol ≥ productor + asignado al evento |
 | `/aprobaciones` | `ListaAprobacionesComponent` | Equipo | `GuardiaAuth` + rol ≥ productor |
 | `/admin` | `AdminInicioComponent` | Equipo | `GuardiaAuth` + rol = administrador |
-| `/admin/eventos` | `GestionEventosComponent` | Equipo | `GuardiaAuth` + rol = administrador |
-| `/admin/eventos/:id` | `EditarEventoComponent` | Equipo | `GuardiaAuth` + rol = administrador |
-| `/admin/usuarios` | `GestionUsuariosComponent` | Equipo | `GuardiaAuth` + rol = administrador |
+| `/mis-eventos/eventos` | `GestionEventosComponent` | Equipo | `GuardiaAuth` + rol = administrador |
+| `/mis-eventos/eventos/:id` | `EditarEventoComponent` | Equipo | `GuardiaAuth` + rol = administrador |
+| `/usuarios` | `GestionUsuariosComponent` | Equipo | `GuardiaAuth` + rol = administrador |
 
 > Las guardias son **solo experiencia de usuario**. Cada endpoint reverifica el rol en el backend. Ver `CLAUDE.md` §5 (A01).
 

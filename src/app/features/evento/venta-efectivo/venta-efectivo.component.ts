@@ -11,7 +11,7 @@ import { etapaVigenteParaMostrar } from '../../../shared/utilidades/etapa-vigent
 /**
  * Ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`,
  * `TODO.md` Tarea 2 — Venta en efectivo, `PRD.md` CU-11). Se llega acá desde
- * `SeleccionVentaEfectivoComponent` (`/efectivo`) o por enlace directo.
+ * `SeleccionVentaEfectivoComponent` (`/taquilla/efectivo`) o por enlace directo.
  *
  * A diferencia de `ComprarComponent`, no hay plazo de comprobante ni pantalla
  * de espera: `VentasEfectivoService.crearVenta()` reserva, confirma y emite

@@ -7,9 +7,9 @@ import { ServicioAuth } from '../../core/auth/servicio-auth';
 import type { Rol } from '../../core/models/usuario.model';
 import { BarraNavegacionComponent } from './barra-navegacion.component';
 
-/** Componente vacío para registrar `/login` como ruta real en las pruebas que navegan. */
-@Component({ selector: 'app-login-dummy', template: '' })
-class ComponenteLoginDummy {}
+/** Componente vacío para registrar rutas reales en las pruebas que navegan. */
+@Component({ selector: 'app-ruta-dummy', template: '' })
+class ComponenteRutaDummy {}
 
 // `servicio-auth.ts` (importado abajo solo como token de DI) importa el SDK
 // real de Firebase a nivel de módulo — se mockea aquí para que este archivo
@@ -24,6 +24,17 @@ vi.mock('firebase/auth', () => ({
     return { setCustomParameters: vi.fn() };
   }),
 }));
+
+/** Rutas de personal usadas en las pruebas que navegan, para que el Router pueda resolverlas. */
+const RUTAS_PERSONAL: Routes = [
+  { path: 'login', component: ComponenteRutaDummy },
+  { path: 'usuarios', component: ComponenteRutaDummy },
+  { path: 'taquilla/efectivo', component: ComponenteRutaDummy },
+  { path: 'taquilla/puerta', component: ComponenteRutaDummy },
+  { path: 'mis-eventos/panel', component: ComponenteRutaDummy },
+  { path: 'mis-eventos/eventos', component: ComponenteRutaDummy },
+  { path: 'mis-eventos/aprobaciones', component: ComponenteRutaDummy },
+];
 
 function configurarPrueba(
   usuarioActual: User | null,
@@ -72,7 +83,7 @@ describe('BarraNavegacionComponent', () => {
 
   it('el botón "Ingresar" no se renderiza en /login (se confunde con "Ingresar con Google")', async () => {
     const { fixture } = configurarPrueba(null, null, undefined, undefined, [
-      { path: 'login', component: ComponenteLoginDummy },
+      { path: 'login', component: ComponenteRutaDummy },
     ]);
     const router = TestBed.inject(Router);
 
@@ -83,38 +94,106 @@ describe('BarraNavegacionComponent', () => {
     expect(enlaceIngresar).toBeNull();
   });
 
-  it('administrador ve Eventos y Usuarios, pero ya no Cartelera (el logo del header ya enlaza a /)', () => {
+  it('administrador ve "Usuarios" (tab único) y "Mis Eventos" (grupo, nivel 1), pero ya no Cartelera ni un enlace navegable a "Eventos" suelto', () => {
     const usuario = { displayName: 'Ana Admin', email: 'ana@letiende.co', photoURL: null } as User;
     const { fixture } = configurarPrueba(usuario, 'administrador');
     const texto = fixture.nativeElement.textContent as string;
 
     expect(texto).not.toContain('Cartelera');
-    expect(texto).toContain('Eventos');
     expect(texto).toContain('Usuarios');
+    expect(texto).toContain('Mis Eventos');
+    // "Eventos" no aparece como enlace navegable de nivel 1 suelto: solo
+    // dentro de la fila de tabs de nivel 2, que no se muestra sin navegar a
+    // un tab de "Mis Eventos" (ningún grupo está activo por defecto en el
+    // fixture). No se puede usar `texto.not.toContain('Eventos')` porque el
+    // grupo se llama literalmente "Mis Eventos", que contiene esa subcadena.
+    const enlaces = Array.from(
+      fixture.nativeElement.querySelectorAll('nav a') as NodeListOf<HTMLAnchorElement>,
+    );
+    expect(enlaces.map((a) => a.textContent?.trim())).not.toContain('Eventos');
+    expect(enlaces.map((a) => a.getAttribute('href'))).not.toContain('/mis-eventos/eventos');
     expect(texto).toContain('Cerrar sesión');
   });
 
-  it('portero ve Efectivo y Puerta, pero ya no Cartelera ni las secciones de productor/administrador', () => {
+  it('portero ve "Taquilla" (grupo, nivel 1) en vez de "Efectivo"/"Puerta" sueltos', () => {
     const usuario = { displayName: 'Pedro Portero', email: 'pedro@letiende.co', photoURL: null } as User;
     const { fixture } = configurarPrueba(usuario, 'portero');
     const texto = fixture.nativeElement.textContent as string;
 
     expect(texto).not.toContain('Cartelera');
-    expect(texto).toContain('Efectivo');
-    expect(texto).toContain('Puerta');
+    expect(texto).toContain('Taquilla');
+    expect(texto).not.toContain('Efectivo');
+    expect(texto).not.toContain('Puerta');
     expect(texto).not.toContain('Aprobaciones');
     expect(texto).not.toContain('Eventos');
     expect(texto).not.toContain('Usuarios');
   });
 
-  it('productor tampoco ve Cartelera en el menú', () => {
+  it('productor ve "Mis Eventos" (grupo) en vez de "Panel"/"Aprobaciones" sueltos, y tampoco ve Cartelera', () => {
     const usuario = { displayName: 'Paula Productora', email: 'paula@letiende.co', photoURL: null } as User;
     const { fixture } = configurarPrueba(usuario, 'productor');
     const texto = fixture.nativeElement.textContent as string;
 
     expect(texto).not.toContain('Cartelera');
-    expect(texto).toContain('Panel');
-    expect(texto).toContain('Aprobaciones');
+    expect(texto).toContain('Mis Eventos');
+    expect(texto).not.toContain('Panel');
+    expect(texto).not.toContain('Aprobaciones');
+  });
+
+  it('regresión de autorización: un productor NUNCA tiene un enlace navegable a "Eventos" en el header, ni siquiera navegando a /mis-eventos/panel — el header ya no tiene nivel 2 (rediseño), solo el link de grupo "Mis Eventos"', async () => {
+    const usuario = {
+      displayName: 'Paula Productora',
+      email: 'paula@letiende.co',
+      photoURL: null,
+    } as User;
+    const { fixture } = configurarPrueba(usuario, 'productor', undefined, undefined, RUTAS_PERSONAL);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/mis-eventos/panel');
+    fixture.detectChanges();
+    const texto = fixture.nativeElement.textContent as string;
+
+    expect(texto).toContain('Mis Eventos');
+    // No se puede usar `texto.not.toContain('Eventos')`: el grupo se llama
+    // literalmente "Mis Eventos", que contiene esa subcadena. Se prueba en
+    // cambio que ningún `<a>` real de la nav tenga ese texto exacto ni ese
+    // href — la prueba real de la regla de autorización.
+    const enlaces = Array.from(
+      fixture.nativeElement.querySelectorAll('nav a') as NodeListOf<HTMLAnchorElement>,
+    );
+    expect(enlaces.map((a) => a.textContent?.trim())).not.toContain('Eventos');
+    expect(enlaces.map((a) => a.getAttribute('href'))).not.toContain('/mis-eventos/eventos');
+  });
+
+  it('regresión de autorización (drawer móvil): un productor NUNCA tiene un enlace navegable a "Eventos" en el drawer móvil, ni siquiera navegando a /mis-eventos/panel — la barra es mobile-first (CLAUDE.md §1), esta rama del DOM es la que más importa proteger', async () => {
+    const usuario = {
+      displayName: 'Paula Productora',
+      email: 'paula@letiende.co',
+      photoURL: null,
+    } as User;
+    const { fixture } = configurarPrueba(usuario, 'productor', undefined, undefined, RUTAS_PERSONAL);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/mis-eventos/panel');
+    fixture.detectChanges();
+
+    const botonAbrirMenu = fixture.nativeElement.querySelector(
+      'button[aria-label="Abrir menú de navegación"]',
+    ) as HTMLButtonElement;
+    expect(botonAbrirMenu).toBeTruthy();
+    botonAbrirMenu.click();
+    fixture.detectChanges();
+
+    const drawer = fixture.nativeElement.querySelector('.md\\:hidden nav[aria-label="Navegación principal"]');
+    expect(drawer).toBeTruthy();
+    const textoDrawer = (drawer as HTMLElement).textContent as string;
+    expect(textoDrawer).toContain('Mis Eventos');
+
+    const enlacesDrawer = Array.from(
+      drawer!.querySelectorAll('a') as NodeListOf<HTMLAnchorElement>,
+    );
+    expect(enlacesDrawer.map((a) => a.textContent?.trim())).not.toContain('Eventos');
+    expect(enlacesDrawer.map((a) => a.getAttribute('href'))).not.toContain('/mis-eventos/eventos');
   });
 
   it('muestra el avatar con photoURL con referrerpolicy="no-referrer"', () => {

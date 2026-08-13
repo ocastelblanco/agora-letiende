@@ -122,7 +122,7 @@ describe('EditarEventoComponent', () => {
       expect(datosEnviados.fechaHora).toBe('2026-09-15T01:00:00.000Z');
       expect(datosEnviados.etapas[0]).toMatchObject({ nombre: 'Preventa', precio: 45000, orden: 1 });
       expect(datosEnviados.mediosPago).toEqual(['efectivo']);
-      expect(navigateMock).toHaveBeenCalledWith(['/admin/eventos', 'e1']);
+      expect(navigateMock).toHaveBeenCalledWith(['/mis-eventos/eventos', 'e1']);
       expect(snackBarOpenMock).toHaveBeenCalledWith('Evento creado correctamente.', 'Cerrar', {
         duration: 4000,
       });

@@ -18,7 +18,8 @@ const ID_SCRIPT_JSON_LD = 'app-json-ld-evento';
  * Open Graph, Twitter Card y JSON-LD `schema.org/Event`, resueltos en SSR
  * (`RenderMode.Server` en `app.routes.server.ts`) para que los rastreadores
  * de WhatsApp/Instagram reciban el HTML ya armado en la primera respuesta —
- * a diferencia de `/admin/*`, que es `RenderMode.Client`.
+ * a diferencia de las rutas protegidas de personal, que son
+ * `RenderMode.Client`.
  *
  * El parámetro `slug` se recibe como Signal input
  * (`withComponentInputBinding()` en `app.config.ts`), no leyendo

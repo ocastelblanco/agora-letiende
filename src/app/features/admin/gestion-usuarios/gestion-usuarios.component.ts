@@ -13,7 +13,7 @@ import { DatosNuevoUsuario, DatosUsuario, Rol, Usuario } from '../../../core/mod
 import { ConfirmarDialogComponent } from '../../../shared/dialogos/confirmar-dialog.component';
 
 /**
- * Ruta protegida `/admin/usuarios` (`guardiaRol`, `data: { rolMinimo: 'administrador' }`
+ * Ruta protegida `/usuarios` (`guardiaRol`, `data: { rolMinimo: 'administrador' }`
  * en `app.routes.ts`; `tech-specs.md` §4.2, `TODO.md` Tarea 1) — CRUD de
  * `agora-usuarios`. Un único formulario reactivo se reutiliza para crear y
  * editar: `usuarioEditandoEmail` distingue el modo (`null` = crear, un
