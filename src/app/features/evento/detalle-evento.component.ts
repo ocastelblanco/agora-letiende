@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
 import type { EtapaBoleteria, EventoPublico } from '../../core/models/evento.model';
 import { PrecioPipe } from '../../shared/pipes/precio.pipe';
+import { avisoEstadoEvento } from '../../shared/utilidades/aviso-estado-evento';
 import { etapaVigenteParaMostrar } from '../../shared/utilidades/etapa-vigente';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
@@ -107,6 +108,22 @@ export class DetalleEventoComponent {
   protected etapaCerrada(etapa: EtapaBoleteria): boolean {
     return new Date(etapa.cierraEn).getTime() <= Date.now();
   }
+
+  /** Fecha límite de cierre de una etapa, en hora de Bogotá (`CLAUDE.md` §4). */
+  protected etapaCierraEnLegible(etapa: EtapaBoleteria): string {
+    return paraInputBogota(etapa.cierraEn).replace('T', ' ');
+  }
+
+  /**
+   * Texto del banner diagonal AGOTADO/CANCELADO (`plan-pre-producción.md`
+   * T3) — información crítica para un visitante que podría estar a punto de
+   * intentar comprar, así que se muestra independientemente de si el evento
+   * tiene `imagenUrl` (ver decisión en el template).
+   */
+  protected readonly avisoEstado = computed(() => {
+    const evento = this.evento();
+    return evento ? avisoEstadoEvento(evento.estado) : null;
+  });
 
   private actualizarMetadatos(evento: EventoPublico): void {
     const tituloPagina = `${evento.nombre} — Ágora`;

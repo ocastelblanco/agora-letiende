@@ -44,7 +44,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ---
 
-### T3 — Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug` `[activa como Tarea 1 de TODO.md]`
+### T3 — Fecha límite de etapas + banner AGOTADO/CANCELADO en `/evento/:slug` `[x] completada 12/08/2026, PR pendiente de apertura`
 
 **Origen:** tabla de ajustes menores, filas "Card de evento detallado" (×2).
 
@@ -74,7 +74,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 ## Fase 2 — Reestructuración del menú principal
 
-### T5 — Menú de dos niveles con rutas anidadas reales `[activa como Tarea 2 de TODO.md]`
+### T5 — Menú de dos niveles con rutas anidadas reales `[activa como Tarea 1 de TODO.md]`
 
 **Origen:** sección "Reestructuración del menú principal" del documento de negocio.
 
