@@ -118,3 +118,4 @@ Frontend,13/08/2026 09:45,13/08/2026 13:08,3:23:00,AI,Sonnet 5,Rediseña menu a 
 Specs definition,13/08/2026 13:08,13/08/2026 15:08,2:00:00,AI,Sonnet 5,Recalcula motor JIT y documentacion tras T5 avanza TODO a T6 antes de la fusion del PR 36,Claude Code,cli,medium
 Backend,13/08/2026 15:08,13/08/2026 15:44,0:36:00,AI,Sonnet 5,Implementa T6 productor edita eventos propios verificacion arquitectonica corrige bug real abre PR 37,Claude Code,cli,high
 Frontend,13/08/2026 16:15,13/08/2026 16:43,0:28:00,AI,Sonnet 5,Hotfix ruta mis-eventos-eventos-nuevo sin id real mostraba evento no encontrado en vez del formulario de crear,Claude Code,cli,medium
+Specs definition,13/08/2026 16:43,13/08/2026 17:24,0:41:00,AI,Sonnet 5,Recalcula motor JIT y documentacion tras T6 avanza TODO a T7 commit final al PR 37,Claude Code,cli,medium
