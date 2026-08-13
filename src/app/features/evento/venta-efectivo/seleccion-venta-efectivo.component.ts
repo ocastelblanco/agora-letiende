@@ -4,7 +4,7 @@ import { EventosPublicosService } from '../../../core/api/eventos-publicos.servi
 import { paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
 
 /**
- * Ruta protegida `/efectivo` (`guardiaRol`, mínimo `portero`, `TODO.md`
+ * Ruta protegida `/taquilla/efectivo` (`guardiaRol`, mínimo `portero`, `TODO.md`
  * Tarea 2 — Venta en efectivo). `tech-specs.md` §4.2 solo define
  * `/evento/:slug/efectivo` (ya con el `slug` en la mano) sin especificar
  * cómo el equipo llega ahí — mismo hueco y misma solución que

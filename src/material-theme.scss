@@ -174,7 +174,7 @@ html {
   --mat-sys-on-surface: #230c00;
 
   // Bug real encontrado en vivo (07/08/2026, PR #13): el desplegable "Rol"
-  // de /admin/usuarios se veía transparente, mezclado con el resto del
+  // de /usuarios (antes /admin/usuarios) se veía transparente, mezclado con el resto del
   // formulario — imposible seleccionar una opción. Causa verificada con el
   // CSS generado real (no teoría): `mat.theme()` en esta versión de
   // Angular Material (22.1.0) deja **vacíos** varios roles de superficie

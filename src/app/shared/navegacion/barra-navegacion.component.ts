@@ -5,15 +5,18 @@ import { filter, map } from 'rxjs';
 import { PanelService } from '../../core/api/panel.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
 import { cumpleRolMinimo } from '../../core/models/usuario.model';
-import { SECCIONES_NAVEGACION } from './secciones-navegacion';
+import { GRUPOS_NAVEGACION } from './secciones-navegacion';
 
 /**
  * Barra de navegación de toda la app (`TODO.md` Tarea 1) — **siempre
  * visible**, con o sin sesión, para ofrecer siempre una forma de llegar a
  * `/login` (decisión de diseño explícita del usuario, ver `MEMORY.md`
- * sesión 06/08/2026 noche). Ya autenticado, muestra las secciones que el
- * rol actual cumple según `SECCIONES_NAVEGACION` (sin "Cartelera" —
- * `TODO.md` Tarea 1 — el logo del header ya enlaza a `/` siempre).
+ * sesión 06/08/2026 noche). Ya autenticado, muestra una jerarquía de dos
+ * niveles (grupo → tabs) armada a partir de `GRUPOS_NAVEGACION` (sin
+ * "Cartelera" — `TODO.md` Tarea 1 — el logo del header ya enlaza a `/`
+ * siempre), filtrando cada tab por su propio `rolMinimo` individual — el
+ * grupo en sí nunca tiene un rol propio, ver el docstring de
+ * `GrupoNavegacion` en `secciones-navegacion.ts`.
  *
  * Sin `@Input()`: todo el estado sale de `ServicioAuth` inyectado
  * directamente. Sin Angular Material nuevo (`MatToolbar`/`MatSidenav`/
@@ -55,13 +58,21 @@ export class BarraNavegacionComponent {
   /** `true` en `/login` — el botón "Ingresar" del header solo se oculta ahí. */
   protected readonly enLogin = computed(() => this.rutaActual() === '/login');
 
-  /** Secciones visibles para el rol actual — vacío sin sesión o sin rol resuelto. */
-  protected readonly secciones = computed(() => {
+  /**
+   * Grupos visibles para el rol actual, con sus tabs ya filtrados por
+   * `rolMinimo` individual — vacío sin sesión o sin rol resuelto. Un grupo
+   * sin ningún tab accesible (ej. "Usuarios" para un portero) se descarta
+   * por completo, nunca se muestra vacío.
+   */
+  protected readonly grupos = computed(() => {
     const rolActual = this.servicioAuth.rol();
     if (!rolActual) {
       return [];
     }
-    return SECCIONES_NAVEGACION.filter((seccion) => cumpleRolMinimo(rolActual, seccion.rolMinimo));
+    return GRUPOS_NAVEGACION.map((grupo) => ({
+      etiqueta: grupo.etiqueta,
+      tabs: grupo.tabs.filter((tab) => cumpleRolMinimo(rolActual, tab.rolMinimo)),
+    })).filter((grupo) => grupo.tabs.length > 0);
   });
 
   /** Inicial del nombre (o correo) del usuario actual, para el avatar de respaldo sin foto. */
@@ -77,6 +88,17 @@ export class BarraNavegacionComponent {
 
   protected alternarMenu(): void {
     this.menuAbierto.set(!this.menuAbierto());
+  }
+
+  /** Último tab visible del grupo — mismo criterio que rutaDestinoParaRol: es el destino al hacer click en la etiqueta del grupo (nivel 1). */
+  protected ultimoTab(grupo: { tabs: { ruta: string }[] }) {
+    return grupo.tabs[grupo.tabs.length - 1];
+  }
+
+  /** Un grupo está "activo" si la ruta actual es uno de sus tabs, o una ruta hija de uno de sus tabs (ej. /mis-eventos/eventos/abc123 bajo el tab /mis-eventos/eventos). */
+  protected grupoActivo(grupo: { tabs: { ruta: string }[] }): boolean {
+    const ruta = this.rutaActual();
+    return grupo.tabs.some((tab) => ruta === tab.ruta || ruta.startsWith(`${tab.ruta}/`));
   }
 
   /**

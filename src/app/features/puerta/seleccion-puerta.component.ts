@@ -4,7 +4,7 @@ import { EventosPublicosService } from '../../core/api/eventos-publicos.service'
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
 /**
- * Ruta protegida `/puerta` (`guardiaRol`, mínimo `portero`, `TODO.md`
+ * Ruta protegida `/taquilla/puerta` (`guardiaRol`, mínimo `portero`, `TODO.md`
  * Tarea 2 — Validación en puerta). `tech-specs.md` §4.2 solo define
  * `/evento/:slug/puerta` (ya con el `slug` en la mano) sin especificar cómo
  * un portero llega ahí — esta pantalla resuelve ese hueco con un selector

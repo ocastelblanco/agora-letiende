@@ -5,7 +5,7 @@ import { PrecioPipe } from '../../shared/pipes/precio.pipe';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
 /**
- * Ruta protegida `/admin/aprobaciones` (`guardiaRol`,
+ * Ruta protegida `/mis-eventos/aprobaciones` (`guardiaRol`,
  * `data: { rolMinimo: 'productor' }` en `app.routes.ts`; `tech-specs.md`
  * §5.1, `TODO.md` Tarea 2) — panel **de solo lectura** con las compras
  * `en_revision` de los eventos donde el usuario actual es productor.

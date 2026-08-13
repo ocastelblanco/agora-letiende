@@ -1,22 +1,7 @@
 import { Routes } from '@angular/router';
 import { guardiaInvitado } from './core/guardias/guardia-invitado';
 import { guardiaRol } from './core/guardias/guardia-rol';
-import { SECCIONES_NAVEGACION } from './shared/navegacion/secciones-navegacion';
-
-/**
- * `rolMinimo` de las rutas `admin/*` se deriva de `SECCIONES_NAVEGACION`
- * (única fuente de verdad, `TODO.md` Tarea 1) en vez de declararse dos
- * veces. Lanza en tiempo de carga del módulo si la sección esperada no
- * existe — un error de configuración así debe fallar ruidosamente, no
- * silenciarse detrás de un `undefined`.
- */
-function rolMinimoDe(ruta: string): string {
-  const seccion = SECCIONES_NAVEGACION.find((s) => s.ruta === ruta);
-  if (!seccion) {
-    throw new Error(`No hay una sección de navegación para la ruta "${ruta}".`);
-  }
-  return seccion.rolMinimo;
-}
+import { rolMinimoDeRuta } from './shared/navegacion/secciones-navegacion';
 
 export const routes: Routes = [
   {
@@ -38,7 +23,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/evento/comprar/comprar.component').then((m) => m.ComprarComponent),
     // RenderMode.Client (app.routes.server.ts): formulario interactivo sin
-    // valor de SEO, mismo criterio que /admin/* (TODO.md Tarea 2).
+    // valor de SEO, mismo criterio que las rutas protegidas de personal
+    // (TODO.md Tarea 2).
     title: 'Comprar boletas — Ágora',
   },
   {
@@ -46,8 +32,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/puerta/puerta.component').then((m) => m.PuertaComponent),
     canActivate: [guardiaRol],
-    // No usa rolMinimoDe: es una ruta dinámica por evento, no una sección
-    // fija de SECCIONES_NAVEGACION (esa es /puerta, el selector).
+    // No usa rolMinimoDeRuta: es una ruta dinámica por evento, no un tab
+    // fijo de GRUPOS_NAVEGACION (ese es /taquilla/puerta, el selector).
     data: { rolMinimo: 'portero' },
     title: 'Puerta — Ágora',
   },
@@ -59,7 +45,7 @@ export const routes: Routes = [
       ),
     canActivate: [guardiaRol],
     // Mismo criterio que /evento/:slug/puerta: ruta dinámica por evento, no
-    // una sección fija de SECCIONES_NAVEGACION (esa es /efectivo, el
+    // un tab fijo de GRUPOS_NAVEGACION (ese es /taquilla/efectivo, el
     // selector, TODO.md Tarea 2).
     data: { rolMinimo: 'portero' },
     title: 'Venta en efectivo — Ágora',
@@ -70,8 +56,8 @@ export const routes: Routes = [
       import('./features/panel/panel-evento.component').then((m) => m.PanelEventoComponent),
     canActivate: [guardiaRol],
     // Mismo criterio que /evento/:slug/puerta y /evento/:slug/efectivo:
-    // ruta dinámica por evento, no una sección fija de SECCIONES_NAVEGACION
-    // (esa es /panel, el selector, TODO.md Tarea 2).
+    // ruta dinámica por evento, no un tab fijo de GRUPOS_NAVEGACION
+    // (ese es /mis-eventos/panel, el selector, TODO.md Tarea 2).
     data: { rolMinimo: 'productor' },
     title: 'Panel — Ágora',
   },
@@ -107,71 +93,84 @@ export const routes: Routes = [
     title: 'Ingresar — Ágora',
   },
   {
-    path: 'admin/usuarios',
+    path: 'usuarios',
     loadComponent: () =>
       import('./features/admin/gestion-usuarios/gestion-usuarios.component').then(
         (m) => m.GestionUsuariosComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/usuarios') },
+    data: { rolMinimo: rolMinimoDeRuta('/usuarios') },
     title: 'Usuarios — Ágora',
   },
   {
-    path: 'puerta',
+    path: 'taquilla/puerta',
     loadComponent: () =>
       import('./features/puerta/seleccion-puerta.component').then(
         (m) => m.SeleccionPuertaComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/puerta') },
+    data: { rolMinimo: rolMinimoDeRuta('/taquilla/puerta') },
     title: 'Puerta — Ágora',
   },
   {
-    path: 'efectivo',
+    path: 'taquilla/efectivo',
     loadComponent: () =>
       import('./features/evento/venta-efectivo/seleccion-venta-efectivo.component').then(
         (m) => m.SeleccionVentaEfectivoComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/efectivo') },
+    data: { rolMinimo: rolMinimoDeRuta('/taquilla/efectivo') },
     title: 'Venta en efectivo — Ágora',
   },
   {
-    path: 'panel',
+    path: 'mis-eventos/panel',
     loadComponent: () =>
       import('./features/panel/seleccion-panel.component').then((m) => m.SeleccionPanelComponent),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/panel') },
+    data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/panel') },
     title: 'Panel — Ágora',
   },
   {
-    path: 'admin/aprobaciones',
+    path: 'mis-eventos/aprobaciones',
     loadComponent: () =>
       import('./features/aprobaciones/lista-aprobaciones.component').then(
         (m) => m.ListaAprobacionesComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/aprobaciones') },
+    data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/aprobaciones') },
     title: 'Aprobaciones — Ágora',
   },
   {
-    path: 'admin/eventos',
+    path: 'mis-eventos/eventos',
     loadComponent: () =>
       import('./features/admin/gestion-eventos/gestion-eventos.component').then(
         (m) => m.GestionEventosComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/eventos') },
+    data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') },
     title: 'Eventos — Ágora',
   },
   {
-    path: 'admin/eventos/:id',
+    path: 'mis-eventos/eventos/:id',
     loadComponent: () =>
       import('./features/admin/gestion-eventos/editar-evento.component').then(
         (m) => m.EditarEventoComponent,
       ),
     canActivate: [guardiaRol],
-    data: { rolMinimo: rolMinimoDe('/admin/eventos') },
+    data: { rolMinimo: rolMinimoDeRuta('/mis-eventos/eventos') },
     title: 'Editar evento — Ágora',
   },
+  // Redirects de las URLs viejas hacia las nuevas (menú de dos niveles) —
+  // los `path` de abajo quedaron libres al renombrar las rutas reales de
+  // arriba, así que no colisionan.
+  { path: 'admin/usuarios', redirectTo: 'usuarios' },
+  { path: 'puerta', redirectTo: 'taquilla/puerta' },
+  { path: 'efectivo', redirectTo: 'taquilla/efectivo' },
+  { path: 'panel', redirectTo: 'mis-eventos/panel' },
+  { path: 'admin/aprobaciones', redirectTo: 'mis-eventos/aprobaciones' },
+  // El matching es por prefijo (sin `pathMatch: 'full'`), así que esta
+  // entrada ya captura también `/admin/eventos/:id` completo — Angular
+  // concatena el segmento sobrante (`/:id`) al destino del redirect. No se
+  // necesita una entrada separada para `admin/eventos/:id`.
+  { path: 'admin/eventos', redirectTo: 'mis-eventos/eventos' },
 ];

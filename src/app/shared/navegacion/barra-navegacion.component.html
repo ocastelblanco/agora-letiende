@@ -25,17 +25,46 @@
         </svg>
       </a>
     } @else if (usuarioActual()) {
-      <nav class="hidden items-center gap-6 md:flex" aria-label="Navegación principal">
-        @for (seccion of secciones(); track seccion.ruta) {
-          <a
-            [routerLink]="seccion.ruta"
-            routerLinkActive="text-secondary"
-            [routerLinkActiveOptions]="{ exact: seccion.ruta === '/' }"
-            ariaCurrentWhenActive="page"
-            class="text-sm font-semibold text-primary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
-          >
-            {{ seccion.etiqueta }}
-          </a>
+      <nav class="hidden flex-col md:flex" aria-label="Navegación principal">
+        <div class="flex items-center gap-6">
+          @for (grupo of grupos(); track grupo.etiqueta) {
+            @if (grupo.tabs.length === 1) {
+              <a
+                [routerLink]="grupo.tabs[0].ruta"
+                routerLinkActive="text-secondary"
+                [routerLinkActiveOptions]="{ exact: grupo.tabs[0].ruta === '/' }"
+                ariaCurrentWhenActive="page"
+                class="text-sm font-semibold text-primary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+              >
+                {{ grupo.tabs[0].etiqueta }}
+              </a>
+            } @else {
+              <a
+                [routerLink]="ultimoTab(grupo).ruta"
+                [class.text-secondary]="grupoActivo(grupo)"
+                class="text-sm font-semibold text-primary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+              >
+                {{ grupo.etiqueta }}
+              </a>
+            }
+          }
+        </div>
+
+        @for (grupo of grupos(); track grupo.etiqueta) {
+          @if (grupo.tabs.length > 1 && grupoActivo(grupo)) {
+            <div class="flex items-center gap-4 pt-1">
+              @for (tab of grupo.tabs; track tab.ruta) {
+                <a
+                  [routerLink]="tab.ruta"
+                  routerLinkActive="text-secondary"
+                  ariaCurrentWhenActive="page"
+                  class="text-sm text-primary/80 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+                >
+                  {{ tab.etiqueta }}
+                </a>
+              }
+            </div>
+          }
         }
       </nav>
 
@@ -92,17 +121,44 @@
   @if (usuarioActual() && menuAbierto()) {
     <div class="border-t border-primary/10 px-4 py-3 md:hidden">
       <nav class="flex flex-col gap-1" aria-label="Navegación principal">
-        @for (seccion of secciones(); track seccion.ruta) {
-          <a
-            [routerLink]="seccion.ruta"
-            routerLinkActive="bg-neutral/40 text-secondary"
-            [routerLinkActiveOptions]="{ exact: seccion.ruta === '/' }"
-            ariaCurrentWhenActive="page"
-            class="rounded-xl px-3 py-2 text-sm font-semibold text-primary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
-            (click)="cerrarMenu()"
-          >
-            {{ seccion.etiqueta }}
-          </a>
+        @for (grupo of grupos(); track grupo.etiqueta) {
+          @if (grupo.tabs.length === 1) {
+            <a
+              [routerLink]="grupo.tabs[0].ruta"
+              routerLinkActive="bg-neutral/40 text-secondary"
+              [routerLinkActiveOptions]="{ exact: grupo.tabs[0].ruta === '/' }"
+              ariaCurrentWhenActive="page"
+              class="rounded-xl px-3 py-2 text-sm font-semibold text-primary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+              (click)="cerrarMenu()"
+            >
+              {{ grupo.tabs[0].etiqueta }}
+            </a>
+          } @else {
+            <a
+              [routerLink]="ultimoTab(grupo).ruta"
+              [class]="
+                grupoActivo(grupo)
+                  ? 'rounded-xl px-3 py-2 text-sm font-semibold text-primary bg-neutral/40 text-secondary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary'
+                  : 'rounded-xl px-3 py-2 text-sm font-semibold text-primary transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary'
+              "
+              (click)="cerrarMenu()"
+            >
+              {{ grupo.etiqueta }}
+            </a>
+            @if (grupoActivo(grupo)) {
+              @for (tab of grupo.tabs; track tab.ruta) {
+                <a
+                  [routerLink]="tab.ruta"
+                  routerLinkActive="bg-neutral/40 text-secondary"
+                  ariaCurrentWhenActive="page"
+                  class="rounded-xl px-3 py-2 pl-7 text-sm text-primary/80 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+                  (click)="cerrarMenu()"
+                >
+                  {{ tab.etiqueta }}
+                </a>
+              }
+            }
+          }
         }
       </nav>
 

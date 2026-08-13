@@ -50,21 +50,21 @@ describe('guardiaInvitado', () => {
     expect(createUrlTreeMock).not.toHaveBeenCalled();
   });
 
-  it('redirige a /admin/usuarios cuando ya hay sesión de administrador', async () => {
+  it('redirige a /usuarios cuando ya hay sesión de administrador', async () => {
     const { createUrlTreeMock } = configurarPrueba(usuarioFalso, 'administrador');
 
     const resultado = await TestBed.runInInjectionContext(() => guardiaInvitado({} as never, {} as never));
 
     expect(resultado).toBe(urlTreeFalso);
-    expect(createUrlTreeMock).toHaveBeenCalledWith(['/admin/usuarios']);
+    expect(createUrlTreeMock).toHaveBeenCalledWith(['/usuarios']);
   });
 
-  it('redirige a /puerta cuando ya hay sesión de portero (su sección más específica, TODO.md Tarea 2)', async () => {
+  it('redirige a /taquilla/puerta cuando ya hay sesión de portero (su tab más específico, TODO.md Tarea 2)', async () => {
     const { createUrlTreeMock } = configurarPrueba(usuarioFalso, 'portero');
 
     const resultado = await TestBed.runInInjectionContext(() => guardiaInvitado({} as never, {} as never));
 
     expect(resultado).toBe(urlTreeFalso);
-    expect(createUrlTreeMock).toHaveBeenCalledWith(['/puerta']);
+    expect(createUrlTreeMock).toHaveBeenCalledWith(['/taquilla/puerta']);
   });
 });

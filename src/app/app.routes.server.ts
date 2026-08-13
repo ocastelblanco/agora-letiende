@@ -18,8 +18,8 @@ export const serverRoutes: ServerRoute[] = [
   // El formulario de compra no tiene valor de SEO (no es lo que un
   // rastreador de Open Graph debe indexar) y su contenido depende del
   // aforo en el instante exacto de la visita — RenderMode.Client, mismo
-  // criterio que /admin/* aunque el motivo sea otro (acá no hay sesión de
-  // Firebase de por medio, TODO.md Tarea 2).
+  // criterio que las rutas protegidas de personal aunque el motivo sea otro
+  // (acá no hay sesión de Firebase de por medio, TODO.md Tarea 2).
   {
     path: 'evento/:slug/comprar',
     renderMode: RenderMode.Client,
@@ -47,7 +47,73 @@ export const serverRoutes: ServerRoute[] = [
   // sesión y siempre redirigiría a /login, autenticado o no — gotcha
   // verificado en producción en Babel (mismo stack), ver MEMORY.md §7.
   {
+    path: 'usuarios',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'mis-eventos/aprobaciones',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'mis-eventos/eventos',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'mis-eventos/eventos/:id',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'taquilla/puerta',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'evento/:slug/puerta',
+    renderMode: RenderMode.Client,
+  },
+  // Mismo motivo que /taquilla/puerta y /evento/:slug/puerta (TODO.md
+  // Tarea 2, Venta en efectivo): sesión de Firebase protegida por guardiaRol.
+  {
+    path: 'taquilla/efectivo',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'evento/:slug/efectivo',
+    renderMode: RenderMode.Client,
+  },
+  // Mismo motivo que /taquilla/efectivo y /evento/:slug/efectivo (TODO.md
+  // Tarea 2, Panel de control básico): sesión de Firebase protegida por
+  // guardiaRol.
+  {
+    path: 'mis-eventos/panel',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'evento/:slug/panel',
+    renderMode: RenderMode.Client,
+  },
+  // Redirects de las URLs viejas del menú de un nivel (`app.routes.ts`,
+  // `redirectTo`) — declarados explícitamente en vez de dejarlos caer al
+  // wildcard '**' de abajo: una ruta con parámetro (ej. la antigua
+  // `admin/eventos/:id`) hace fallar el build de prerender
+  // ("getPrerenderParams missing") si hereda RenderMode.Prerender sin
+  // definir cómo enumerar sus valores — verificado con el build real, no
+  // era solo una duda teórica. RenderMode.Client es correcto igual: un
+  // `redirectTo` no renderiza contenido propio, así que solo importa que no
+  // intente prerenderizarse.
+  {
     path: 'admin/usuarios',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'puerta',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'efectivo',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'panel',
     renderMode: RenderMode.Client,
   },
   {
@@ -56,38 +122,6 @@ export const serverRoutes: ServerRoute[] = [
   },
   {
     path: 'admin/eventos',
-    renderMode: RenderMode.Client,
-  },
-  {
-    path: 'admin/eventos/:id',
-    renderMode: RenderMode.Client,
-  },
-  {
-    path: 'puerta',
-    renderMode: RenderMode.Client,
-  },
-  {
-    path: 'evento/:slug/puerta',
-    renderMode: RenderMode.Client,
-  },
-  // Mismo motivo que /puerta y /evento/:slug/puerta (TODO.md Tarea 2,
-  // Venta en efectivo): sesión de Firebase protegida por guardiaRol.
-  {
-    path: 'efectivo',
-    renderMode: RenderMode.Client,
-  },
-  {
-    path: 'evento/:slug/efectivo',
-    renderMode: RenderMode.Client,
-  },
-  // Mismo motivo que /efectivo y /evento/:slug/efectivo (TODO.md Tarea 2,
-  // Panel de control básico): sesión de Firebase protegida por guardiaRol.
-  {
-    path: 'panel',
-    renderMode: RenderMode.Client,
-  },
-  {
-    path: 'evento/:slug/panel',
     renderMode: RenderMode.Client,
   },
   {

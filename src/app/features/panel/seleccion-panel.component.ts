@@ -4,7 +4,7 @@ import { PanelService } from '../../core/api/panel.service';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
 /**
- * Ruta protegida `/panel` (`guardiaRol`, mínimo `productor`, `TODO.md`
+ * Ruta protegida `/mis-eventos/panel` (`guardiaRol`, mínimo `productor`, `TODO.md`
  * Tarea 2 — Panel de control básico). Decisión 1 (resuelta explícitamente,
  * no una ambigüedad a resolver después): un enlace en
  * `ListaAprobacionesComponent` no alcanza porque esa lista solo tiene filas
