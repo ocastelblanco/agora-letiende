@@ -175,6 +175,19 @@ export const routes: Routes = [
       // separado del que derivarlo con `rolMinimoDeRuta` — la única entrada de
       // `GRUPOS_NAVEGACION` para esta sección es '/mis-eventos/eventos' (la
       // lista), no 'crear'.
+      // `data.id: 'nuevo'` es necesario porque esta ruta, a diferencia de
+      // 'eventos/:id', no tiene ningún parámetro `:id` real en su path: el
+      // input `id` de `EditarEventoComponent` (Signal input poblado por
+      // `withComponentInputBinding()`, ver app.config.ts) necesita el valor
+      // `'nuevo'` desde algún lado. Antes de T6 existía una única ruta
+      // `eventos/:id` que también capturaba el literal `'nuevo'` como
+      // parámetro real, así que `id()` lo recibía naturalmente; al separar
+      // las dos rutas, sin esta clave `RoutedComponentInputBinder` llama
+      // `setInput('id', undefined)` en cada navegación aquí (mezcla
+      // `data` + `params`, y esta ruta no tiene ninguno de los dos para
+      // `id`), lo que hacía que el componente entrara en modo EDICIÓN con
+      // `eventoId: undefined` y mostrara "No se encontró ese evento." — bug
+      // real reportado en vivo al hacer clic en "Crear evento".
       {
         path: 'eventos/nuevo',
         loadComponent: () =>
@@ -182,7 +195,7 @@ export const routes: Routes = [
             (m) => m.EditarEventoComponent,
           ),
         canActivate: [guardiaRol],
-        data: { rolMinimo: 'administrador' },
+        data: { rolMinimo: 'administrador', id: 'nuevo' },
         title: 'Crear evento — Ágora',
       },
       {
