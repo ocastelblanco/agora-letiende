@@ -475,10 +475,25 @@ async function actualizarEvento(
     // nunca se aplica un delta calculado sobre un total obsoleto); (2)
     // `sillasDisponibles` nunca queda negativo, pase lo que pase entre la
     // lectura y la escritura.
+    //
+    // Bug real encontrado en staging (sesión de diagnóstico 14/08/2026): a
+    // diferencia de `UpdateExpression` (donde `SET x = x + :n` sí es
+    // aritmética válida, ya usada en `aforo.ts`), `ConditionExpression` de
+    // DynamoDB NO admite operadores aritméticos — solo compara un `path`
+    // contra un `value` (`attribute = value`, `attribute >= value`, etc.).
+    // La condición original `sillasDisponibles + :deltaSillas >= :cero`
+    // nunca lanza contra el mock de las pruebas (que no valida sintaxis),
+    // pero DynamoDB real la rechaza con `ValidationException` — de ahí el
+    // 500 genérico sin pista en CloudWatch que encontró el usuario. La
+    // guarda equivalente sin aritmética: el umbral se calcula en JS antes
+    // de construir la petición (`delta` ya se conoce en ese momento), y la
+    // condición solo compara el valor real de `sillasDisponibles` contra
+    // ese umbral — mismo patrón ya usado en `aforo.ts` (`reservarSillas`,
+    // `ConditionExpression: 'sillasDisponibles >= :n AND ...'`).
     condicionesExtra.push('sillasTotales = :totalLeido');
     valoresExpresion[':totalLeido'] = totalActual;
-    condicionesExtra.push('sillasDisponibles + :deltaSillas >= :cero');
-    valoresExpresion[':cero'] = 0;
+    condicionesExtra.push('sillasDisponibles >= :minimoSillasDisponibles');
+    valoresExpresion[':minimoSillasDisponibles'] = Math.max(0, -delta);
 
     // Reactivación automática: si el evento estaba `agotado` solo por falta
     // de aforo y este cambio le devuelve sillas disponibles, vuelve a

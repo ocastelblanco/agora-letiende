@@ -345,7 +345,14 @@ describe('handler de /api/eventos', () => {
         expect(sendMock).not.toHaveBeenCalled();
       });
 
-      it('incluye la guarda optimista sobre sillasTotales y sobre sillasDisponibles nunca negativo en el ConditionExpression', async () => {
+      it('incluye la guarda optimista sobre sillasTotales y sobre sillasDisponibles nunca negativo en el ConditionExpression, sin aritmética (bug real de staging)', async () => {
+        // DynamoDB ConditionExpression no admite operadores aritméticos
+        // (`+`/`-`) — solo UpdateExpression los admite en su cláusula SET.
+        // Esta prueba habría pasado igual con la condición inválida de
+        // antes, porque el mock no valida sintaxis real de DynamoDB (por
+        // eso el bug solo apareció en staging); lo que sí verifica es que
+        // el umbral se precalculó en JS y la condición solo compara un
+        // `path` contra un `value`, nunca una suma dentro de la condición.
         sendMock
           .mockResolvedValueOnce({
             Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
@@ -357,9 +364,28 @@ describe('handler de /api/eventos', () => {
         const comandoUpdate = sendMock.mock.calls[1][0];
         expect(comandoUpdate.input.ConditionExpression).toContain('sillasTotales = :totalLeido');
         expect(comandoUpdate.input.ConditionExpression).toContain(
-          'sillasDisponibles + :deltaSillas >= :cero',
+          'sillasDisponibles >= :minimoSillasDisponibles',
         );
+        expect(comandoUpdate.input.ConditionExpression).not.toMatch(/sillasDisponibles\s*\+/);
         expect(comandoUpdate.input.ExpressionAttributeValues[':totalLeido']).toBe(100);
+        // delta = 150 - 100 = +50 (aumenta el aforo) — el umbral nunca baja
+        // de 0 aunque el delta sea positivo.
+        expect(comandoUpdate.input.ExpressionAttributeValues[':minimoSillasDisponibles']).toBe(0);
+      });
+
+      it('calcula el umbral mínimo como -delta cuando se reduce sillasTotales, para que la condición siga siendo una comparación simple', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        // comprometidas = 80, nuevoTotal 85 → delta = -15 → umbral = 15.
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 85 } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':deltaSillas']).toBe(-15);
+        expect(comandoUpdate.input.ExpressionAttributeValues[':minimoSillasDisponibles']).toBe(15);
       });
 
       it('responde 409 (no 404) si la condición falla con sillasTotales en el payload (aforo cambió mientras editaban)', async () => {
