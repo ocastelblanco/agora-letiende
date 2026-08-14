@@ -85,7 +85,7 @@ Ninguna está implementada aún. La marca indica en qué versión entra: **v1** 
 
 ### 5.1 Cartelera pública (v1)
 
-Una página abierta, sin necesidad de iniciar sesión, que lista los eventos disponibles con su imagen, nombre, fecha, hora y precio vigente. Cada evento tiene además su propia página con la descripción completa, la dirección del teatro, los enlaces a redes sociales y el botón de compra. Un evento sin sillas disponibles se muestra marcado como **AGOTADO** y no permite comprar.
+Una página abierta, sin necesidad de iniciar sesión, que lista los eventos disponibles con su imagen, nombre, fecha, hora y precio vigente. Cada evento tiene además su propia página con la descripción completa, la dirección del teatro, los enlaces a redes sociales y el botón de compra. Un evento sin sillas disponibles se muestra marcado como **AGOTADO** y no permite comprar. Un evento **CANCELADO** también se muestra, marcado como tal, mientras siga vigente (no permite comprar tampoco) — ver §9. Un evento ya finalizado, o cuyo estado de cancelación ya no está vigente, deja de aparecer.
 
 ### 5.2 Creación y edición de eventos (v1)
 
@@ -334,7 +334,11 @@ Con el ciclo completo mínimo ya construido, el paso a producción de v1 exige u
 
 **El aforo es un número, no un mapa de sillas.** No hay silla numerada ni selección de ubicación. El teatro de Le Tiende opera con entrada general, y modelar sillas individuales multiplicaría la complejidad sin resolver ningún problema real.
 
-**Un evento se edita libremente, incluso ya publicado.** La operación real cambia de opinión: se corre una fecha, se ajusta un precio, se suma un productor. Bloquear la edición generaría trabajo por fuera del sistema, que es justamente lo que Ágora viene a eliminar. La contrapartida es que reducir el aforo por debajo de lo ya vendido debe impedirse explícitamente.
+**Un evento se edita libremente, incluso ya publicado.** La operación real cambia de opinión: se corre una fecha, se ajusta un precio, se suma un productor, se corrige el número de sillas totales. Bloquear la edición generaría trabajo por fuera del sistema, que es justamente lo que Ágora viene a eliminar. La contrapartida es que reducir el aforo por debajo de lo ya vendido debe impedirse explícitamente.
+
+**Un evento vencido deja de venderse y de aparecer en la cartelera, sin que nadie tenga que acordarse de cerrarlo a mano.** Cuando ya pasaron tanto la fecha del evento como el cierre de su última etapa de boletería, el sistema lo trata como finalizado *(ajuste decidido antes de UAT, `docs/plan-pre-produccion.md` — hotfixes pre-producción)*.
+
+**Un evento cancelado se mantiene visible mientras hubiera estado vigente.** Un cliente que ya compró una boleta para un evento que luego se cancela necesita poder ver esa cancelación reflejada en la página del evento hasta la fecha en que iba a ocurrir — después de esa fecha, ya no aporta nada seguir mostrándolo. En ningún momento un evento cancelado admite una venta nueva, sea en línea o en efectivo *(mismo ajuste)*.
 
 **Ágora hereda la identidad visual y las convenciones de Le Tiende.** Misma paleta y tipografía que Comandante y Babel, mismo idioma de código (español), misma cuenta de AWS, mismo proyecto de identidad de Google. Ágora agrega la suite de componentes Angular Material sobre esa base, para no construir a mano las tablas, calendarios y cargas de archivo del panel administrativo. Los roles de Ágora son independientes: tener acceso a Babel no da acceso a Ágora.
 
