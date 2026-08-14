@@ -403,9 +403,8 @@ functions:
     handler: dist-server-bundle/reportes.handler
     role: !GetAtt ReportesLambdaRole.Arn
     description: >-
-      GET /api/eventos/panel, GET /api/eventos/:eventoId/panel y
-      GET /api/eventos/:eventoId/reportes — exigirRol('productor')
-      (TODO.md Tarea 2).
+      GET /api/eventos/panel (exigirRol portero), GET /api/eventos/:eventoId/panel
+      y /reportes (exigirRol productor) — TODO.md Tarea 1 T8.
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}

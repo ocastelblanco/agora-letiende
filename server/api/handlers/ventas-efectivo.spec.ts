@@ -19,7 +19,14 @@ const {
 }));
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
-vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+// `tieneAccesoAlEvento` se reexporta desde la implementación real
+// (`importOriginal`) — es lógica pura sin dependencias externas (TODO.md
+// Tarea 1, T8), mismo criterio que eventos.spec.ts; solo `exigirRol` se
+// reemplaza por el mock controlado desde cada test.
+vi.mock('../lib/autorizacion', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/autorizacion')>();
+  return { ...real, exigirRol: exigirRolMock };
+});
 vi.mock('../lib/firma-boletas', () => ({ firmarCodigoBoleta: firmarCodigoBoletaMock }));
 vi.mock('../services/notificaciones', () => ({
   CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
@@ -71,6 +78,12 @@ const eventoPublicado = {
   etapas: [
     { etapaId: 'et-1', nombre: 'Preventa', precio: 45000, cierraEn: '2026-09-01T00:00:00.000Z', orden: 1 },
   ],
+  // El portero por defecto de estas pruebas está asignado (TODO.md Tarea 1,
+  // T8) — las pruebas de "no asignado" abajo lo desasignan explícitamente,
+  // en vez de que todas las demás pruebas (aforo, etapas, mediosPago...)
+  // tengan que preocuparse por armar este campo cada vez.
+  porteros: ['portero@letiende.co'],
+  productores: [],
 };
 
 function crearPeticion(metodo: string, cuerpo?: unknown): Parameters<typeof handler>[0] {
@@ -189,6 +202,42 @@ describe('POST /api/ventas-efectivo', () => {
 
     expect(respuesta.statusCode).toBe(404);
     expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  // TODO.md Tarea 1 (T8): autorización real por evento — un portero solo
+  // puede vender en efectivo para los eventos donde está en `porteros`.
+  describe('autorización por evento (TODO.md Tarea 1, T8)', () => {
+    it('responde 403 si el portero no está asignado al evento (porteros no lo incluye)', async () => {
+      sendMock.mockResolvedValueOnce({ Items: [{ ...eventoPublicado, porteros: ['otro@letiende.co'] }] });
+
+      const respuesta = await invocar('POST', cuerpoValido);
+
+      expect(respuesta.statusCode).toBe(403);
+      expect(reservarSillasMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 403 si el evento no tiene ningún portero asignado', async () => {
+      sendMock.mockResolvedValueOnce({ Items: [{ ...eventoPublicado, porteros: [] }] });
+
+      const respuesta = await invocar('POST', cuerpoValido);
+
+      expect(respuesta.statusCode).toBe(403);
+    });
+
+    it('un administrador puede vender aunque no esté en porteros (bypass)', async () => {
+      sendMock
+        .mockResolvedValueOnce({ Items: [{ ...eventoPublicado, porteros: ['otro@letiende.co'] }] })
+        .mockResolvedValueOnce({});
+      reservarSillasMock.mockResolvedValueOnce(undefined);
+      exigirRolMock.mockResolvedValueOnce({
+        autorizado: true,
+        permisos: { email: 'admin@letiende.co', nombre: 'Ana Admin', rol: 'administrador', activo: true },
+      });
+
+      const respuesta = await invocar('POST', cuerpoValido);
+
+      expect(respuesta.statusCode).toBe(201);
+    });
   });
 
   it('responde 409 si el evento no acepta pagos en efectivo', async () => {

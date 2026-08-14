@@ -7,7 +7,7 @@ import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { verificarFirmaBoleta } from '../lib/firma-boletas';
 import { generarQrPng } from '../services/qr';
-import { exigirRol } from '../lib/autorizacion';
+import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 
 // Placeholder honesto: mismo texto ya usado en el JSON-LD de
@@ -197,6 +197,25 @@ async function validarBoletaEnPuerta(
     return respuestaJson(200, { veredicto: 'NO_EXISTE' });
   }
   const { boletaId } = separado;
+
+  // Autorización real por evento (`TODO.md` Tarea 1, T8) — **decisión de
+  // rendimiento explícita, no dejada implícita**: hasta esta tarea, esta
+  // ruta hacía una única escritura condicional sin ninguna lectura previa en
+  // el camino feliz, la más sensible a latencia de todo el sistema (`PRD.md`
+  // §8, veredicto en ≤5s durante un escaneo en ráfaga). Agregar este chequeo
+  // exige un `GetItem` extra por clave primaria — la operación más barata
+  // posible en DynamoDB, de un solo dígito de milisegundos — que se acepta
+  // frente al riesgo de dejar sin verificar que un portero valide ingresos
+  // de un evento donde no está asignado (`docs/plan-pre-produccion.md` T8).
+  // Un `eventoId` que no existe en absoluto (payload manipulado) se trata
+  // igual que "no asignado": nunca se distingue, mismo criterio que
+  // `MENSAJE_BOLETA_INVALIDA` arriba (no dar pistas de qué existe y qué no).
+  const resultadoEvento = await documentoDynamoDB.send(
+    new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId: eventoIdEsperado } }),
+  );
+  if (!resultadoEvento.Item || !tieneAccesoAlEvento(resultadoEvento.Item, autorizacion.permisos)) {
+    return respuestaJson(403, { mensaje: 'No estás asignado a este evento' });
+  }
 
   try {
     const resultado = await documentoDynamoDB.send(
