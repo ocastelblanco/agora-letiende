@@ -151,3 +151,5 @@ Workspace setting,14/08/2026 21:20,14/08/2026 21:23,0:03:00,AI,Sonnet 5,Cambia r
 Backend,14/08/2026 21:23,14/08/2026 22:05,0:42:00,AI,Sonnet 5,Diagnostica Error interno al editar sillasTotales investiga CloudWatch y agrega logging real antes del 500,Claude Code,cli,high
 Backend,14/08/2026 22:05,14/08/2026 22:35,0:30:00,AI,Sonnet 5,Encuentra causa raiz DynamoDB ConditionExpression no admite aritmetica corrige a comparacion con umbral precalculado,Claude Code,cli,high
 Cloud infraestructure,14/08/2026 22:35,14/08/2026 22:55,0:20:00,AI,Sonnet 5,Investiga correo aprobacion no recibido confirma en SES envio sin rebote solo demora de entrega,Claude Code,cli,medium
+Backend,14/08/2026 22:55,14/08/2026 23:05,0:10:00,AI,Sonnet 5,Investiga compra rechazada automaticamente sin accion del productor usuario aclara malentendido sin cambios,Claude Code,cli,medium
+Specs definition,14/08/2026 23:05,14/08/2026 23:30,0:25:00,AI,Sonnet 5,Recalcula motor JIT actualiza TODO memoria CLAUDE con gotcha commit final al PR,Claude Code,cli,medium
