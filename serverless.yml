@@ -725,8 +725,12 @@ resources:
                     - dynamodb:UpdateItem
                   Resource: !GetAtt AgoraEventos.Arn
           # Sobre agora-compras: PutItem para crear la compra, GetItem para
-          # el endpoint de estado — sin Scan ni Query, esta función nunca
-          # lista compras.
+          # el endpoint de estado, Query sobre eventoId-creadaEn-index y
+          # UpdateItem (liberarReservasVencidas de aforo.ts, hotfix
+          # pre-producción 14/08/2026 — libera activamente reservas vencidas
+          # de un evento antes de rechazar una compra por falta de aforo,
+          # sin esperar al TTL de DynamoDB) — sin Scan, esta función nunca
+          # lista todas las compras.
           - PolicyName: agora-compras-compras-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -735,7 +739,12 @@ resources:
                   Action:
                     - dynamodb:PutItem
                     - dynamodb:GetItem
+                    - dynamodb:UpdateItem
                   Resource: !GetAtt AgoraCompras.Arn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource: !Sub '${AgoraCompras.Arn}/index/*'
           # ses:SendEmail (no ses:*), acotado a la identidad verificada de
           # letiende.co — el enlace de comprobante es el único correo que
           # esta función envía (services/notificaciones.ts).
@@ -1013,9 +1022,13 @@ resources:
                     - dynamodb:GetItem
                     - dynamodb:UpdateItem
                   Resource: !GetAtt AgoraEventos.Arn
-          # Sobre agora-compras: solo PutItem — a diferencia de compras.ts,
-          # esta función nunca consulta el estado de una compra existente
-          # (nace y muere `aprobada` en la misma operación).
+          # Sobre agora-compras: PutItem para su propia compra (nace y muere
+          # `aprobada` en la misma operación), más Query/UpdateItem para
+          # liberarReservasVencidas de aforo.ts (hotfix pre-producción,
+          # 14/08/2026) — reservarSillas() puede necesitar liberar reservas
+          # ajenas ya vencidas de otras compras por transferencia del mismo
+          # evento antes de rechazar esta venta en efectivo por falta de
+          # aforo, sin esperar al TTL de DynamoDB.
           - PolicyName: agora-ventas-efectivo-compras-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -1023,7 +1036,12 @@ resources:
                 - Effect: Allow
                   Action:
                     - dynamodb:PutItem
+                    - dynamodb:UpdateItem
                   Resource: !GetAtt AgoraCompras.Arn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource: !Sub '${AgoraCompras.Arn}/index/*'
           # PutItem sobre agora-boletas: emitirBoletas() de boleteria.ts,
           # mismo criterio que aprobaciones.ts.
           - PolicyName: agora-ventas-efectivo-boletas-dynamodb-${sls:stage}
