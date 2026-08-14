@@ -153,3 +153,8 @@ Backend,14/08/2026 22:05,14/08/2026 22:35,0:30:00,AI,Sonnet 5,Encuentra causa ra
 Cloud infraestructure,14/08/2026 22:35,14/08/2026 22:55,0:20:00,AI,Sonnet 5,Investiga correo aprobacion no recibido confirma en SES envio sin rebote solo demora de entrega,Claude Code,cli,medium
 Backend,14/08/2026 22:55,14/08/2026 23:05,0:10:00,AI,Sonnet 5,Investiga compra rechazada automaticamente sin accion del productor usuario aclara malentendido sin cambios,Claude Code,cli,medium
 Specs definition,14/08/2026 23:05,14/08/2026 23:30,0:25:00,AI,Sonnet 5,Recalcula motor JIT actualiza TODO memoria CLAUDE con gotcha commit final al PR,Claude Code,cli,medium
+Workspace setting,14/08/2026 23:30,14/08/2026 23:35,0:05:00,AI,Sonnet 5,Confirma fusion del PR 41 limpieza estandar vuelta a main y crea rama para nuevos hotfixes,Claude Code,cli,low
+Specs definition,14/08/2026 23:35,14/08/2026 23:40,0:05:00,AI,Sonnet 5,Pregunta al usuario destino del enlace en mensaje de aprobacion decide reformular texto,Claude Code,cli,low
+Backend,14/08/2026 23:40,14/08/2026 23:55,0:15:00,AI,Sonnet 5,Nombre visible del remitente en SES y reformula mensaje de compra ya resuelta con pruebas,Claude Code,cli,medium
+Frontend,14/08/2026 23:55,15/08/2026 00:05,0:10:00,AI,Sonnet 5,Administradores aparecen en desplegable de productores con test de regresion nuevo,Claude Code,cli,medium
+Specs definition,15/08/2026 00:05,15/08/2026 00:25,0:20:00,AI,Sonnet 5,Actualiza TODO y memoria con segunda ronda de hotfixes pausa dominio personalizado de nuevo,Claude Code,cli,medium
