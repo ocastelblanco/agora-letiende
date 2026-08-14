@@ -392,11 +392,31 @@ describe('POST /api/aprobaciones/:token/rechazar', () => {
     );
     const comandoUpdate = sendMock.mock.calls[1]?.[0];
     expect(comandoUpdate.input).toMatchObject({
-      UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+      UpdateExpression:
+        'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora, motivoRechazo = :motivo REMOVE expiraEn',
       ConditionExpression: 'estado = :enRevision',
     });
+    // El motivo queda persistido en la compra, no solo en el correo (hotfix
+    // pre-producción, 14/08/2026) — nunca se pierde si la petición gana la
+    // carrera pero el correo llega a fallar más abajo.
+    expect(comandoUpdate.input.ExpressionAttributeValues[':motivo']).toBe(
+      'El comprobante no corresponde al monto',
+    );
     // Defensa adicional, mismo criterio que aprobarCompra (MEMORY.md §7).
     expect(comandoUpdate.input.UpdateExpression).toContain('REMOVE expiraEn');
+  });
+
+  it('sin motivo, no agrega motivoRechazo al UpdateExpression', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraEnRevision] });
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    await invocar('POST', { rawPath: '/api/aprobaciones/token-x/rechazar', token: 'token-x' });
+
+    const comandoUpdate = sendMock.mock.calls[1]?.[0];
+    expect(comandoUpdate.input.UpdateExpression).not.toContain('motivoRechazo');
+    expect(comandoUpdate.input.ExpressionAttributeValues[':motivo']).toBeUndefined();
   });
 
   it('funciona sin motivo', async () => {

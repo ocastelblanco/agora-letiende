@@ -321,20 +321,35 @@ async function rechazarCompra(
       ? motivoBruto
       : undefined;
 
+  // `motivoRechazo` se persiste en la propia compra (hotfix pre-producción,
+  // 14/08/2026) — antes `motivo` solo viajaba hasta el correo `compra_rechazada`
+  // y nunca quedaba en DynamoDB. Bajo un doble envío real (dos peticiones
+  // casi simultáneas, ver CLAUDE.md §7), la que pierde la carrera responde
+  // 409 y su `motivo` se perdía para siempre sin dejar rastro — con esto
+  // queda en el registro (CLAUDE.md §5, A09: toda transición con
+  // consecuencia económica se registra) incluso si el correo llegara a
+  // fallar más abajo.
+  const asignaciones = ['estado = :rechazada', 'resueltoPor = :resueltoPor', 'resueltoEn = :ahora'];
+  const valoresExpresion: Record<string, unknown> = {
+    ':rechazada': 'rechazada',
+    ':enRevision': 'en_revision',
+    ':resueltoPor': RESUELTO_POR_ENLACE,
+    ':ahora': new Date().toISOString(),
+  };
+  if (motivo !== undefined) {
+    asignaciones.push('motivoRechazo = :motivo');
+    valoresExpresion[':motivo'] = motivo;
+  }
+
   try {
     // REMOVE expiraEn: misma defensa adicional que aprobarCompra arriba.
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+        UpdateExpression: `SET ${asignaciones.join(', ')} REMOVE expiraEn`,
         ConditionExpression: 'estado = :enRevision',
-        ExpressionAttributeValues: {
-          ':rechazada': 'rechazada',
-          ':enRevision': 'en_revision',
-          ':resueltoPor': RESUELTO_POR_ENLACE,
-          ':ahora': new Date().toISOString(),
-        },
+        ExpressionAttributeValues: valoresExpresion,
       }),
     );
   } catch (error) {
