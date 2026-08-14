@@ -5,6 +5,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import type { User } from 'firebase/auth';
 import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
+import { UsuariosService } from '../../../core/api/usuarios.service';
 import { routes } from '../../../app.routes';
 import { EditarEventoComponent } from './editar-evento.component';
 
@@ -69,6 +70,18 @@ describe('integración de Router — /eventos/nuevo enlaza el input `id` de Edit
             eventos: () => [],
             error: () => false,
             cargarEventos: vi.fn().mockResolvedValue(undefined),
+          },
+        },
+        // EditarEventoComponent la inyecta para los selectores de
+        // productores/porteros (TODO.md Tarea 1, T7) — el rol de esta
+        // prueba es administrador, así que su constructor SÍ llama
+        // cargarUsuarios().
+        {
+          provide: UsuariosService,
+          useValue: {
+            usuarios: () => [],
+            error: () => false,
+            cargarUsuarios: vi.fn().mockResolvedValue(undefined),
           },
         },
       ],

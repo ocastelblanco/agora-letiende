@@ -4,8 +4,9 @@ import { Router, provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
+import { UsuariosService } from '../../../core/api/usuarios.service';
 import type { Evento } from '../../../core/models/evento.model';
-import type { Rol } from '../../../core/models/usuario.model';
+import type { Rol, Usuario } from '../../../core/models/usuario.model';
 import { EditarEventoComponent } from './editar-evento.component';
 
 // `servicio-auth.ts` (importado transitivamente vía ServicioAuth) importa
@@ -38,10 +39,16 @@ const eventoExistente: Evento = {
   mediosPago: ['efectivo', 'bold'],
   plazoComprobanteMinutos: 10,
   productores: ['productor@letiende.co'],
+  porteros: ['portero@letiende.co'],
   estado: 'borrador',
   creadoEn: '2026-08-06T00:00:00.000Z',
   actualizadoEn: '2026-08-06T00:00:00.000Z',
 };
+
+const usuariosEjemplo: Usuario[] = [
+  { email: 'productor@letiende.co', nombre: 'Paula Productora', rol: 'productor', activo: true, creadoEn: '2026-08-01T00:00:00.000Z' },
+  { email: 'portero@letiende.co', nombre: 'Pedro Portero', rol: 'portero', activo: true, creadoEn: '2026-08-01T00:00:00.000Z' },
+];
 
 function configurarPrueba(opciones: {
   eventos?: Evento[];
@@ -50,8 +57,10 @@ function configurarPrueba(opciones: {
   subirActivoMock?: ReturnType<typeof vi.fn>;
   descargarQrMock?: ReturnType<typeof vi.fn>;
   rol?: Rol | null;
+  usuarios?: Usuario[];
 }) {
   const cargarEventosMock = vi.fn().mockResolvedValue(undefined);
+  const cargarUsuariosMock = vi.fn().mockResolvedValue(undefined);
 
   TestBed.configureTestingModule({
     imports: [NoopAnimationsModule],
@@ -67,6 +76,14 @@ function configurarPrueba(opciones: {
           actualizarEvento: opciones.actualizarEventoMock ?? vi.fn(),
           subirActivo: opciones.subirActivoMock ?? vi.fn(),
           descargarQr: opciones.descargarQrMock ?? vi.fn(),
+        },
+      },
+      {
+        provide: UsuariosService,
+        useValue: {
+          usuarios: () => opciones.usuarios ?? usuariosEjemplo,
+          error: () => false,
+          cargarUsuarios: cargarUsuariosMock,
         },
       },
       {
@@ -86,7 +103,7 @@ function configurarPrueba(opciones: {
   const fixture: ComponentFixture<EditarEventoComponent> =
     TestBed.createComponent(EditarEventoComponent);
 
-  return { fixture, cargarEventosMock, navigateMock, snackBarOpenMock };
+  return { fixture, cargarEventosMock, cargarUsuariosMock, navigateMock, snackBarOpenMock };
 }
 
 async function activarConId(fixture: ComponentFixture<EditarEventoComponent>, id: string) {
@@ -131,6 +148,7 @@ describe('EditarEventoComponent', () => {
         descripcion: 'Una noche de jazz',
         fechaHora: '2026-09-14T20:00',
         sillasTotales: 100,
+        productores: ['productor@letiende.co'],
       });
       componente['etapas'].at(0).patchValue({
         nombre: 'Preventa',
@@ -419,7 +437,8 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.nombre.disabled).toBe(true);
       expect(componente['formulario'].controls.descripcion.disabled).toBe(true);
       expect(componente['formulario'].controls.fechaHora.disabled).toBe(true);
-      expect(componente['formulario'].controls.productoresTexto.disabled).toBe(true);
+      expect(componente['formulario'].controls.productores.disabled).toBe(true);
+      expect(componente['formulario'].controls.porteros.disabled).toBe(true);
       expect(componente['formulario'].controls.estado.disabled).toBe(true);
       expect(componente['formulario'].controls.mediosPago.disabled).toBe(true);
     });
@@ -445,6 +464,110 @@ describe('EditarEventoComponent', () => {
         maxBoletasPorCompra: eventoExistente.maxBoletasPorCompra,
         plazoComprobanteMinutos: eventoExistente.plazoComprobanteMinutos,
       });
+    });
+
+    // TODO.md Tarea 1 (T7): GET /api/usuarios exige exigirRol('administrador')
+    // (server/api/handlers/usuarios.ts) — un productor nunca debe llamarlo.
+    it('nunca llama cargarUsuarios() para un productor (ese GET respondería 403)', async () => {
+      const { fixture, cargarUsuariosMock } = configurarPrueba({
+        eventos: [eventoExistente],
+        rol: 'productor',
+      });
+      await activarConId(fixture, 'e1');
+
+      expect(cargarUsuariosMock).not.toHaveBeenCalled();
+    });
+
+    it('muestra productores/porteros como texto de solo lectura, con las etiquetas correctas', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente], rol: 'productor' });
+      await activarConId(fixture, 'e1');
+      fixture.detectChanges();
+
+      const texto = fixture.nativeElement.textContent as string;
+      expect(texto).toContain('productor@letiende.co');
+      expect(texto).toContain('portero@letiende.co');
+      expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    });
+  });
+
+  describe('selectores de productores/porteros (TODO.md Tarea 1, T7)', () => {
+    it('como administrador, carga el directorio de usuarios al construir', async () => {
+      const { fixture, cargarUsuariosMock } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+
+      expect(cargarUsuariosMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('precarga productores/porteros con los correos del evento existente', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['formulario'].controls.productores.value).toEqual(['productor@letiende.co']);
+      expect(componente['formulario'].controls.porteros.value).toEqual(['portero@letiende.co']);
+    });
+
+    it('guardar() en modo crear es inválido sin al menos un productor seleccionado', async () => {
+      const crearEventoMock = vi.fn();
+      const { fixture } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+      componente['formulario'].patchValue({
+        slug: 'x',
+        nombre: 'X',
+        descripcion: 'X',
+        fechaHora: '2026-09-15T10:00',
+      });
+
+      await componente['guardar']();
+
+      expect(crearEventoMock).not.toHaveBeenCalled();
+      expect(componente['formulario'].controls.productores.invalid).toBe(true);
+    });
+
+    it('guardar() en modo crear envía productores y porteros seleccionados', async () => {
+      const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
+      const { fixture } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+      componente['formulario'].patchValue({
+        slug: 'x',
+        nombre: 'X',
+        descripcion: 'X',
+        fechaHora: '2026-09-15T10:00',
+        productores: ['productor@letiende.co'],
+        porteros: ['portero@letiende.co'],
+      });
+      componente['etapas'].at(0).patchValue({
+        nombre: 'Preventa',
+        precio: 45000,
+        cierraEn: '2026-08-31T19:00',
+      });
+
+      await componente['guardar']();
+
+      expect(crearEventoMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productores: ['productor@letiende.co'],
+          porteros: ['portero@letiende.co'],
+        }),
+      );
+    });
+
+    it('guardar() como administrador en modo editar envía productores y porteros', async () => {
+      const actualizarEventoMock = vi
+        .fn()
+        .mockResolvedValue({ exito: true, evento: eventoExistente });
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente], actualizarEventoMock });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+      componente['formulario'].controls.porteros.setValue(['nuevo-portero@letiende.co']);
+
+      await componente['guardar']();
+
+      const [, datos] = actualizarEventoMock.mock.calls[0];
+      expect(datos.productores).toEqual(['productor@letiende.co']);
+      expect(datos.porteros).toEqual(['nuevo-portero@letiende.co']);
     });
   });
 });

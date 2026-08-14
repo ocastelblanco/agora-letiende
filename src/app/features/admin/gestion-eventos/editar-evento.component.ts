@@ -3,10 +3,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { merge } from 'rxjs';
 import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
+import { UsuariosService } from '../../../core/api/usuarios.service';
 import { DatosEtapaBoleteria, Evento, MedioPago } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
 import { desdeInputBogota, paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
@@ -60,12 +63,13 @@ const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/web
  */
 @Component({
   selector: 'app-editar-evento',
-  imports: [ReactiveFormsModule, MatButtonModule, PrecioPipe],
+  imports: [ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatSelectModule, PrecioPipe],
   templateUrl: './editar-evento.component.html',
 })
 export class EditarEventoComponent {
   private readonly fb = inject(FormBuilder);
   private readonly eventosService = inject(EventosService);
+  private readonly usuariosService = inject(UsuariosService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
   private readonly servicioAuth = inject(ServicioAuth);
@@ -74,6 +78,23 @@ export class EditarEventoComponent {
   protected readonly esProductor = computed(() => this.servicioAuth.rol() === 'productor');
 
   protected readonly mediosPagoDisponibles = MEDIOS_PAGO;
+
+  /**
+   * Opciones de los selectores de `productores`/`porteros` (TODO.md Tarea 1,
+   * T7) — filtradas en el cliente sobre el único listado que ya expone
+   * `GET /api/usuarios` (sin filtro de rol en el backend). Deliberadamente
+   * **no** se cargan para un `productor`: ese endpoint exige
+   * `exigirRol('administrador')` (`server/api/handlers/usuarios.ts`), así
+   * que pedirlo devolvería 403 sin ningún beneficio — el productor ve estos
+   * campos de solo lectura (ver plantilla), no necesita el directorio
+   * completo de personal para eso.
+   */
+  protected readonly productoresDisponibles = computed(() =>
+    this.usuariosService.usuarios().filter((u) => u.rol === 'productor'),
+  );
+  protected readonly porterosDisponibles = computed(() =>
+    this.usuariosService.usuarios().filter((u) => u.rol === 'portero'),
+  );
 
   /** Parámetro de ruta `id` — `'nuevo'` en modo crear, el `eventoId` real al editar. */
   readonly id = input.required<string>();
@@ -113,7 +134,13 @@ export class EditarEventoComponent {
     sillasTotales: [100, [Validators.required, Validators.min(1)]],
     maxBoletasPorCompra: [4, [Validators.required, Validators.min(1)]],
     plazoComprobanteMinutos: [10, [Validators.required, Validators.min(1)]],
-    productoresTexto: [''],
+    // Arreglo de correos, no texto libre (TODO.md Tarea 1, T7) — el
+    // `required` sobre un arreglo lo cumple `Validators.required` de Angular
+    // (una `[]` cuenta como vacío), reflejando en el formulario la misma
+    // regla que el backend ya exige (`normalizarProductores`, al menos un
+    // productor). `porteros` es análogo pero opcional, sin validador.
+    productores: this.fb.nonNullable.control<string[]>([], Validators.required),
+    porteros: this.fb.nonNullable.control<string[]>([]),
     estado: ['borrador'],
     mediosPago: this.fb.nonNullable.group({
       efectivo: [true],
@@ -169,6 +196,17 @@ export class EditarEventoComponent {
   }
 
   constructor() {
+    // Selectores de productores/porteros (TODO.md Tarea 1, T7) — solo se
+    // carga el directorio si NO es productor (ver docstring de
+    // `productoresDisponibles` arriba: para un productor, ese GET
+    // respondería 403). Lectura única de `esProductor()` al construir: la
+    // guardia de ruta (`guardiaRol`) ya esperó a que la sesión esté resuelta
+    // antes de permitir la navegación, mismo supuesto que ya usa
+    // `precargarFormulario()`/`guardar()` en este mismo componente.
+    if (!this.esProductor()) {
+      void this.usuariosService.cargarUsuarios();
+    }
+
     // Reacciona a cada cambio del Signal input `id` — incluida la reutilización
     // de instancia descrita en el docstring de la clase, donde este es el
     // único punto que se vuelve a ejecutar.
@@ -246,7 +284,8 @@ export class EditarEventoComponent {
       sillasTotales: 100,
       maxBoletasPorCompra: 4,
       plazoComprobanteMinutos: 10,
-      productoresTexto: '',
+      productores: [],
+      porteros: [],
       estado: 'borrador',
       mediosPago: { efectivo: true, transferencia: false, bold: false },
     });
@@ -287,7 +326,8 @@ export class EditarEventoComponent {
       sillasTotales: evento.sillasTotales,
       maxBoletasPorCompra: evento.maxBoletasPorCompra,
       plazoComprobanteMinutos: evento.plazoComprobanteMinutos,
-      productoresTexto: evento.productores.join(', '),
+      productores: evento.productores,
+      porteros: evento.porteros,
       estado: evento.estado,
     });
     // `slug` y `sillasTotales` no se editan tras crear (el slug es la URL
@@ -332,7 +372,8 @@ export class EditarEventoComponent {
       this.formulario.controls.nombre.disable();
       this.formulario.controls.descripcion.disable();
       this.formulario.controls.fechaHora.disable();
-      this.formulario.controls.productoresTexto.disable();
+      this.formulario.controls.productores.disable();
+      this.formulario.controls.porteros.disable();
       this.formulario.controls.estado.disable();
       this.formulario.controls.mediosPago.disable();
       this.etapas.disable();
@@ -358,11 +399,21 @@ export class EditarEventoComponent {
     }));
   }
 
-  private productoresFormulario(): string[] {
-    return this.formulario.controls.productoresTexto.value
-      .split(',')
-      .map((correo) => correo.trim())
-      .filter((correo) => correo.length > 0);
+  /**
+   * Texto de solo lectura para `productores`/`porteros` cuando el rol actual
+   * es `productor` (TODO.md Tarea 1, T7) — la plantilla usa `mat-select`
+   * interactivo solo para `administrador`; un productor ve esta lista plana
+   * en su lugar (ver docstring de `productoresDisponibles`: no hay opciones
+   * cargadas para armar un `mat-select` con las etiquetas correctas).
+   */
+  protected productoresParaMostrar(): string {
+    const valores = this.formulario.controls.productores.value;
+    return valores.length > 0 ? valores.join(', ') : 'Ninguno asignado';
+  }
+
+  protected porterosParaMostrar(): string {
+    const valores = this.formulario.controls.porteros.value;
+    return valores.length > 0 ? valores.join(', ') : 'Ninguno asignado';
   }
 
   protected async guardar(): Promise<void> {
@@ -386,7 +437,8 @@ export class EditarEventoComponent {
           plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
           etapas: this.etapasFormulario(),
           mediosPago: this.mediosPagoSeleccionados(),
-          productores: this.productoresFormulario(),
+          productores: valores.productores,
+          porteros: valores.porteros,
         });
 
         if (resultado.exito) {
@@ -429,7 +481,8 @@ export class EditarEventoComponent {
               plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
               etapas: this.etapasFormulario(),
               mediosPago: this.mediosPagoSeleccionados(),
-              productores: this.productoresFormulario(),
+              productores: valores.productores,
+              porteros: valores.porteros,
               estado: valores.estado as Evento['estado'],
             },
       );

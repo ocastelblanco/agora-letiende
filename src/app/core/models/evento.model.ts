@@ -26,6 +26,8 @@ export interface Evento {
   mediosPago: MedioPago[];
   plazoComprobanteMinutos: number;
   productores: string[];
+  /** Análogo a `productores`, pero opcional: puede quedar vacío (`TODO.md` Tarea 1, T7). */
+  porteros: string[];
   estado: EstadoEvento;
   creadoEn: string;
   actualizadoEn: string;
@@ -58,6 +60,8 @@ export interface DatosNuevoEvento {
   etapas: DatosEtapaBoleteria[];
   mediosPago: MedioPago[];
   productores: string[];
+  /** Opcional al crear — puede quedar vacío (`TODO.md` Tarea 1, T7). */
+  porteros?: string[];
   plazoComprobanteMinutos?: number;
 }
 
@@ -76,6 +80,7 @@ export interface DatosEditarEvento {
   etapas?: DatosEtapaBoleteria[];
   mediosPago?: MedioPago[];
   productores?: string[];
+  porteros?: string[];
   estado?: EstadoEvento;
   imagenKey?: string;
   logotipoKey?: string;

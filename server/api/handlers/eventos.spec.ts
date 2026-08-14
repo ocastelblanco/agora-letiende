@@ -196,6 +196,60 @@ describe('handler de /api/eventos', () => {
       expect(respuesta.statusCode).toBe(400);
     });
 
+    // TODO.md Tarea 1 (T7): el documento de negocio exige al menos un
+    // productor para guardar el evento — antes de esta tarea, [] era válido.
+    describe('productores/porteros (TODO.md Tarea 1, T7)', () => {
+      it('responde 400 si productores está vacío', async () => {
+        const respuesta = await invocar('POST', { cuerpo: { ...eventoValido, productores: [] } });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('responde 400 si falta productores en el payload (default [] rechazado)', async () => {
+        const { productores: _productores, ...sinProductores } = eventoValido;
+        const respuesta = await invocar('POST', { cuerpo: sinProductores });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+
+      it('responde 400 si productores trae un correo inválido', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, productores: ['no-es-un-correo'] },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+
+      it('crea el evento con porteros vacío por defecto cuando no se envía en el payload', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.porteros).toEqual([]);
+      });
+
+      it('crea el evento con los porteros enviados', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, porteros: ['portero@letiende.co'] },
+        });
+
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.porteros).toEqual(['portero@letiende.co']);
+      });
+
+      it('responde 400 si porteros trae un correo inválido', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, porteros: ['no-es-un-correo'] },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+    });
+
     it('responde 409 si el eventoId colisiona (ConditionExpression falla)', async () => {
       sendMock.mockRejectedValue(new ConditionalCheckFailedException());
 
@@ -264,6 +318,55 @@ describe('handler de /api/eventos', () => {
       const respuesta = await invocar('PUT', { eventoId: 'inexistente', cuerpo: { nombre: 'X' } });
 
       expect(respuesta.statusCode).toBe(404);
+    });
+
+    describe('productores/porteros (TODO.md Tarea 1, T7)', () => {
+      it('responde 400 si productores se edita a un arreglo vacío (el evento nunca puede quedar sin ninguno)', async () => {
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { productores: [] } });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('actualiza productores cuando el arreglo tiene al menos un correo válido', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { productores: ['nuevo@letiende.co'] },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+        const comando = sendMock.mock.calls[0][0];
+        expect(comando.input.ExpressionAttributeValues[':productores']).toEqual(['nuevo@letiende.co']);
+      });
+
+      it('acepta porteros vacío al editar (opcional, a diferencia de productores)', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { porteros: [] } });
+
+        expect(respuesta.statusCode).toBe(200);
+      });
+
+      it('actualiza porteros con los correos enviados', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { porteros: ['portero@letiende.co'] } });
+
+        const comando = sendMock.mock.calls[0][0];
+        expect(comando.input.ExpressionAttributeValues[':porteros']).toEqual(['portero@letiende.co']);
+      });
+
+      it('responde 400 si porteros trae un correo inválido, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { porteros: ['no-es-un-correo'] },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
     });
 
     describe('etapaId estable (TODO.md Tarea 2)', () => {
@@ -617,6 +720,29 @@ describe('handler de /api/eventos', () => {
         const respuesta = await invocar('PUT', {
           eventoId: 'e1',
           cuerpo: { estado: 'publicado' },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      // TODO.md Tarea 1 (T7): ni productores ni porteros entran a
+      // CAMPOS_EDITABLES_PRODUCTOR — un productor sigue sin poder tocarlos,
+      // sin cambios respecto de T6.
+      it('productor con "productores" en el payload (no permitido): 403, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { productores: ['otro@letiende.co'] },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('productor con "porteros" en el payload (no permitido): 403, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { porteros: ['portero@letiende.co'] },
         });
 
         expect(respuesta.statusCode).toBe(403);
