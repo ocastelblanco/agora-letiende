@@ -120,3 +120,8 @@ Backend,13/08/2026 15:08,13/08/2026 15:44,0:36:00,AI,Sonnet 5,Implementa T6 prod
 Frontend,13/08/2026 16:15,13/08/2026 16:43,0:28:00,AI,Sonnet 5,Hotfix ruta mis-eventos-eventos-nuevo sin id real mostraba evento no encontrado en vez del formulario de crear,Claude Code,cli,medium
 Specs definition,13/08/2026 16:43,13/08/2026 17:24,0:41:00,AI,Sonnet 5,Recalcula motor JIT y documentacion tras T6 avanza TODO a T7 commit final al PR 37,Claude Code,cli,medium
 Workspace setting,13/08/2026 17:25,13/08/2026 17:30,0:05:00,AI,Sonnet 5,Confirma fusion del PR 37 sincroniza main y limpia ramas locales fusionadas de T5 y T6,Claude Code,cli,low
+Backend,14/08/2026 09:00,14/08/2026 09:25,0:25:00,AI,Sonnet 5,Pull del repo confirma T5 T6 y tareas previas fusionadas lectura de eventos.ts autorizacion.ts editar-evento y plan-pre-produccion para T7,Claude Code,cli,medium
+Backend,14/08/2026 09:25,14/08/2026 10:10,0:45:00,AI,Sonnet 5,Implementa modelo porteros y normalizarCorreos compartido en eventos.ts con minimo un productor aplicado en crear y editar mas 18 pruebas nuevas,Claude Code,cli,high
+Frontend,14/08/2026 10:10,14/08/2026 11:10,1:00:00,AI,Sonnet 5,Selectores multiples de productores y porteros en editar-evento con vista de solo lectura para productor sin llamar GET usuarios,Claude Code,cli,high
+Frontend,14/08/2026 11:10,14/08/2026 11:40,0:30:00,AI,Sonnet 5,Verificacion completa build y test frontend backend corrige mock faltante de UsuariosService en prueba de integracion del router,Claude Code,cli,medium
+Specs definition,14/08/2026 11:40,14/08/2026 12:05,0:25:00,AI,Sonnet 5,Corrige estado desactualizado de PR 36 y 37 en MEMORY actualiza TODO y MEMORY con T7 completa y abre PR,Claude Code,cli,low

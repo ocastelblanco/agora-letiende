@@ -22,14 +22,16 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 **Riesgo:** cambio de modelo de datos (campo nuevo persistido) más un cambio de validación que puede romper la creación de eventos existente si `normalizarProductores` rechaza un arreglo vacío sin que el frontend lo anticipe — coordinar el mensaje de error visible con el nuevo requisito mínimo. No es todavía el cambio de autorización real (eso es T8) — este solo agrega el campo y el formulario; `porteros` no se usa para restringir nada aún.
 
+**Decisión resuelta al implementar, no anticipada en el Alcance original:** un `productor` no puede ver el `mat-select` interactivo con las opciones reales porque `GET /api/usuarios` (que alimenta las opciones) exige `exigirRol('administrador')` — un productor recibiría 403 sin ningún beneficio. En vez de forzar un `mat-select` deshabilitado sin opciones (que mostraría el campo vacío en pantalla pese a tener un valor real), un productor ve `productores`/`porteros` como texto plano de solo lectura (correos separados por coma), y el componente **nunca llama `cargarUsuarios()` cuando `esProductor()`** — evita el 403 en vez de solo ignorarlo. Ver `MEMORY.md` §9 para el detalle completo.
+
 **Definition of done:**
-- [ ] `porteros: string[]` persistido en `agora-eventos`, validado con `normalizarPorteros()` (mismo rigor que `normalizarProductores`)
-- [ ] `crearEvento()` rechaza `productores` vacío con un mensaje claro; `porteros` vacío sigue siendo válido
-- [ ] `EditarEventoComponent`: selector múltiple de productores (filtrado a rol `productor`) y de porteros (filtrado a rol `portero`), ambos alimentados por `GET /api/usuarios`
-- [ ] Ambos selectores deshabilitados (no ocultos) para `productor`, consistente con el resto de campos no editables de T6
-- [ ] `PUT /api/eventos/:eventoId` permite modificar `productores`/`porteros` para `administrador` (sin cambios de alcance para `productor`, que sigue sin poder tocarlos)
-- [ ] `npm run test` y `npm run test:api` en verde
-- [ ] `npm run build`/`build:api` sin errores
+- [x] `porteros: string[]` persistido en `agora-eventos`, validado con `normalizarPorteros()` (mismo rigor que `normalizarProductores`, compartiendo el validador base `normalizarCorreos(valor, longitudMinima)`)
+- [x] `crearEvento()` rechaza `productores` vacío con un mensaje claro; `porteros` vacío sigue siendo válido. **Resuelto al implementar, más estricto de lo pedido:** la regla de mínimo un productor vive en `normalizarProductores()` misma (vía `normalizarCorreos(valor, 1)`), así que también aplica a `PUT` — un evento nunca puede quedar sin productores, ni al crear ni al editar
+- [x] `EditarEventoComponent`: selector múltiple de productores (filtrado a rol `productor`) y de porteros (filtrado a rol `portero`), ambos alimentados por `GET /api/usuarios` — **solo para `administrador`**; ver decisión resuelta abajo
+- [x] Ambos selectores deshabilitados (no ocultos) para `productor` — **resuelto de forma distinta a un `mat-select` deshabilitado**: `GET /api/usuarios` exige `exigirRol('administrador')`, así que un productor nunca llama ese endpoint (evita un 403 inútil); en su lugar ve productores/porteros como texto plano de solo lectura, mismo criterio visual que el resto de campos no editables de T6
+- [x] `PUT /api/eventos/:eventoId` permite modificar `productores`/`porteros` para `administrador` (sin cambios de alcance para `productor`, que sigue sin poder tocarlos — cubierto con dos pruebas nuevas de regresión, 403 sin escribir en DynamoDB)
+- [x] `npm run test` (268) y `npm run test:api` (270) en verde
+- [x] `npm run build`/`build:api` sin errores
 - [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
 
 ---
