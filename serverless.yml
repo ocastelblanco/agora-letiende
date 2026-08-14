@@ -614,12 +614,17 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         Policies:
-          # Mínimo privilegio (CLAUDE.md §5, A05): solo dynamodb:Query sobre
+          # Mínimo privilegio (CLAUDE.md §5, A05): dynamodb:Query sobre
           # agora-eventos (tabla + GSIs, el sufijo /index/* es obligatorio o
           # Query sobre un GSI falla con AccessDenied) — sin Scan, sin
           # acceso a agora-usuarios, sin s3:* (las URLs de imagen se
           # calculan por convención de nombre, no requieren permiso S3: son
-          # públicas por bucket policy, no prefirmadas).
+          # públicas por bucket policy, no prefirmadas). dynamodb:UpdateItem
+          # agregado en los hotfixes pre-producción: `finalizarSiVencido()`
+          # (`lib/vigencia-evento.ts`) persiste, best-effort, la transición a
+          # `finalizado` de un evento cuya vigencia ya terminó — acotado al
+          # ítem de la tabla, nunca a un índice (UpdateItem no aplica sobre
+          # GSIs).
           - PolicyName: agora-eventos-publicos-dynamodb-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
@@ -630,6 +635,10 @@ resources:
                   Resource:
                     - !GetAtt AgoraEventos.Arn
                     - !Sub '${AgoraEventos.Arn}/index/*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraEventos.Arn
 
     LiberarReservasLambdaRole:
       Type: AWS::IAM::Role

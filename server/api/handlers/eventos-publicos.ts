@@ -5,14 +5,20 @@ import type {
 } from 'aws-lambda';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
+import { estadoEfectivo, finalizarSiVencido, type EventoParaVigencia } from '../lib/vigencia-evento';
 import { respuestaJson } from '../lib/http';
 
 /**
- * Estados de `agora-eventos` visibles públicamente. Un evento en `borrador`,
- * `finalizado` o `cancelado` nunca aparece en la cartelera ni resuelve por
- * slug (TODO.md Tarea 1, DoD).
+ * Estados de `agora-eventos` que se consultan por el GSI y, tras calcular
+ * `estadoEfectivo()` (hotfixes pre-producción), pueden seguir siendo
+ * visibles: `publicado`/`agotado` mientras estén vigentes, y `cancelado`
+ * mientras esté vigente (con el banner correspondiente — se muestra para
+ * que un cliente que ya compró sepa que se canceló, no para vender). Un
+ * evento en `borrador` o ya `finalizado` (persistido o por vigencia
+ * vencida) nunca aparece en la cartelera ni resuelve por slug.
  */
-const ESTADOS_VISIBLES = ['publicado', 'agotado'] as const;
+const ESTADOS_QUE_PUEDEN_SER_VISIBLES = ['publicado', 'agotado', 'cancelado'] as const;
+const ESTADOS_VISIBLES = new Set<string>(ESTADOS_QUE_PUEDEN_SER_VISIBLES);
 
 const BASE_URL_PUBLICA = 'https://agora.letiende.co';
 
@@ -43,20 +49,26 @@ function aVistaPublica(evento: Record<string, unknown>): Record<string, unknown>
   return vista;
 }
 
-function esEstadoVisible(estado: unknown): boolean {
-  return (
-    typeof estado === 'string' && (ESTADOS_VISIBLES as readonly string[]).includes(estado)
-  );
+/** Extrae de un ítem crudo de DynamoDB solo los campos que la vigencia necesita. */
+function aEventoParaVigencia(evento: Record<string, unknown>): EventoParaVigencia {
+  const etapas = Array.isArray(evento['etapas'])
+    ? (evento['etapas'] as { cierraEn: string }[])
+    : [];
+  return { fechaHora: String(evento['fechaHora']), etapas };
 }
 
 /**
  * `GET /api/eventos-publicos` — cartelera pública. Un `Query` por cada
- * estado visible sobre `estado-fechaHora-index` (nunca `Scan`), combinados
- * y ordenados por `fechaHora`.
+ * estado que puede ser visible sobre `estado-fechaHora-index` (nunca
+ * `Scan`), combinados y ordenados por `fechaHora`. La visibilidad final la
+ * decide `estadoEfectivo()` (vigencia real, no el `estado` persistido) —
+ * mientras filtra, esta función también aprovecha para poner al día en la
+ * base de datos cualquier evento que ya venció (best-effort, sin bloquear
+ * la respuesta al cliente por eso).
  */
 async function listarEventosPublicos(): Promise<APIGatewayProxyResultV2> {
   const resultados = await Promise.all(
-    ESTADOS_VISIBLES.map((estado) =>
+    ESTADOS_QUE_PUEDEN_SER_VISIBLES.map((estado) =>
       documentoDynamoDB.send(
         new QueryCommand({
           TableName: process.env['TABLA_EVENTOS'],
@@ -69,8 +81,21 @@ async function listarEventosPublicos(): Promise<APIGatewayProxyResultV2> {
     ),
   );
 
-  const eventos = resultados
-    .flatMap((resultado) => resultado.Items ?? [])
+  const ahora = new Date();
+  const finalizacionesPendientes: Promise<void>[] = [];
+  const visibles = (resultados.flatMap((resultado) => resultado.Items ?? [])).filter((item) => {
+    const estadoPersistido = String(item['estado']);
+    const efectivo = estadoEfectivo({ ...aEventoParaVigencia(item), estado: estadoPersistido }, ahora);
+    if (efectivo !== estadoPersistido) {
+      finalizacionesPendientes.push(
+        finalizarSiVencido(process.env['TABLA_EVENTOS'], String(item['eventoId']), estadoPersistido),
+      );
+    }
+    return ESTADOS_VISIBLES.has(efectivo);
+  });
+  await Promise.all(finalizacionesPendientes);
+
+  const eventos = visibles
     .sort((a, b) => String(a['fechaHora']).localeCompare(String(b['fechaHora'])))
     .map(aVistaPublica);
 
@@ -79,8 +104,9 @@ async function listarEventosPublicos(): Promise<APIGatewayProxyResultV2> {
 
 /**
  * `GET /api/eventos-publicos/{slug}` — detalle público de un evento. `Query`
- * sobre `slug-index` (nunca `Scan`); 404 si no existe o su `estado` no está
- * en `ESTADOS_VISIBLES`.
+ * sobre `slug-index` (nunca `Scan`); 404 si no existe o su `estadoEfectivo()`
+ * no está en `ESTADOS_VISIBLES` (vigencia real, mismo criterio que
+ * `listarEventosPublicos()`, incluida la actualización best-effort).
  */
 async function obtenerEventoPorSlug(slug: string | undefined): Promise<APIGatewayProxyResultV2> {
   if (!slug) {
@@ -99,7 +125,16 @@ async function obtenerEventoPorSlug(slug: string | undefined): Promise<APIGatewa
   );
 
   const evento = resultado.Items?.[0];
-  if (!evento || !esEstadoVisible(evento['estado'])) {
+  if (!evento) {
+    return respuestaJson(404, { mensaje: 'Evento no encontrado' });
+  }
+
+  const estadoPersistido = String(evento['estado']);
+  const efectivo = estadoEfectivo({ ...aEventoParaVigencia(evento), estado: estadoPersistido }, new Date());
+  if (efectivo !== estadoPersistido) {
+    await finalizarSiVencido(process.env['TABLA_EVENTOS'], String(evento['eventoId']), estadoPersistido);
+  }
+  if (!ESTADOS_VISIBLES.has(efectivo)) {
     return respuestaJson(404, { mensaje: 'Evento no encontrado' });
   }
 
@@ -120,7 +155,11 @@ function escaparXml(valor: string): string {
  * `serverless.yml`). `Query` sobre `estado-fechaHora-index` solo para
  * `estado = 'publicado'` (los `agotado` siguen siendo eventos reales pero no
  * aceptan más compras; se mantienen fuera del sitemap a propósito, tal como
- * pide TODO.md Tarea 1).
+ * pide TODO.md Tarea 1) — descartando además, por vigencia real, cualquiera
+ * cuyo `estadoEfectivo()` ya sea `finalizado` aunque el campo persistido
+ * todavía diga `publicado` (sin la actualización best-effort acá: el
+ * tráfico de rastreo no es el lugar para mantener la base de datos al día,
+ * `listarEventosPublicos()` ya lo hace).
  */
 async function generarSitemap(): Promise<APIGatewayProxyResultV2> {
   const resultado = await documentoDynamoDB.send(
@@ -133,7 +172,10 @@ async function generarSitemap(): Promise<APIGatewayProxyResultV2> {
     }),
   );
 
-  const eventos = resultado.Items ?? [];
+  const ahora = new Date();
+  const eventos = (resultado.Items ?? []).filter(
+    (item) => estadoEfectivo({ ...aEventoParaVigencia(item), estado: 'publicado' }, ahora) === 'publicado',
+  );
   const urls = eventos
     .map(
       (evento) =>
