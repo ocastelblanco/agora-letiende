@@ -442,9 +442,16 @@ functions:
     environment:
       # Protección SSRF de Angular (`AngularNodeAppEngine`) exige una lista
       # explícita de hosts permitidos (MEMORY.md §7, gotcha verificado).
-      # Sin dominio propio todavía (roadmap #17 en tech-specs.md §11):
-      # solo el hostname crudo de API Gateway.
-      NG_ALLOWED_HOSTS: !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+      # `agora.letiende.co` se agrega **en el mismo cambio** que monta el
+      # dominio (roadmap #17) — nunca "montar primero, configurar después"
+      # (mismo gotcha ya sufrido en Babel, CLAUDE.md §7). El hostname crudo
+      # de API Gateway se conserva en la lista incluso en production, sin
+      # costo, por si hace falta depurar directo contra él.
+      NG_ALLOWED_HOSTS:
+        Fn::If:
+          - EsProduccion
+          - !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com,agora.letiende.co'
+          - !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
     package:
       patterns:
         - '!**'
@@ -460,6 +467,11 @@ functions:
           method: '*'
 
 resources:
+  Conditions:
+    # Dominio personalizado solo en production (roadmap #17, TODO.md) —
+    # staging sigue con la URL plana de API Gateway, sin cambios.
+    EsProduccion: !Equals ['${sls:stage}', 'production']
+
   Resources:
     # --- Roles IAM de mínimo privilegio (uno por función, CLAUDE.md §5 A05) ---
     SaludLambdaRole:
@@ -1435,6 +1447,63 @@ resources:
               Action: s3:GetObject
               Resource: !Sub '${BucketActivos.Arn}/eventos/*'
 
+    # --- Dominio personalizado (production únicamente, roadmap #17) ---
+    # Decisión ADR-013 (docs/MEMORY.md): dominio directo de API Gateway HTTP
+    # API con certificado ACM regional, sin CloudFront — mismo patrón ya
+    # verificado en producción por Babel (`babel.letiende.co`,
+    # `DominioPersonalizadoBabel` en su `serverless.yml`), replicado tal
+    # cual en vez de reinventar. Hotfix urgente pre-lanzamiento (14/08/2026):
+    # `URL_BASE_APP` de producción ya apuntaba a `https://agora.letiende.co`
+    # desde antes de que este dominio existiera — cualquier enlace de
+    # correo real (comprobante/aprobación/boletas) habría quedado roto sin
+    # esto.
+    CertificadoDominioPersonalizado:
+      Type: AWS::CertificateManager::Certificate
+      Condition: EsProduccion
+      Properties:
+        DomainName: agora.letiende.co
+        ValidationMethod: DNS
+        # HostedZoneId explícito: CloudFormation crea el registro CNAME de
+        # validación en la zona de letiende.co automáticamente (ya existe,
+        # ver docs/TODO.md — nunca se crea una zona nueva) y espera a que
+        # el certificado quede ISSUED como parte del propio despliegue, sin
+        # ningún paso manual de copiar/pegar un CNAME.
+        DomainValidationOptions:
+          - DomainName: agora.letiende.co
+            HostedZoneId: Z010633738KAGFIPOZVEW
+
+    DominioPersonalizadoAgora:
+      Type: AWS::ApiGatewayV2::DomainName
+      Condition: EsProduccion
+      Properties:
+        DomainName: agora.letiende.co
+        DomainNameConfigurations:
+          - CertificateArn: !Ref CertificadoDominioPersonalizado
+            EndpointType: REGIONAL
+            SecurityPolicy: TLS_1_2
+
+    MapeoDominioPersonalizadoAgora:
+      Type: AWS::ApiGatewayV2::ApiMapping
+      Condition: EsProduccion
+      Properties:
+        ApiId: !Ref HttpApi
+        DomainName: !Ref DominioPersonalizadoAgora
+        Stage: !Ref HttpApiStage
+
+    # Alias hacia el dominio regional de API Gateway (no un CNAME plano):
+    # mismo mecanismo que ya usa Babel, resuelve directo sin capa extra.
+    RegistroDnsDominioPersonalizado:
+      Type: AWS::Route53::RecordSet
+      Condition: EsProduccion
+      Properties:
+        HostedZoneId: Z010633738KAGFIPOZVEW
+        Name: agora.letiende.co
+        Type: A
+        AliasTarget:
+          DNSName: !GetAtt DominioPersonalizadoAgora.RegionalDomainName
+          HostedZoneId: !GetAtt DominioPersonalizadoAgora.RegionalHostedZoneId
+          EvaluateTargetHealth: false
+
   Outputs:
     # Fuente confiable de la URL del endpoint para el smoke test de CI
     # (.github/workflows/deploy.yml) — evita parsear el texto de salida de
@@ -1469,3 +1538,12 @@ resources:
             - !Ref 'AWS::Region'
             - '.'
             - !Ref 'AWS::URLSuffix'
+
+    # Solo existe en production (Condition EsProduccion) — verificar por
+    # CLI tras desplegar, no solo que el IaC haya sintetizado bien
+    # (TODO.md, DoD de Dominio personalizado): certificado ISSUED, dominio
+    # resuelve, GET / responde 200 con TLS válido.
+    UrlDominioPersonalizado:
+      Description: URL del dominio personalizado de producción (roadmap #17)
+      Condition: EsProduccion
+      Value: !Sub 'https://${DominioPersonalizadoAgora}'
