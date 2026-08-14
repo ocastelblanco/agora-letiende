@@ -108,19 +108,22 @@ async function obtenerDatosCrudosDelEvento(
 }
 
 /**
- * `GET /api/eventos/panel` (`exigirRol('productor')`) — selector del panel
- * (Decisión 1, `TODO.md` Tarea 2): a diferencia de `/puerta`/`/efectivo`
- * (listan todos los eventos publicados, sin filtrar), acá cada productor
- * solo debe ver los eventos donde está asignado — un `administrador` los ve
- * todos, sin filtrar (`tieneAccesoAlEvento`, `lib/autorizacion.ts`). `Scan`
- * sobre `agora-eventos` es aceptable acá: mismo precedente ya establecido
- * por `listarPendientes()` (`aprobaciones.ts`) y `listarEventos()`
- * (`eventos.ts`) para esta misma tabla pequeña — la prohibición de `Scan` de
- * esta tarea aplica solo a `obtenerPanelEvento` (métricas), que sí tiene
- * GSIs provisionados para ese propósito.
+ * `GET /api/eventos/panel` (`exigirRol('portero')`) — selector genérico de
+ * "mis eventos asignados" (Decisión 1, `TODO.md` Tarea 2; generalizado en
+ * `TODO.md` Tarea 1, T8): originalmente exclusivo de `productor` para el
+ * panel de control, ahora también lo consumen `SeleccionVentaEfectivoComponent`/
+ * `SeleccionPuertaComponent` (`portero`) — `tieneAccesoAlEvento` ya resuelve
+ * los tres roles (`administrador` ve todos, `productor` por `productores`,
+ * `portero` por `porteros`), así que bajar el `rolMinimo` es el único cambio
+ * necesario aquí; el filtrado real no se toca. `Scan` sobre `agora-eventos`
+ * es aceptable acá: mismo precedente ya establecido por `listarPendientes()`
+ * (`aprobaciones.ts`) y `listarEventos()` (`eventos.ts`) para esta misma
+ * tabla pequeña — la prohibición de `Scan` de `TODO.md` Tarea 2 aplica solo
+ * a `obtenerPanelEvento` (métricas), que sí tiene GSIs provisionados para
+ * ese propósito.
  */
 async function listarEventosPanel(evento: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const autorizacion = await exigirRol(evento, 'productor');
+  const autorizacion = await exigirRol(evento, 'portero');
   if (!autorizacion.autorizado) {
     return autorizacion.respuesta;
   }
@@ -371,9 +374,12 @@ async function generarReporteEvento(
 }
 
 /**
- * `GET /api/eventos/panel`, `GET /api/eventos/:eventoId/panel` (métricas de
+ * `GET /api/eventos/panel` (`exigirRol('portero')`, generalizado en
+ * `TODO.md` Tarea 1 T8), `GET /api/eventos/:eventoId/panel` (métricas de
  * solo lectura) y `GET /api/eventos/:eventoId/reportes?formato=xlsx|pdf`
- * (exportación, `TODO.md` Tarea 2) — las tres exigen `exigirRol('productor')`.
+ * (exportación, `TODO.md` Tarea 2) — estas dos últimas siguen exigiendo
+ * `exigirRol('productor')`: son exclusivas del panel de control, no de
+ * `portero`.
  */
 export const handler: APIGatewayProxyHandlerV2 = async (
   evento: APIGatewayProxyEventV2,

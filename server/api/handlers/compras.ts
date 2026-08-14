@@ -52,6 +52,13 @@ export interface EventoParaCompra {
   maxBoletasPorCompra: number;
   mediosPago: MedioPago[];
   plazoComprobanteMinutos: number;
+  // Presentes en el ítem real de DynamoDB desde siempre (nunca los escribe
+  // compras.ts), pero solo se necesitan a partir de `ventas-efectivo.ts`
+  // (`TODO.md` Tarea 1, T8: `tieneAccesoAlEvento(eventoEncontrado, permisos)`
+  // exige que este tipo declare `productores`/`porteros`, no solo que el
+  // dato exista en tiempo de ejecución).
+  productores: string[];
+  porteros: string[];
 }
 
 function esErrorCondicionFallida(error: unknown): boolean {

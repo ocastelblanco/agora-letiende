@@ -10,7 +10,7 @@ import { AforoInsuficienteError, ErrorAforo, EventoNoPublicadoError, confirmarSi
 import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { CanalCorreoSes } from '../services/notificaciones';
-import { exigirRol } from '../lib/autorizacion';
+import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { esEmailValido, esEnteroPositivo, esNombreClienteValido, esTelefonoValido, esTextoValido } from '../lib/validaciones';
 import {
   EstadoCompra,
@@ -99,6 +99,15 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
   const eventoEncontrado = await buscarEventoPublicadoPorSlug(datos['slug']);
   if (!eventoEncontrado || eventoEncontrado.estado !== 'publicado') {
     return respuestaJson(404, { mensaje: 'No existe un evento publicado con ese slug' });
+  }
+
+  // Autorización real por evento (`TODO.md` Tarea 1, T8): un portero solo
+  // puede vender en efectivo para los eventos donde está en `porteros` — un
+  // administrador o productor asignado también pasan (`tieneAccesoAlEvento`,
+  // que ya incluye esos dos casos). Sin lectura extra: `eventoEncontrado` ya
+  // trae `porteros`/`productores` completos desde la Query de arriba.
+  if (!tieneAccesoAlEvento(eventoEncontrado, autorizacion.permisos)) {
+    return respuestaJson(403, { mensaje: 'No estás asignado a este evento' });
   }
 
   // El administrador decide por evento qué medios de pago acepta

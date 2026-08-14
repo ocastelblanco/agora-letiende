@@ -36,6 +36,13 @@ const permisosAdministrador = {
   activo: true,
 };
 
+const permisosPortero = {
+  email: 'portero@letiende.co',
+  nombre: 'Portero',
+  rol: 'portero' as const,
+  activo: true,
+};
+
 const eventoItem = {
   eventoId: 'evt-1',
   slug: 'concierto-jazz',
@@ -174,6 +181,48 @@ describe('GET /api/eventos/panel', () => {
 
     const cuerpo = JSON.parse(respuesta.body ?? '[]');
     expect(cuerpo).toHaveLength(2);
+  });
+
+  // TODO.md Tarea 1 (T8): este endpoint pasó de exigirRol('productor') a
+  // exigirRol('portero') para que SeleccionVentaEfectivoComponent/
+  // SeleccionPuertaComponent lo reutilicen — un portero solo ve los eventos
+  // donde está en `porteros`, nunca por `productores`.
+  it('un portero solo ve los eventos donde está en porteros', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosPortero });
+    sendMock.mockResolvedValueOnce({
+      Items: [
+        { ...eventoItem, porteros: ['portero@letiende.co'] },
+        { ...eventoItem, eventoId: 'evt-ajeno', slug: 'otro-evento', porteros: ['otro@letiende.co'] },
+      ],
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '[]');
+    expect(cuerpo).toEqual([
+      {
+        eventoId: 'evt-1',
+        slug: 'concierto-jazz',
+        nombre: 'Concierto de jazz',
+        fechaHora: '2026-09-01T00:00:00.000Z',
+        estado: 'publicado',
+      },
+    ]);
+  });
+
+  it('un portero nunca se resuelve contra productores (regresión)', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosPortero });
+    sendMock.mockResolvedValueOnce({
+      // El correo del portero está en `productores`, no en `porteros` —
+      // no debería alcanzar este evento.
+      Items: [{ ...eventoItem, productores: ['portero@letiende.co'], porteros: [] }],
+    });
+
+    const respuesta = await invocar('GET');
+
+    const cuerpo = JSON.parse(respuesta.body ?? '[]');
+    expect(cuerpo).toEqual([]);
   });
 });
 

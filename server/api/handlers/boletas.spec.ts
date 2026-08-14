@@ -8,7 +8,14 @@ const { sendMock, verificarFirmaBoletaMock, exigirRolMock } = vi.hoisted(() => (
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 vi.mock('../lib/firma-boletas', () => ({ verificarFirmaBoleta: verificarFirmaBoletaMock }));
-vi.mock('../lib/autorizacion', () => ({ exigirRol: exigirRolMock }));
+// `tieneAccesoAlEvento` se reexporta desde la implementación real
+// (`importOriginal`) — es lógica pura sin dependencias externas (TODO.md
+// Tarea 1, T8), mismo criterio que eventos.spec.ts/ventas-efectivo.spec.ts;
+// solo `exigirRol` se reemplaza por el mock controlado desde cada test.
+vi.mock('../lib/autorizacion', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/autorizacion')>();
+  return { ...real, exigirRol: exigirRolMock };
+});
 
 const { handler } = await import('./boletas');
 
@@ -43,6 +50,10 @@ const eventoConEtapa = {
   descripcion: 'Una noche de jazz',
   fechaHora: '2026-09-15T01:00:00.000Z',
   etapas: [{ etapaId: 'et-1', nombre: 'Preventa', precio: 45000, cierraEn: '2099-01-01T00:00:00.000Z', orden: 1 }],
+  // El portero por defecto de estas pruebas está asignado (TODO.md Tarea 1,
+  // T8) — las pruebas de autorización lo desasignan explícitamente.
+  porteros: ['portero@letiende.co'],
+  productores: [],
 };
 
 const compraConCliente = {
@@ -220,6 +231,7 @@ describe('POST /api/boletas/:codigo/validar', () => {
 
   it('VALIDA: autoriza el ingreso con una única escritura condicional', async () => {
     verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockResolvedValueOnce({ Item: eventoConEtapa }); // GetCommand de tieneAccesoAlEvento (T8)
     sendMock.mockResolvedValueOnce({ Attributes: { ...boletaValida, estado: 'usada' } });
 
     const respuesta = await invocar('POST', {
@@ -232,8 +244,8 @@ describe('POST /api/boletas/:codigo/validar', () => {
     const cuerpo = JSON.parse(respuesta.body ?? '{}');
     expect(cuerpo.veredicto).toBe('VALIDA');
     expect(cuerpo.numeroEnCompra).toBe(1);
-    expect(sendMock).toHaveBeenCalledTimes(1);
-    const comando = sendMock.mock.calls[0]?.[0];
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    const comando = sendMock.mock.calls[1]?.[0];
     expect(comando.input).toMatchObject({
       Key: { boletaId: 'bol-1' },
       UpdateExpression: 'SET estado = :usada, ingresoEn = :ahora, ingresoPor = :correo',
@@ -245,6 +257,7 @@ describe('POST /api/boletas/:codigo/validar', () => {
 
   it('YA_USADA: condición falla porque la boleta ya se usó, responde con la hora del primer ingreso', async () => {
     verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockResolvedValueOnce({ Item: eventoConEtapa }); // GetCommand de tieneAccesoAlEvento (T8)
     sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
     sendMock.mockResolvedValueOnce({
       Item: { ...boletaValida, estado: 'usada', ingresoEn: '2026-08-09T20:00:00.000Z' },
@@ -264,6 +277,7 @@ describe('POST /api/boletas/:codigo/validar', () => {
 
   it('OTRO_EVENTO: condición falla porque la boleta es de otro evento', async () => {
     verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockResolvedValueOnce({ Item: eventoConEtapa }); // GetCommand de tieneAccesoAlEvento (T8)
     sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
     sendMock.mockResolvedValueOnce({ Item: { ...boletaValida, eventoId: 'evt-ajeno' } });
 
@@ -279,6 +293,7 @@ describe('POST /api/boletas/:codigo/validar', () => {
 
   it('NO_EXISTE: condición falla y la boleta no existe en absoluto', async () => {
     verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockResolvedValueOnce({ Item: eventoConEtapa }); // GetCommand de tieneAccesoAlEvento (T8)
     sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
     sendMock.mockResolvedValueOnce({});
 
@@ -290,5 +305,55 @@ describe('POST /api/boletas/:codigo/validar', () => {
 
     const cuerpo = JSON.parse(respuesta.body ?? '{}');
     expect(cuerpo.veredicto).toBe('NO_EXISTE');
+  });
+
+  // TODO.md Tarea 1 (T8): autorización real por evento — un portero solo
+  // puede validar ingresos de los eventos donde está en `porteros`.
+  describe('autorización por evento (TODO.md Tarea 1, T8)', () => {
+    it('responde 403 si el portero no está asignado al evento, sin llegar a la escritura condicional', async () => {
+      verificarFirmaBoletaMock.mockReturnValueOnce(true);
+      sendMock.mockResolvedValueOnce({ Item: { ...eventoConEtapa, porteros: ['otro@letiende.co'] } });
+
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/boletas/bol-1.firma-buena/validar',
+        codigo: 'bol-1.firma-buena',
+        cuerpo: { eventoId: 'evt-1' },
+      });
+
+      expect(respuesta.statusCode).toBe(403);
+      expect(sendMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('responde 403 si el eventoId del cuerpo no corresponde a ningún evento real', async () => {
+      verificarFirmaBoletaMock.mockReturnValueOnce(true);
+      sendMock.mockResolvedValueOnce({});
+
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/boletas/bol-1.firma-buena/validar',
+        codigo: 'bol-1.firma-buena',
+        cuerpo: { eventoId: 'evt-inventado' },
+      });
+
+      expect(respuesta.statusCode).toBe(403);
+    });
+
+    it('un administrador puede validar aunque no esté en porteros (bypass)', async () => {
+      verificarFirmaBoletaMock.mockReturnValueOnce(true);
+      exigirRolMock.mockResolvedValueOnce({
+        autorizado: true,
+        permisos: { email: 'admin@letiende.co', nombre: 'Ana Admin', rol: 'administrador', activo: true },
+      });
+      sendMock.mockResolvedValueOnce({ Item: { ...eventoConEtapa, porteros: ['otro@letiende.co'] } });
+      sendMock.mockResolvedValueOnce({ Attributes: { ...boletaValida, estado: 'usada' } });
+
+      const respuesta = await invocar('POST', {
+        rawPath: '/api/boletas/bol-1.firma-buena/validar',
+        codigo: 'bol-1.firma-buena',
+        cuerpo: { eventoId: 'evt-1' },
+      });
+
+      const cuerpo = JSON.parse(respuesta.body ?? '{}');
+      expect(cuerpo.veredicto).toBe('VALIDA');
+    });
   });
 });
