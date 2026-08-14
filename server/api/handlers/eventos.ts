@@ -168,12 +168,30 @@ function normalizarMediosPago(valor: unknown): MedioPago[] | null {
   return medios.length === valor.length ? medios : null;
 }
 
-function normalizarProductores(valor: unknown): string[] | null {
-  if (!Array.isArray(valor)) {
+/**
+ * Validador compartido de `productores`/`porteros` (`TODO.md` Tarea 1, T7)
+ * — mismo criterio en ambos: arreglo de correos válidos, sin duplicar la
+ * comprobación elemento por elemento. `longitudMinima` es lo único que
+ * distingue los dos campos: el documento de negocio exige al menos un
+ * productor para guardar el evento, mientras que `porteros` puede quedar
+ * vacío (se agregan luego, al editar).
+ */
+function normalizarCorreos(valor: unknown, longitudMinima: number): string[] | null {
+  if (!Array.isArray(valor) || valor.length < longitudMinima) {
     return null;
   }
   const correos = valor.filter(esEmailValido);
   return correos.length === valor.length ? correos : null;
+}
+
+/** Al menos un productor es obligatorio (documento de negocio, TODO.md Tarea 1, T7) — aplica tanto al crear como al editar, para que el evento nunca quede sin ninguno. */
+function normalizarProductores(valor: unknown): string[] | null {
+  return normalizarCorreos(valor, 1);
+}
+
+/** Análogo a `normalizarProductores`, pero opcional: puede quedar vacío tanto al crear como al editar (TODO.md Tarea 1, T7). */
+function normalizarPorteros(valor: unknown): string[] | null {
+  return normalizarCorreos(valor, 0);
 }
 
 /**
@@ -223,7 +241,14 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
 
   const productores = normalizarProductores(datos['productores'] ?? []);
   if (!productores) {
-    return respuestaJson(400, { mensaje: 'productores debe ser un arreglo de correos válidos' });
+    return respuestaJson(400, {
+      mensaje: 'productores debe ser un arreglo de al menos un correo válido',
+    });
+  }
+
+  const porteros = normalizarPorteros(datos['porteros'] ?? []);
+  if (!porteros) {
+    return respuestaJson(400, { mensaje: 'porteros debe ser un arreglo de correos válidos' });
   }
 
   const plazoComprobanteMinutos = esEnteroPositivo(datos['plazoComprobanteMinutos'])
@@ -248,6 +273,7 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     mediosPago,
     plazoComprobanteMinutos,
     productores,
+    porteros,
     estado: 'borrador' as EstadoEvento,
     creadoEn: ahora,
     actualizadoEn: ahora,
@@ -414,9 +440,18 @@ async function actualizarEvento(
   if (datos['productores'] !== undefined) {
     const productores = normalizarProductores(datos['productores']);
     if (!productores) {
-      return respuestaJson(400, { mensaje: 'productores inválido' });
+      return respuestaJson(400, {
+        mensaje: 'productores debe ser un arreglo de al menos un correo válido',
+      });
     }
     agregar('productores', '#productores', productores);
+  }
+  if (datos['porteros'] !== undefined) {
+    const porteros = normalizarPorteros(datos['porteros']);
+    if (!porteros) {
+      return respuestaJson(400, { mensaje: 'porteros inválido' });
+    }
+    agregar('porteros', '#porteros', porteros);
   }
   if (datos['estado'] !== undefined) {
     if (
