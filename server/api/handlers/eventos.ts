@@ -17,6 +17,7 @@ import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
 import { generarQrPng, generarQrSvg } from '../services/qr';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
+import { haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import type { PermisosUsuario } from '../lib/resolver-permisos';
 import { respuestaJson } from '../lib/http';
 
@@ -314,14 +315,17 @@ const CAMPOS_EDITABLES_PRODUCTOR = new Set([
 
 /**
  * Campos editables por `PUT /api/eventos/:eventoId`. Deliberadamente
- * excluye `eventoId`, `slug`, `sillasTotales`, `sillasDisponibles` y
- * `sillasReservadas` — el aforo (incluida cualquier resta/reasignación de
- * `sillasTotales`) es responsabilidad exclusiva del motor de aforo
- * (roadmap #8, todavía no existe); hasta entonces esos campos solo se
- * editan internamente, nunca vía este endpoint (TODO.md Tarea 1). Un
+ * excluye `eventoId`, `slug`, `sillasDisponibles` y `sillasReservadas` — el
+ * aforo consumido (vendidas/reservadas) sigue siendo responsabilidad
+ * exclusiva de `aforo.ts` (reservar/confirmar/liberar). `sillasTotales` SÍ
+ * es editable por `administrador` (hotfixes pre-producción: "el
+ * administrador debe poder editar el número de sillas totales de un evento,
+ * en todo momento") — ver el bloque dedicado más abajo, que ajusta
+ * `sillasDisponibles` por la diferencia en vez de tocarlo directamente. Un
  * `administrador` puede editar cualquiera de los campos de abajo; un
  * `productor` asignado al evento solo los de `CAMPOS_EDITABLES_PRODUCTOR`
- * (TODO.md Tarea 1, T6).
+ * (TODO.md Tarea 1, T6) — `sillasTotales` deliberadamente no está en esa
+ * lista.
  */
 async function actualizarEvento(
   eventoId: string | undefined,
@@ -361,9 +365,30 @@ async function actualizarEvento(
     }
   }
 
+  // Lectura del evento actual, compartida entre los bloques de abajo que la
+  // necesitan (`etapas`, `sillasTotales`) — como mucho una sola vez por
+  // petición, aunque ambos campos vengan juntos en el mismo payload (solo
+  // un `administrador` puede enviar `sillasTotales`, y `etapas` está fuera
+  // del alcance de un `productor`, así que nunca compite con la lectura de
+  // más arriba, exclusiva de esa rama).
+  let eventoActualCache: Record<string, unknown> | null | undefined;
+  const leerEventoActual = async (): Promise<Record<string, unknown> | null> => {
+    if (eventoActualCache === undefined) {
+      const resultado = await documentoDynamoDB.send(
+        new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
+      );
+      eventoActualCache = resultado.Item ?? null;
+    }
+    return eventoActualCache;
+  };
+
   const asignaciones: string[] = [];
   const nombresAtributos: Record<string, string> = {};
   const valoresExpresion: Record<string, unknown> = {};
+  // Cláusulas adicionales de `ConditionExpression`, más allá del
+  // `attribute_exists(eventoId)` de siempre — hoy solo las agrega el bloque
+  // de `sillasTotales` (guarda optimista + aforo nunca negativo).
+  const condicionesExtra: string[] = [];
 
   const agregar = (campo: string, marcador: string, valor: unknown): void => {
     asignaciones.push(`${marcador} = :${campo}`);
@@ -401,21 +426,99 @@ async function actualizarEvento(
     }
     agregar('plazoComprobanteMinutos', '#plazoComprobanteMinutos', datos['plazoComprobanteMinutos']);
   }
+  if (datos['sillasTotales'] !== undefined) {
+    // Hotfixes pre-producción: "el administrador debe poder editar el
+    // número de sillas totales de un evento, en todo momento" — nunca un
+    // productor (no está en CAMPOS_EDITABLES_PRODUCTOR, así que ya se
+    // rechazó arriba si intentó enviarlo).
+    if (!esEnteroPositivo(datos['sillasTotales'])) {
+      return respuestaJson(400, { mensaje: 'sillasTotales inválido' });
+    }
+
+    const eventoActual = await leerEventoActual();
+    if (!eventoActual) {
+      return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+    }
+
+    const totalActual =
+      typeof eventoActual['sillasTotales'] === 'number' ? eventoActual['sillasTotales'] : 0;
+    const disponiblesActual =
+      typeof eventoActual['sillasDisponibles'] === 'number' ? eventoActual['sillasDisponibles'] : 0;
+    const nuevoTotal = datos['sillasTotales'];
+    // vendidas + reservadas, sin necesitar separarlas: es lo único que este
+    // nuevo total nunca puede pisar.
+    const comprometidas = totalActual - disponiblesActual;
+
+    if (nuevoTotal < comprometidas) {
+      return respuestaJson(400, {
+        mensaje: `No puedes bajar el aforo a ${nuevoTotal}: ya hay ${comprometidas} sillas vendidas o reservadas`,
+      });
+    }
+
+    const delta = nuevoTotal - totalActual;
+
+    // Aritmética relativa sobre `sillasDisponibles` (`= sillasDisponibles +
+    // :delta`), nunca un valor absoluto calculado a partir de la lectura de
+    // arriba — el valor real en el momento de esta escritura puede ser
+    // distinto (una compra concurrente pudo descontarlo entre medio), y
+    // esta forma lo respeta sin necesidad de releer (CLAUDE.md §5, A04: el
+    // aforo nunca se descuenta con lectura-luego-escritura).
+    asignaciones.push('sillasTotales = :nuevoSillasTotales');
+    valoresExpresion[':nuevoSillasTotales'] = nuevoTotal;
+    asignaciones.push('sillasDisponibles = sillasDisponibles + :deltaSillas');
+    valoresExpresion[':deltaSillas'] = delta;
+
+    // Dos guardas en la propia escritura condicional, sobre el estado REAL
+    // al momento de escribir, no el leído: (1) `sillasTotales` no cambió
+    // desde la lectura de arriba (si otra edición concurrente ya lo cambió,
+    // el `delta` calculado aquí ya no es válido — falla y se responde 409,
+    // nunca se aplica un delta calculado sobre un total obsoleto); (2)
+    // `sillasDisponibles` nunca queda negativo, pase lo que pase entre la
+    // lectura y la escritura.
+    condicionesExtra.push('sillasTotales = :totalLeido');
+    valoresExpresion[':totalLeido'] = totalActual;
+    condicionesExtra.push('sillasDisponibles + :deltaSillas >= :cero');
+    valoresExpresion[':cero'] = 0;
+
+    // Reactivación automática: si el evento estaba `agotado` solo por falta
+    // de aforo y este cambio le devuelve sillas disponibles, vuelve a
+    // `publicado` — mismo criterio que la transición automática opuesta que
+    // ya hace `confirmarSillas()` en `aforo.ts`. No se aplica si el propio
+    // payload ya trae un `estado` explícito (el administrador manda sobre
+    // la automatización, se procesa en el bloque de abajo) ni si el evento
+    // ya venció por vigencia (hotfixes pre-producción) — reactivarlo
+    // anunciaría de nuevo un evento que ya pasó.
+    if (
+      datos['estado'] === undefined &&
+      eventoActual['estado'] === 'agotado' &&
+      disponiblesActual + delta > 0 &&
+      !haFinalizadoPorVigencia(
+        {
+          fechaHora: String(eventoActual['fechaHora']),
+          etapas: Array.isArray(eventoActual['etapas'])
+            ? (eventoActual['etapas'] as { cierraEn: string }[])
+            : [],
+        },
+        new Date(),
+      )
+    ) {
+      agregar('estado', '#estado', 'publicado');
+    }
+  }
   if (datos['etapas'] !== undefined) {
     // Lee el evento actual solo en este caso (no incondicional al inicio de
     // la función: sería una lectura extra innecesaria para un PUT que no
     // toca etapas) para poder validar a cuáles etapaId ya existentes puede
     // aferrarse el payload del cliente — ver normalizarEtapas() (TODO.md
     // Tarea 2). Mismo patrón que obtenerPanelEvento()/generarReporteEvento()
-    // en reportes.ts.
-    const eventoActual = await documentoDynamoDB.send(
-      new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId } }),
-    );
-    if (!eventoActual.Item) {
+    // en reportes.ts. Comparte la lectura con el bloque de `sillasTotales`
+    // de arriba vía `leerEventoActual()` si ambos vienen en el mismo payload.
+    const eventoActual = await leerEventoActual();
+    if (!eventoActual) {
       return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
     }
-    const etapasActuales = Array.isArray(eventoActual.Item['etapas'])
-      ? (eventoActual.Item['etapas'] as unknown[])
+    const etapasActuales = Array.isArray(eventoActual['etapas'])
+      ? (eventoActual['etapas'] as unknown[])
       : [];
     const idsExistentes = new Set<string>(
       etapasActuales.flatMap((etapa) => {
@@ -489,13 +592,24 @@ async function actualizarEvento(
         UpdateExpression: `SET ${asignaciones.join(', ')}`,
         ExpressionAttributeNames: nombresAtributos,
         ExpressionAttributeValues: valoresExpresion,
-        ConditionExpression: 'attribute_exists(eventoId)',
+        ConditionExpression: ['attribute_exists(eventoId)', ...condicionesExtra].join(' AND '),
         ReturnValues: 'ALL_NEW',
       }),
     );
     return respuestaJson(200, resultado.Attributes);
   } catch (error) {
     if (esErrorCondicionFallida(error)) {
+      // Con `sillasTotales` en el payload, una condición fallida no
+      // significa "el evento no existe" (ya se comprobó arriba con la
+      // lectura previa) sino que el aforo cambió entre la lectura y esta
+      // escritura (otra edición concurrente, o el delta dejaría
+      // `sillasDisponibles` en negativo) — 409, no 404, para que el
+      // administrador sepa que debe reintentar, no que el evento desapareció.
+      if (datos['sillasTotales'] !== undefined) {
+        return respuestaJson(409, {
+          mensaje: 'El aforo del evento cambió mientras editabas — intenta de nuevo',
+        });
+      }
       return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
     }
     throw error;

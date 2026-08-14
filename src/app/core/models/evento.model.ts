@@ -67,14 +67,16 @@ export interface DatosNuevoEvento {
 
 /**
  * Datos editables de un evento existente (`PUT /api/eventos/:eventoId`).
- * Nunca incluye `sillasTotales`/`sillasDisponibles`/`sillasReservadas` — el
- * backend los rechaza si llegan (`CLAUDE.md` §5, A08; `TODO.md` Tarea 1, el
- * motor de aforo todavía no existe).
+ * `sillasTotales` es editable por `administrador` (hotfixes pre-producción)
+ * — el backend ajusta `sillasDisponibles` por la diferencia, nunca acepta
+ * ese campo directo. Nunca incluye `sillasDisponibles`/`sillasReservadas`:
+ * el aforo consumido solo lo escribe `aforo.ts` (`CLAUDE.md` §5, A08).
  */
 export interface DatosEditarEvento {
   nombre?: string;
   descripcion?: string;
   fechaHora?: string;
+  sillasTotales?: number;
   maxBoletasPorCompra?: number;
   plazoComprobanteMinutos?: number;
   etapas?: DatosEtapaBoleteria[];

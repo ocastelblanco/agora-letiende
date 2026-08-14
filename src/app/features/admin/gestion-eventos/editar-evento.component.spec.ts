@@ -241,7 +241,7 @@ describe('EditarEventoComponent', () => {
   });
 
   describe('modo editar (id = eventoId real)', () => {
-    it('precarga el formulario y deshabilita slug y sillasTotales', async () => {
+    it('precarga el formulario y deshabilita slug (sillasTotales queda editable para administrador)', async () => {
       const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
       await activarConId(fixture, 'e1');
       const componente = fixture.componentInstance;
@@ -249,7 +249,8 @@ describe('EditarEventoComponent', () => {
       expect(componente['cargando']()).toBe(false);
       expect(componente['eventoNoEncontrado']()).toBe(false);
       expect(componente['formulario'].controls.slug.disabled).toBe(true);
-      expect(componente['formulario'].controls.sillasTotales.disabled).toBe(true);
+      expect(componente['formulario'].controls.sillasTotales.disabled).toBe(false);
+      expect(componente['formulario'].controls.sillasTotales.value).toBe(100);
       expect(componente['formulario'].controls.nombre.value).toBe('Concierto de jazz');
       expect(componente['formulario'].controls.mediosPago.controls.bold.value).toBe(true);
       expect(componente['etapas'].length).toBe(1);
@@ -266,7 +267,7 @@ describe('EditarEventoComponent', () => {
       expect(componente['eventoNoEncontrado']()).toBe(true);
     });
 
-    it('guardar() actualiza el evento sin incluir sillasTotales ni sillasDisponibles', async () => {
+    it('guardar() actualiza el evento incluyendo sillasTotales (editable), nunca sillasDisponibles', async () => {
       const actualizarEventoMock = vi
         .fn()
         .mockResolvedValue({ exito: true, evento: eventoExistente });
@@ -277,14 +278,14 @@ describe('EditarEventoComponent', () => {
       await activarConId(fixture, 'e1');
       const componente = fixture.componentInstance;
 
-      componente['formulario'].patchValue({ nombre: 'Nuevo nombre' });
+      componente['formulario'].patchValue({ nombre: 'Nuevo nombre', sillasTotales: 150 });
       await componente['guardar']();
 
       expect(actualizarEventoMock).toHaveBeenCalledTimes(1);
       const [eventoId, datos] = actualizarEventoMock.mock.calls[0];
       expect(eventoId).toBe('e1');
       expect(datos.nombre).toBe('Nuevo nombre');
-      expect(datos).not.toHaveProperty('sillasTotales');
+      expect(datos.sillasTotales).toBe(150);
       expect(datos).not.toHaveProperty('sillasDisponibles');
       expect(snackBarOpenMock).toHaveBeenCalledWith('Evento actualizado correctamente.', 'Cerrar', {
         duration: 4000,
@@ -437,6 +438,7 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.nombre.disabled).toBe(true);
       expect(componente['formulario'].controls.descripcion.disabled).toBe(true);
       expect(componente['formulario'].controls.fechaHora.disabled).toBe(true);
+      expect(componente['formulario'].controls.sillasTotales.disabled).toBe(true);
       expect(componente['formulario'].controls.productores.disabled).toBe(true);
       expect(componente['formulario'].controls.porteros.disabled).toBe(true);
       expect(componente['formulario'].controls.estado.disabled).toBe(true);
