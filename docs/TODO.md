@@ -8,9 +8,9 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 1 — [HOTFIX]: Tres hotfixes de correo, productores y mensaje de aprobación + doble envío real en aprobar/rechazar
+## Tarea 1 — [HOTFIX]: Correo, productores, mensaje de aprobación, doble envío y SLA de liberación de aforo
 
-**Origen:** pedido directo del usuario (14/08/2026, continuación), con prioridad explícita por delante del roadmap normal — mismo patrón ya usado con la ronda anterior de hotfixes (PR #41, fusionado). Dominio personalizado vuelve a pausarse en el Backlog. Un cuarto hotfix (doble envío) se agregó a la misma rama/PR tras un reporte en vivo durante la validación de los tres primeros.
+**Origen:** pedido directo del usuario (14/08/2026, continuación), con prioridad explícita por delante del roadmap normal — mismo patrón ya usado con la ronda anterior de hotfixes (PR #41, fusionado). Dominio personalizado vuelve a pausarse en el Backlog. El cuarto y el quinto hotfix se agregaron a la misma rama/PR tras reportes en vivo durante la validación de los tres primeros.
 
 **Alcance:**
 
@@ -18,8 +18,9 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 2. **Administradores seleccionables como Productores.** El desplegable de "Productores" en `EditarEventoComponent` solo mostraba usuarios con `rol === 'productor'`, excluyendo a los administradores — que no podían quedar asignados a un evento puntual para recibir el correo `aviso_comprobante` ni aprobar/rechazar por el enlace mágico. `productoresDisponibles` ahora también incluye `rol === 'administrador'`. Sin cambios de autorización: `tieneAccesoAlEvento()` ya deja pasar a cualquier `administrador` sin mirar `productores` (bypass existente) — esto es solo una conveniencia de notificación. `porterosDisponibles` no cambia (fuera de alcance, el usuario solo pidió Productores).
 3. **Mensaje de "compra ya resuelta" sin paréntesis extraño.** El texto `Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).` (mostrado a un segundo productor que visita el mismo enlace de aprobación tras otro ya haberla resuelto) tenía un paréntesis sin ningún destino real al que enlazar — decisión explícita con el usuario (`AskUserQuestion`): sin nada en `MEMORY.md` que indicara un destino concreto, se reformuló a texto plano simple, `RESUELTO_POR_ENLACE = 'otro miembro del equipo'`, en vez de inventar un enlace sin propósito claro.
 4. **Doble envío real al rechazar una compra (reportado en vivo, ver `MEMORY.md` §7 para el detalle completo).** El productor veía "ya fue resuelta" aunque el rechazo sí se aplicó (el cliente recibió el correo) y el `motivo` que escribió nunca llegó — confirmado con CloudWatch (dos invocaciones de Lambda a menos de 1 segundo de diferencia) y DynamoDB (`resueltoEn` coincide con ese instante exacto): un doble click/toque real que el `[disabled]` del botón no alcanza a bloquear. Corregido con una guarda de reentrada síncrona en `RevisarAprobacionComponent.aprobar()`/`rechazar()`, y persistiendo `motivoRechazo` en la propia compra (antes solo viajaba hasta el correo, se perdía si esa petición perdía la carrera).
+5. **SLA de 15 minutos para liberar una reserva vencida por transferencia (reportado en vivo, ver `MEMORY.md` §7 para el detalle completo).** El TTL de DynamoDB no ofrece ninguna garantía de tiempo ("típicamente 48 horas"), pero el negocio exige que competir por la última silla nunca espere tanto a una reserva ya vencida. **Decisión tomada con el usuario (`AskUserQuestion`):** liberación activa solo al competir por cupo, sin infraestructura nueva (se descartó un barrido programado por EventBridge). `reservarSillas()` (`aforo.ts`), cuando la escritura condicional falla, ahora libera activamente las reservas vencidas de ese evento (`Query` sobre `eventoId-creadaEn-index` + transición condicional a `expirada` + `liberarSillas`) y reintenta una vez antes de clasificar el fallo como definitivo — nunca corre en el camino feliz. `ComprasLambdaRole`/`VentasEfectivoLambdaRole` ganan `Query`(GSI)/`UpdateItem` sobre `agora-compras`.
 
-**Decisiones tomadas con el usuario antes de implementar (`AskUserQuestion`):** para el punto 3, no inventar un destino de enlace sin evidencia en la documentación del proyecto — reformular el texto en su lugar.
+**Decisiones tomadas con el usuario antes de implementar (`AskUserQuestion`):** para el punto 3, no inventar un destino de enlace sin evidencia en la documentación del proyecto — reformular el texto en su lugar. Para el punto 5, liberación activa al competir por cupo en vez de un barrido programado — sin infraestructura nueva.
 
 **Archivos:**
 - `server/api/services/correo-ses.ts`/`.spec.ts` — `NOMBRE_REMITENTE`, `Source` con formato RFC 5322.
@@ -27,6 +28,8 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - `server/api/handlers/aprobaciones.ts`/`.spec.ts` — `RESUELTO_POR_ENLACE` reformulado, `motivoRechazo` persistido condicionalmente.
 - `src/app/features/aprobaciones/revisar-aprobacion.component.ts`/`.spec.ts` — guarda de reentrada síncrona en `aprobar()`/`rechazar()`.
 - `src/app/core/api/aprobaciones.service.spec.ts` — texto de prueba actualizado al nuevo mensaje.
+- `server/api/services/aforo.ts`/`.spec.ts` — `liberarReservasVencidas()`, `reservarSillas()` reintenta tras liberar.
+- `serverless.yml` — `Query`/`UpdateItem` sobre `agora-compras` para `ComprasLambdaRole`/`VentasEfectivoLambdaRole`.
 
 **Definition of done:**
 - [x] El remitente de los correos muestra "Taquilla Le Tiende" en vez del buzón crudo
@@ -34,8 +37,10 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - [x] El mensaje de "compra ya resuelta" ya no tiene un paréntesis sin destino
 - [x] Un doble click/toque real en "Aprobar"/"Rechazar" no dispara una segunda petición HTTP
 - [x] `motivoRechazo` queda persistido en la compra, no solo en el correo
-- [x] `npm run test` (272) y `npm run test:api` (322) en verde
+- [x] Una reserva vencida se libera activamente al competir por cupo, sin depender solo del TTL
+- [x] `npm run test` (272) y `npm run test:api` (325) en verde
 - [x] `npm run build`/`build:api` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas (`grep` del patrón de `CLAUDE.md` §5-bis) — solo permisos IAM adicionales sobre una tabla ya existente
 - [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
 
 ---
