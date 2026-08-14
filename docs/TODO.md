@@ -8,29 +8,33 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ---
 
-## Tarea 1 — [HOTFIX]: Tres hotfixes de correo, productores y mensaje de aprobación
+## Tarea 1 — [HOTFIX]: Tres hotfixes de correo, productores y mensaje de aprobación + doble envío real en aprobar/rechazar
 
-**Origen:** pedido directo del usuario (14/08/2026, continuación), con prioridad explícita por delante del roadmap normal — mismo patrón ya usado con la ronda anterior de hotfixes (PR #41, fusionado). Dominio personalizado vuelve a pausarse en el Backlog.
+**Origen:** pedido directo del usuario (14/08/2026, continuación), con prioridad explícita por delante del roadmap normal — mismo patrón ya usado con la ronda anterior de hotfixes (PR #41, fusionado). Dominio personalizado vuelve a pausarse en el Backlog. Un cuarto hotfix (doble envío) se agregó a la misma rama/PR tras un reporte en vivo durante la validación de los tres primeros.
 
-**Alcance (los tres, en una sola tarea porque el usuario los pidió juntos):**
+**Alcance:**
 
 1. **Nombre visible del remitente de correo.** Los correos transaccionales mostraban el buzón crudo `taquilla@letiende.co` en vez de un nombre reconocible. `Source` de `SendEmailCommand` (SES) admite el formato RFC 5322 `"Nombre" <correo>` directamente — se agregó una constante `NOMBRE_REMITENTE = 'Taquilla Le Tiende'` en `server/api/services/correo-ses.ts`, sin tocar el secreto `SES_REMITENTE` (que sigue siendo solo la dirección).
 2. **Administradores seleccionables como Productores.** El desplegable de "Productores" en `EditarEventoComponent` solo mostraba usuarios con `rol === 'productor'`, excluyendo a los administradores — que no podían quedar asignados a un evento puntual para recibir el correo `aviso_comprobante` ni aprobar/rechazar por el enlace mágico. `productoresDisponibles` ahora también incluye `rol === 'administrador'`. Sin cambios de autorización: `tieneAccesoAlEvento()` ya deja pasar a cualquier `administrador` sin mirar `productores` (bypass existente) — esto es solo una conveniencia de notificación. `porterosDisponibles` no cambia (fuera de alcance, el usuario solo pidió Productores).
 3. **Mensaje de "compra ya resuelta" sin paréntesis extraño.** El texto `Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).` (mostrado a un segundo productor que visita el mismo enlace de aprobación tras otro ya haberla resuelto) tenía un paréntesis sin ningún destino real al que enlazar — decisión explícita con el usuario (`AskUserQuestion`): sin nada en `MEMORY.md` que indicara un destino concreto, se reformuló a texto plano simple, `RESUELTO_POR_ENLACE = 'otro miembro del equipo'`, en vez de inventar un enlace sin propósito claro.
+4. **Doble envío real al rechazar una compra (reportado en vivo, ver `MEMORY.md` §7 para el detalle completo).** El productor veía "ya fue resuelta" aunque el rechazo sí se aplicó (el cliente recibió el correo) y el `motivo` que escribió nunca llegó — confirmado con CloudWatch (dos invocaciones de Lambda a menos de 1 segundo de diferencia) y DynamoDB (`resueltoEn` coincide con ese instante exacto): un doble click/toque real que el `[disabled]` del botón no alcanza a bloquear. Corregido con una guarda de reentrada síncrona en `RevisarAprobacionComponent.aprobar()`/`rechazar()`, y persistiendo `motivoRechazo` en la propia compra (antes solo viajaba hasta el correo, se perdía si esa petición perdía la carrera).
 
-**Decisión tomada con el usuario antes de implementar (`AskUserQuestion`):** para el punto 3, no inventar un destino de enlace sin evidencia en la documentación del proyecto — reformular el texto en su lugar.
+**Decisiones tomadas con el usuario antes de implementar (`AskUserQuestion`):** para el punto 3, no inventar un destino de enlace sin evidencia en la documentación del proyecto — reformular el texto en su lugar.
 
 **Archivos:**
 - `server/api/services/correo-ses.ts`/`.spec.ts` — `NOMBRE_REMITENTE`, `Source` con formato RFC 5322.
 - `src/app/features/admin/gestion-eventos/editar-evento.component.ts`/`.spec.ts` — `productoresDisponibles` incluye `administrador`.
-- `server/api/handlers/aprobaciones.ts`/`.spec.ts` — `RESUELTO_POR_ENLACE` reformulado.
-- `src/app/core/api/aprobaciones.service.spec.ts`, `src/app/features/aprobaciones/revisar-aprobacion.component.spec.ts` — texto de prueba actualizado al nuevo mensaje.
+- `server/api/handlers/aprobaciones.ts`/`.spec.ts` — `RESUELTO_POR_ENLACE` reformulado, `motivoRechazo` persistido condicionalmente.
+- `src/app/features/aprobaciones/revisar-aprobacion.component.ts`/`.spec.ts` — guarda de reentrada síncrona en `aprobar()`/`rechazar()`.
+- `src/app/core/api/aprobaciones.service.spec.ts` — texto de prueba actualizado al nuevo mensaje.
 
 **Definition of done:**
 - [x] El remitente de los correos muestra "Taquilla Le Tiende" en vez del buzón crudo
 - [x] Un administrador aparece en el desplegable de Productores y, si se lo selecciona, recibe el correo de aviso de comprobante y puede aprobar/rechazar por el enlace
 - [x] El mensaje de "compra ya resuelta" ya no tiene un paréntesis sin destino
-- [x] `npm run test` (271) y `npm run test:api` (321) en verde
+- [x] Un doble click/toque real en "Aprobar"/"Rechazar" no dispara una segunda petición HTTP
+- [x] `motivoRechazo` queda persistido en la compra, no solo en el correo
+- [x] `npm run test` (272) y `npm run test:api` (322) en verde
 - [x] `npm run build`/`build:api` sin errores
 - [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
 

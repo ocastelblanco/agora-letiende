@@ -158,3 +158,8 @@ Specs definition,14/08/2026 23:35,14/08/2026 23:40,0:05:00,AI,Sonnet 5,Pregunta 
 Backend,14/08/2026 23:40,14/08/2026 23:55,0:15:00,AI,Sonnet 5,Nombre visible del remitente en SES y reformula mensaje de compra ya resuelta con pruebas,Claude Code,cli,medium
 Frontend,14/08/2026 23:55,15/08/2026 00:05,0:10:00,AI,Sonnet 5,Administradores aparecen en desplegable de productores con test de regresion nuevo,Claude Code,cli,medium
 Specs definition,15/08/2026 00:05,15/08/2026 00:25,0:20:00,AI,Sonnet 5,Actualiza TODO y memoria con segunda ronda de hotfixes pausa dominio personalizado de nuevo,Claude Code,cli,medium
+Backend,15/08/2026 00:25,15/08/2026 00:30,0:05:00,AI,Sonnet 5,Abre el PR 42 con los tres hotfixes y confirma CI en verde,Claude Code,cli,low
+Cloud infraestructura,15/08/2026 00:30,15/08/2026 00:45,0:15:00,AI,Sonnet 5,Investiga rechazo fallido confirma doble envio real con CloudWatch y DynamoDB,Claude Code,cli,high
+Frontend,15/08/2026 00:45,15/08/2026 00:55,0:10:00,AI,Sonnet 5,Corrige doble envio con guarda de reentrada sincrona en aprobar y rechazar con test,Claude Code,cli,high
+Backend,15/08/2026 00:55,15/08/2026 01:05,0:10:00,AI,Sonnet 5,Persiste motivoRechazo en la compra para no perderlo si la peticion pierde la carrera,Claude Code,cli,medium
+Specs definition,15/08/2026 01:05,15/08/2026 01:25,0:20:00,AI,Sonnet 5,Documenta gotcha de doble envio en TODO memoria y CLAUDE commit al PR 42 abierto,Claude Code,cli,medium
