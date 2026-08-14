@@ -115,18 +115,40 @@
           />
         </div>
 
-        <div>
-          <label for="productoresTexto" class="mb-1 block text-sm font-semibold text-primary">
-            Productores (correos separados por coma)
-          </label>
-          <input
-            id="productoresTexto"
-            type="text"
-            formControlName="productoresTexto"
-            placeholder="persona@letiende.co, otra@letiende.co"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-          />
-        </div>
+        @if (esProductor()) {
+          <div>
+            <span class="mb-1 block text-sm font-semibold text-primary">Productores</span>
+            <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
+              {{ productoresParaMostrar() }}
+            </p>
+          </div>
+          <div>
+            <span class="mb-1 block text-sm font-semibold text-primary">Porteros</span>
+            <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
+              {{ porterosParaMostrar() }}
+            </p>
+          </div>
+        } @else {
+          <mat-form-field appearance="outline">
+            <mat-label>Productores</mat-label>
+            <mat-select formControlName="productores" multiple>
+              @for (usuario of productoresDisponibles(); track usuario.email) {
+                <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+              }
+            </mat-select>
+            @if (formulario.controls.productores.invalid && formulario.controls.productores.touched) {
+              <mat-error>Se necesita al menos un productor.</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Porteros</mat-label>
+            <mat-select formControlName="porteros" multiple>
+              @for (usuario of porterosDisponibles(); track usuario.email) {
+                <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
 
         @if (!modoCrear()) {
           <div>
