@@ -127,3 +127,9 @@ Frontend,14/08/2026 11:10,14/08/2026 11:40,0:30:00,AI,Sonnet 5,Verificacion comp
 Specs definition,14/08/2026 11:40,14/08/2026 12:05,0:25:00,AI,Sonnet 5,Corrige estado desactualizado de PR 36 y 37 en MEMORY actualiza TODO y MEMORY con T7 completa y abre PR,Claude Code,cli,low
 Backend,14/08/2026 12:05,14/08/2026 12:10,0:05:00,AI,Sonnet 5,Apertura del PR 39 T7 productores y porteros contra main,Claude Code,cli,low
 Specs definition,14/08/2026 12:10,14/08/2026 12:39,0:29:00,AI,Sonnet 5,Validacion en vivo del PR 39 confirmada por el usuario recalculo del motor JIT con especificacion completa de T8 autorizacion real antes de la fusion,Claude Code,cli,medium
+Backend,14/08/2026 12:39,14/08/2026 12:45,0:06:00,AI,Sonnet 5,Fusion del PR 39 limpieza estandar de rama recrea y sincroniza claude tarea 1 mobile feasibility desde main,Claude Code,cli,low
+Backend,14/08/2026 12:45,14/08/2026 13:35,0:50:00,AI,Sonnet 5,T8 generaliza tieneAccesoAlEvento para portero aplica chequeo en ventas efectivo y boletas con lectura extra documentada,Claude Code,cli,high
+Backend,14/08/2026 13:35,14/08/2026 13:55,0:20:00,AI,Sonnet 5,T8 generaliza listarEventosPanel a exigirRol portero corrige mocks de vitest en specs de ventas efectivo y boletas,Claude Code,cli,medium
+Frontend,14/08/2026 13:55,14/08/2026 14:30,0:35:00,AI,Sonnet 5,T8 migra seleccion puerta y seleccion venta efectivo a PanelService con filtro local de estado y reescribe specs,Claude Code,cli,medium
+Frontend,14/08/2026 14:30,14/08/2026 14:50,0:20:00,AI,Sonnet 5,Verificacion completa T8 build y test frontend y backend en verde evalua y descarta migrar gestion eventos,Claude Code,cli,medium
+Specs definition,14/08/2026 14:50,14/08/2026 15:20,0:30:00,AI,Sonnet 5,Actualiza CLAUDE A01 TODO MEMORY y plan pre produccion con T8 completa pendiente de abrir PR,Claude Code,cli,low

@@ -136,7 +136,7 @@ Desglose técnico de `docs/ajustes-pre-producción.md` (documento de negocio de 
 
 La más grande y más sensible en seguridad de las cuatro fases — toca autorización real sobre dos rutas de dinero/control de acceso físico (venta en efectivo, validación en puerta). Dividida en dos tareas para no mezclar "cambio de modelo de datos y formulario" con "cambio de autorización en producción".
 
-### T7 — Modelo de datos y formulario: selección de productores/porteros por evento `[x] completada 14/08/2026, PR #39 abierto, validado en vivo, pendiente de fusión humana`
+### T7 — Modelo de datos y formulario: selección de productores/porteros por evento `[x] completada 14/08/2026, PR #39 fusionado`
 
 **Origen:** sección "Ajustes a la lógica de negocio → Limitación de alcance de productores y porteros" del documento de negocio.
 
@@ -156,7 +156,7 @@ La más grande y más sensible en seguridad de las cuatro fases — toca autoriz
 
 ---
 
-### T8 — Autorización real por evento para venta en efectivo y validación en puerta
+### T8 — Autorización real por evento para venta en efectivo y validación en puerta `[x] implementada 14/08/2026, PR pendiente de abrir`
 
 **Origen:** mismo ajuste de negocio que T7, la mitad de aplicación/autorización.
 
@@ -182,5 +182,5 @@ La más grande y más sensible en seguridad de las cuatro fases — toca autoriz
 5. ~~Completar Fase 1 (T1-T4)~~ — hecho (12/08/2026): PR #30/#31/#32/#33 fusionados, más el hotfix fuera de ciclo PR #34 (`MEMORY.md` §2/§7).
 6. ~~T5 (menú de dos niveles)~~ — hecho (13/08/2026): implementada, rediseñada a pedido del usuario (Material Tabs en el cuerpo en vez de segundo nivel en el header, ver nota bajo T5 arriba) y verificada en 2 rondas — **PR #36 fusionado**. La Tarea 1 de `TODO.md` pasó a **T6**; el slot de Tarea 2 quedó vacío hasta que T6 se fusionara (desbloqueó T7).
 7. ~~T6 (productor edita sus eventos)~~ — hecho (13/08/2026): implementada, verificada en 2 rondas (autorización completa, sin fuga) y con 2 bugs reales corregidos (uno de frontend encontrado por la verificación, uno de routing reportado en vivo por el usuario tras abrir el PR — ver nota bajo T7 arriba) — **PR #37 fusionado**. La Tarea 1 de `TODO.md` pasó a **T7**; el slot de Tarea 2 quedó vacío hasta que T7 se fusione (desbloquea T8, la última tarea del plan).
-8. ~~T7 (modelo de datos y formulario: productores/porteros)~~ — hecho (14/08/2026): `porteros: string[]` agregado al modelo, `normalizarCorreos()` compartido con la regla de mínimo un productor aplicada tanto a crear como a editar, selectores múltiples en `EditarEventoComponent` (solo lectura para `productor`, que nunca llama `GET /api/usuarios`) — **PR #39 abierto, validado en vivo por el usuario, pendiente de fusión humana**. La Tarea 1 de `TODO.md` pasó a **T8**, la última tarea del plan; el slot de Tarea 2 sigue vacío hasta que T8 se fusione (ahí el plan completo queda agotado).
-9. T8 (autorización real por evento) — especificación completa escrita en `TODO.md` como Tarea 1, sin implementar todavía. No fusionar su PR antes que el de T7 (PR #39), aunque el campo `porteros` que necesita ya exista en el código de la rama de trabajo.
+8. ~~T7 (modelo de datos y formulario: productores/porteros)~~ — hecho (14/08/2026): `porteros: string[]` agregado al modelo, `normalizarCorreos()` compartido con la regla de mínimo un productor aplicada tanto a crear como a editar, selectores múltiples en `EditarEventoComponent` (solo lectura para `productor`, que nunca llama `GET /api/usuarios`) — **PR #39 fusionado**. La Tarea 1 de `TODO.md` pasó a **T8**, la última tarea del plan.
+9. ~~T8 (autorización real por evento)~~ — hecho (14/08/2026): `tieneAccesoAlEvento()` generalizada para `portero`/`porteros` (sin función paralela), chequeo aplicado en `ventas-efectivo.ts` (sin lectura extra) y en `boletas.ts` (con lectura extra antes de la escritura condicional, decisión de rendimiento documentada en el código), `listarEventosPanel()` generalizado a `exigirRol('portero')` y consumido por `SeleccionVentaEfectivoComponent`/`SeleccionPuertaComponent` (con filtro local a `publicado`/`agotado`), `CLAUDE.md` §5 A01 actualizado. `GestionEventosComponent` evaluado y **no migrado** (necesita el `Evento` completo, no el `EventoPanel` mínimo). 286 pruebas backend + 270 frontend en verde, builds limpios — **PR pendiente de abrir**. Con esto, **el plan completo de `docs/plan-pre-produccion.md` queda agotado en cuanto este PR se fusione** — la siguiente recalculación de `TODO.md` vuelve al roadmap normal (Dominio personalizado, pausado en el Backlog).

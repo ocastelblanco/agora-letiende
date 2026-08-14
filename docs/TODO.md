@@ -2,7 +2,7 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Estado al cierre de sesión (14/08/2026):** T7 (modelo de datos y formulario: selección de productores/porteros por evento) implementada, verificada (270 pruebas backend + 268 frontend) y **validada en vivo en staging por el usuario** ("Todo funciona bien") — **PR #39 abierto, pendiente de fusión humana**. A pedido explícito del usuario, esta recalculación se hizo **antes** de la fusión, mismo criterio ya usado en todas las tareas del plan hasta ahora (T1/PR #30, XLSX/PR #25, `etapaId`/PR #26, T5/PR #36, T6/PR #37). **T8 (Fase 4, segunda mitad — la última tarea del plan) pasa a ser la Tarea 1**, sin empezar todavía: aplica la autorización real que T7 solo dejó modelada (`porteros` existe en el código de esta rama, aunque `main` todavía no lo tenga hasta que el PR #39 se fusione).
+**Estado al cierre de sesión (14/08/2026):** T7 fusionada (PR #39, validada en vivo por el usuario — "Todo funciona bien"). **T8 (Tarea 1, la última tarea del plan) implementada y verificada en esta sesión** (286 pruebas backend + 270 frontend en verde, `npm run build`/`build:api` sin errores): `tieneAccesoAlEvento()` generalizada para `portero`/`porteros`, chequeo aplicado en `ventas-efectivo.ts` y `boletas.ts` (con la decisión de rendimiento de la lectura extra documentada en el código), `listarEventosPanel()` generalizado a `exigirRol('portero')` y consumido por `SeleccionVentaEfectivoComponent`/`SeleccionPuertaComponent`, `CLAUDE.md` §5 A01 actualizado. Falta el último paso: abrir el PR para revisión humana (T7/PR #39 ya fusionado, así que la restricción de orden ya está satisfecha).
 
 **Nota sobre el slot 2, deliberadamente sin tarea por ahora:** no hay una segunda tarea del plan disponible en paralelo con T8 (es la última). El usuario ya definió explícitamente (12/08/2026) que Bold/WhatsApp/Google Calendar/Dominio personalizado quedan detrás de las 8 tareas del plan **mientras dure el plan** — no se rellena el slot con un ítem del roadmap v2 solo por mantener la cuenta de "2 tareas". El slot 2 se reactiva recién cuando T8 se fusione: ahí el plan completo queda agotado y la siguiente recalculación vuelve al roadmap normal (Dominio personalizado pausado en el Backlog, o v2).
 
@@ -26,14 +26,14 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 **Dependencias:** T7 (PR #39) — necesita `porteros` en el modelo de `Evento`, ya presente en el código de esta rama. **No fusionar el PR de T8 antes que el de T7.**
 
 **Definition of done:**
-- [ ] `tieneAccesoAlEvento()` resuelve `portero` contra `porteros`, generalizada en el mismo punto central — sin una segunda función paralela
-- [ ] `POST /api/ventas-efectivo` rechaza a un `portero` no asignado al evento (403), sin lectura extra (el evento ya se resuelve en el camino feliz)
-- [ ] `POST /api/boletas/:codigo/validar` rechaza a un `portero` no asignado al evento — decisión de rendimiento (lectura extra antes de la escritura condicional) evaluada y documentada explícitamente en el código
-- [ ] Endpoint de "mis eventos asignados" nuevo o generalizado (`listarEventosPanel` candidato), consumido por `SeleccionVentaEfectivoComponent`/`SeleccionPuertaComponent` en vez de la lista pública sin filtrar
-- [ ] `CLAUDE.md` §5 A01 actualizado para reflejar la regla ya vigente (portero + `porteros`, no solo productor)
-- [ ] `npm run test` y `npm run test:api` en verde
-- [ ] `npm run build`/`build:api` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**, y sin fusionarse antes que el PR de T7
+- [x] `tieneAccesoAlEvento()` resuelve `portero` contra `porteros`, generalizada en el mismo punto central — sin una segunda función paralela
+- [x] `POST /api/ventas-efectivo` rechaza a un `portero` no asignado al evento (403), sin lectura extra (el evento ya se resuelve en el camino feliz)
+- [x] `POST /api/boletas/:codigo/validar` rechaza a un `portero` no asignado al evento — decisión de rendimiento (lectura extra antes de la escritura condicional) evaluada y documentada explícitamente en el código
+- [x] Endpoint de "mis eventos asignados" nuevo o generalizado (`listarEventosPanel`, `exigirRol` bajado a `'portero'`), consumido por `SeleccionVentaEfectivoComponent`/`SeleccionPuertaComponent` en vez de la lista pública sin filtrar. Evaluado (no migrado, decisión deliberada): `GestionEventosComponent` sigue con `EventosService`/`GET /api/eventos` — su tabla necesita el `Evento` completo (columna `sillas`) y acciones de administrador (crear/eliminar) que `EventoPanel` no trae; migrarlo no ahorraba código y sí perdía una columna.
+- [x] `CLAUDE.md` §5 A01 actualizado para reflejar la regla ya vigente (portero + `porteros`, no solo productor)
+- [x] `npm run test` y `npm run test:api` en verde (286 backend, 270 frontend)
+- [x] `npm run build`/`build:api` sin errores
+- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**, y sin fusionarse antes que el PR de T7 (T7/PR #39 ya fusionado — restricción satisfecha; falta abrir el PR de esta tarea)
 
 ---
 
