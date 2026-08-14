@@ -23,8 +23,13 @@ const canalNotificacion = new CanalCorreoSes();
 // no identifica a un productor específico, así que "quién resolvió" queda
 // como una marca genérica, no un nombre real (decisión de alcance explícita,
 // TODO.md Tarea 2: CU-10 exige distinguir un "ya resuelta", no exige que el
-// agente invente una identidad que no puede verificar).
-const RESUELTO_POR_ENLACE = 'un productor del equipo (enlace de aprobación)';
+// agente invente una identidad que no puede verificar). Reformulado (hotfix
+// pre-producción, 14/08/2026): el paréntesis original ("un productor del
+// equipo (enlace de aprobación)") describía el mecanismo, no agregaba
+// información útil para quien lee el mensaje, y no hay ningún destino real
+// al que enlazarlo — se prefirió texto plano y simple sobre inventar un
+// enlace sin propósito claro.
+const RESUELTO_POR_ENLACE = 'otro miembro del equipo';
 
 interface ClienteCompra {
   nombre: string;

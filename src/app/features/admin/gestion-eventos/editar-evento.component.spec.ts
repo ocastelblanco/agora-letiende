@@ -500,6 +500,23 @@ describe('EditarEventoComponent', () => {
       expect(cargarUsuariosMock).toHaveBeenCalledTimes(1);
     });
 
+    it('incluye a los administradores en el desplegable de productores, para que puedan recibir correos de aprobación si se los selecciona (hotfix pre-producción, 14/08/2026)', async () => {
+      const usuariosConAdmin: Usuario[] = [
+        ...usuariosEjemplo,
+        { email: 'admin@letiende.co', nombre: 'Ana Admin', rol: 'administrador', activo: true, creadoEn: '2026-08-01T00:00:00.000Z' },
+      ];
+      const { fixture } = configurarPrueba({ usuarios: usuariosConAdmin });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      expect(componente['productoresDisponibles']().map((u: Usuario) => u.email)).toEqual([
+        'productor@letiende.co',
+        'admin@letiende.co',
+      ]);
+      // Porteros no cambia: el hotfix es exclusivo del desplegable de productores.
+      expect(componente['porterosDisponibles']().map((u: Usuario) => u.email)).toEqual(['portero@letiende.co']);
+    });
+
     it('precarga productores/porteros con los correos del evento existente', async () => {
       const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
       await activarConId(fixture, 'e1');

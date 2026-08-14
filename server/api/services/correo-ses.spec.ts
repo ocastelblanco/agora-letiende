@@ -31,7 +31,7 @@ describe('enviarCorreo', () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     const comando = sendMock.mock.calls[0]?.[0];
     expect(comando.input).toMatchObject({
-      Source: 'taquilla@letiende.co',
+      Source: '"Taquilla Le Tiende" <taquilla@letiende.co>',
       Destination: { ToAddresses: ['cliente@correo.com'] },
       Message: {
         Subject: { Data: 'Carga tu comprobante', Charset: 'UTF-8' },

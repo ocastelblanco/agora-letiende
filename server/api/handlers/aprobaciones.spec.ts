@@ -223,7 +223,7 @@ describe('validación del token (compartida por los tres endpoints de enlace má
 
   it('responde 409 con quién la resolvió si la compra ya no está en_revision (CU-10)', async () => {
     sendMock.mockResolvedValueOnce({
-      Items: [{ ...compraEnRevision, estado: 'aprobada', resueltoPor: 'un productor del equipo (enlace de aprobación)' }],
+      Items: [{ ...compraEnRevision, estado: 'aprobada', resueltoPor: 'otro miembro del equipo' }],
     });
 
     const respuesta = await invocar('GET', { token: 'token-x' });

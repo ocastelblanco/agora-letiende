@@ -62,7 +62,7 @@ describe('RevisarAprobacionComponent', () => {
   it('muestra el error del backend si el token ya fue resuelto o expiró', async () => {
     const obtenerDetalleMock = vi
       .fn()
-      .mockResolvedValue({ exito: false, error: 'Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).' });
+      .mockResolvedValue({ exito: false, error: 'Esta compra ya fue resuelta por otro miembro del equipo.' });
     const { fixture } = configurarPrueba({ obtenerDetalleMock });
 
     await activarConToken(fixture, 'token-x');
