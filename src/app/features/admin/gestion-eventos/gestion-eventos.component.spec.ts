@@ -38,6 +38,7 @@ const eventoEjemplo: Evento = {
   mediosPago: ['efectivo'],
   plazoComprobanteMinutos: 10,
   productores: [],
+  porteros: [],
   estado: 'publicado',
   creadoEn: '2026-08-06T00:00:00.000Z',
   actualizadoEn: '2026-08-06T00:00:00.000Z',
