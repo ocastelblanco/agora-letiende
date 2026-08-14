@@ -125,3 +125,4 @@ Backend,14/08/2026 09:25,14/08/2026 10:10,0:45:00,AI,Sonnet 5,Implementa modelo 
 Frontend,14/08/2026 10:10,14/08/2026 11:10,1:00:00,AI,Sonnet 5,Selectores multiples de productores y porteros en editar-evento con vista de solo lectura para productor sin llamar GET usuarios,Claude Code,cli,high
 Frontend,14/08/2026 11:10,14/08/2026 11:40,0:30:00,AI,Sonnet 5,Verificacion completa build y test frontend backend corrige mock faltante de UsuariosService en prueba de integracion del router,Claude Code,cli,medium
 Specs definition,14/08/2026 11:40,14/08/2026 12:05,0:25:00,AI,Sonnet 5,Corrige estado desactualizado de PR 36 y 37 en MEMORY actualiza TODO y MEMORY con T7 completa y abre PR,Claude Code,cli,low
+Backend,14/08/2026 12:05,14/08/2026 12:10,0:05:00,AI,Sonnet 5,Apertura del PR 39 T7 productores y porteros contra main,Claude Code,cli,low

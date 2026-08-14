@@ -32,7 +32,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - [x] `PUT /api/eventos/:eventoId` permite modificar `productores`/`porteros` para `administrador` (sin cambios de alcance para `productor`, que sigue sin poder tocarlos — cubierto con dos pruebas nuevas de regresión, 403 sin escribir en DynamoDB)
 - [x] `npm run test` (268) y `npm run test:api` (270) en verde
 - [x] `npm run build`/`build:api` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+- [x] Todo entregado en una rama con PR abierto — **sin fusionar** (PR #39)
 
 ---
 
