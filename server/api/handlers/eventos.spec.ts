@@ -271,17 +271,226 @@ describe('handler de /api/eventos', () => {
       expect(respuesta.statusCode).toBe(200);
     });
 
-    it('ignora sillasDisponibles y sillasTotales en el payload de edición', async () => {
+    it('ignora sillasDisponibles enviado directo en el payload (nunca se acepta un valor literal)', async () => {
       sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
 
       await invocar('PUT', {
         eventoId: 'e1',
-        cuerpo: { nombre: 'X', sillasDisponibles: 1, sillasTotales: 1 },
+        cuerpo: { nombre: 'X', sillasDisponibles: 1 },
       });
 
       const comando = sendMock.mock.calls[0][0];
       expect(comando.input.UpdateExpression).not.toContain('sillasDisponibles');
-      expect(comando.input.UpdateExpression).not.toContain('sillasTotales');
+    });
+
+    describe('sillasTotales editable por administrador (hotfixes pre-producción)', () => {
+      it('ajusta sillasDisponibles por la diferencia, con aritmética relativa (nunca un valor absoluto)', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 150 } });
+
+        expect(sendMock).toHaveBeenCalledTimes(2);
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.UpdateExpression).toContain('sillasTotales = :nuevoSillasTotales');
+        expect(comandoUpdate.input.UpdateExpression).toContain(
+          'sillasDisponibles = sillasDisponibles + :deltaSillas',
+        );
+        expect(comandoUpdate.input.ExpressionAttributeValues[':nuevoSillasTotales']).toBe(150);
+        expect(comandoUpdate.input.ExpressionAttributeValues[':deltaSillas']).toBe(50);
+      });
+
+      it('permite reducir sillasTotales hasta exactamente lo ya vendido/reservado (delta negativo)', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        // comprometidas = 100 - 20 = 80
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 80 } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':deltaSillas']).toBe(-20);
+      });
+
+      it('responde 400 si el nuevo total es menor que lo ya vendido/reservado, sin escribir en DynamoDB', async () => {
+        sendMock.mockResolvedValueOnce({
+          Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+        });
+
+        // comprometidas = 80, pedir 79 debe rechazarse.
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 79 } });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('responde 404 si el evento no existe', async () => {
+        sendMock.mockResolvedValueOnce({ Item: undefined });
+
+        const respuesta = await invocar('PUT', { eventoId: 'inexistente', cuerpo: { sillasTotales: 100 } });
+
+        expect(respuesta.statusCode).toBe(404);
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('responde 400 si sillasTotales no es un entero positivo', async () => {
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 0 } });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('incluye la guarda optimista sobre sillasTotales y sobre sillasDisponibles nunca negativo en el ConditionExpression, sin aritmética (bug real de staging)', async () => {
+        // DynamoDB ConditionExpression no admite operadores aritméticos
+        // (`+`/`-`) — solo UpdateExpression los admite en su cláusula SET.
+        // Esta prueba habría pasado igual con la condición inválida de
+        // antes, porque el mock no valida sintaxis real de DynamoDB (por
+        // eso el bug solo apareció en staging); lo que sí verifica es que
+        // el umbral se precalculó en JS y la condición solo compara un
+        // `path` contra un `value`, nunca una suma dentro de la condición.
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 150 } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ConditionExpression).toContain('sillasTotales = :totalLeido');
+        expect(comandoUpdate.input.ConditionExpression).toContain(
+          'sillasDisponibles >= :minimoSillasDisponibles',
+        );
+        expect(comandoUpdate.input.ConditionExpression).not.toMatch(/sillasDisponibles\s*\+/);
+        expect(comandoUpdate.input.ExpressionAttributeValues[':totalLeido']).toBe(100);
+        // delta = 150 - 100 = +50 (aumenta el aforo) — el umbral nunca baja
+        // de 0 aunque el delta sea positivo.
+        expect(comandoUpdate.input.ExpressionAttributeValues[':minimoSillasDisponibles']).toBe(0);
+      });
+
+      it('calcula el umbral mínimo como -delta cuando se reduce sillasTotales, para que la condición siga siendo una comparación simple', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        // comprometidas = 80, nuevoTotal 85 → delta = -15 → umbral = 15.
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 85 } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':deltaSillas']).toBe(-15);
+        expect(comandoUpdate.input.ExpressionAttributeValues[':minimoSillasDisponibles']).toBe(15);
+      });
+
+      it('responde 409 (no 404) si la condición falla con sillasTotales en el payload (aforo cambió mientras editaban)', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', estado: 'publicado', sillasTotales: 100, sillasDisponibles: 20 },
+          })
+          .mockRejectedValueOnce(new ConditionalCheckFailedException());
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 150 } });
+
+        expect(respuesta.statusCode).toBe(409);
+      });
+
+      it('reactiva automáticamente a publicado un evento agotado si el nuevo aforo queda positivo', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: {
+              eventoId: 'e1',
+              estado: 'agotado',
+              sillasTotales: 100,
+              sillasDisponibles: 0,
+              fechaHora: '2026-09-15T01:00:00.000Z',
+              etapas: [{ etapaId: 'et1', cierraEn: '2026-09-10T00:00:00.000Z' }],
+            },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 120 } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':estado']).toBe('publicado');
+      });
+
+      it('no reactiva un evento agotado si el propio payload ya trae un estado explícito', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: {
+              eventoId: 'e1',
+              estado: 'agotado',
+              sillasTotales: 100,
+              sillasDisponibles: 0,
+              fechaHora: '2026-09-15T01:00:00.000Z',
+              etapas: [{ etapaId: 'et1', cierraEn: '2026-09-10T00:00:00.000Z' }],
+            },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 120, estado: 'finalizado' } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':estado']).toBe('finalizado');
+      });
+
+      it('no reactiva un evento agotado cuya vigencia ya terminó (no resucita un evento vencido)', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: {
+              eventoId: 'e1',
+              estado: 'agotado',
+              sillasTotales: 100,
+              sillasDisponibles: 0,
+              fechaHora: '2020-01-10T00:00:00.000Z',
+              etapas: [{ etapaId: 'et1', cierraEn: '2020-01-05T00:00:00.000Z' }],
+            },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 120 } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':estado']).toBeUndefined();
+      });
+
+      it('un productor no puede enviar sillasTotales: 403, sin escribir en DynamoDB', async () => {
+        exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosProductor });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { sillasTotales: 150 } });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('sillasTotales y etapas en el mismo payload comparten una única lectura previa', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: {
+              eventoId: 'e1',
+              estado: 'publicado',
+              sillasTotales: 100,
+              sillasDisponibles: 20,
+              etapas: [{ etapaId: 'et1' }],
+            },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { sillasTotales: 150, etapas: [{ ...etapaValida, etapaId: 'et1' }] },
+        });
+
+        // Una sola lectura (GetCommand) + una escritura (UpdateCommand) —
+        // nunca dos lecturas por venir ambos campos en el mismo payload.
+        expect(sendMock).toHaveBeenCalledTimes(2);
+      });
     });
 
     it('responde 400 si no hay campos para actualizar', async () => {

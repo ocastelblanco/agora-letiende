@@ -136,3 +136,20 @@ Specs definition,14/08/2026 14:50,14/08/2026 15:20,0:30:00,AI,Sonnet 5,Actualiza
 Backend,14/08/2026 15:20,14/08/2026 15:25,0:05:00,AI,Sonnet 5,Apertura del PR 40 T8 autorizacion real por evento y suscripcion a eventos del PR para monitoreo de CI,Claude Code,cli,low
 Specs definition,14/08/2026 15:25,14/08/2026 15:35,0:10:00,AI,Sonnet 5,Monitoreo periodico de CI y mergeability del PR 40 sin cambios hasta la aprobacion del usuario,Claude Code,cli,low
 Specs definition,14/08/2026 15:35,14/08/2026 16:00,0:25:00,AI,Sonnet 5,Usuario aprueba T8 en el PR 40 recalcula motor JIT a dominio personalizado actualiza plan pre produccion y memoria,Claude Code,cli,medium
+Backend,14/08/2026 16:00,14/08/2026 16:15,0:15:00,AI,Sonnet 5,Monitoreo de CI del ultimo commit del PR 40 confirma verde y fusion del PR limpieza estandar de rama tras el merge,Claude Code,cli,low
+Specs definition,14/08/2026 16:15,14/08/2026 16:45,0:30:00,AI,Sonnet 5,Usuario pide tres hotfixes pre produccion lee codigo real de eventos publicos eventos aforo compras y ventas efectivo,Claude Code,cli,medium
+Specs definition,14/08/2026 16:45,14/08/2026 16:55,0:10:00,AI,Sonnet 5,Cuatro preguntas de clarificacion sobre mecanismo de vigencia estado de cancelado vencido y ajuste de aforo,Claude Code,cli,low
+Backend,14/08/2026 16:55,14/08/2026 17:40,0:45:00,AI,Sonnet 5,Crea vigencia evento ts con estadoEfectivo haFinalizadoPorVigencia y finalizarSiVencido con pruebas,Claude Code,cli,high
+Backend,14/08/2026 17:40,14/08/2026 18:20,0:40:00,AI,Sonnet 5,Aplica vigencia real en eventos publicos listar detalle y sitemap con persistencia best effort y pruebas nuevas,Claude Code,cli,high
+Backend,14/08/2026 18:20,14/08/2026 18:50,0:30:00,AI,Sonnet 5,Aplica chequeo de vigencia en compras y ventas efectivo antes de etapa vigente agrega fechaHora a EventoParaCompra,Claude Code,cli,medium
+Backend,14/08/2026 18:50,14/08/2026 19:50,1:00:00,AI,Sonnet 5,Implementa sillasTotales editable en actualizarEvento con ajuste por delta guarda optimista y reactivacion automatica,Claude Code,cli,high
+Backend,14/08/2026 19:50,14/08/2026 20:00,0:10:00,AI,Sonnet 5,Agrega permiso UpdateItem a EventosPublicosLambdaRole en serverless yml y corre auditoria de costos,Claude Code,cli,low
+Frontend,14/08/2026 20:00,14/08/2026 20:30,0:30:00,AI,Sonnet 5,Habilita sillasTotales editable en editar evento component para administrador deshabilitado para productor,Claude Code,cli,medium
+Frontend,14/08/2026 20:30,14/08/2026 20:50,0:20:00,AI,Sonnet 5,Verificacion completa build y test frontend y backend en verde 320 backend 270 frontend,Claude Code,cli,medium
+Specs definition,14/08/2026 20:50,14/08/2026 21:20,0:30:00,AI,Sonnet 5,Documenta las tres reglas de negocio en PRD y tech specs actualiza TODO memoria y tracking,Claude Code,cli,low
+Workspace setting,14/08/2026 21:20,14/08/2026 21:23,0:03:00,AI,Sonnet 5,Cambia rama local a claude tarea 1 mobile feasibility para ayudar con ajustes al PR abierto,Claude Code,cli,low
+Backend,14/08/2026 21:23,14/08/2026 22:05,0:42:00,AI,Sonnet 5,Diagnostica Error interno al editar sillasTotales investiga CloudWatch y agrega logging real antes del 500,Claude Code,cli,high
+Backend,14/08/2026 22:05,14/08/2026 22:35,0:30:00,AI,Sonnet 5,Encuentra causa raiz DynamoDB ConditionExpression no admite aritmetica corrige a comparacion con umbral precalculado,Claude Code,cli,high
+Cloud infraestructure,14/08/2026 22:35,14/08/2026 22:55,0:20:00,AI,Sonnet 5,Investiga correo aprobacion no recibido confirma en SES envio sin rebote solo demora de entrega,Claude Code,cli,medium
+Backend,14/08/2026 22:55,14/08/2026 23:05,0:10:00,AI,Sonnet 5,Investiga compra rechazada automaticamente sin accion del productor usuario aclara malentendido sin cambios,Claude Code,cli,medium
+Specs definition,14/08/2026 23:05,14/08/2026 23:30,0:25:00,AI,Sonnet 5,Recalcula motor JIT actualiza TODO memoria CLAUDE con gotcha commit final al PR,Claude Code,cli,medium

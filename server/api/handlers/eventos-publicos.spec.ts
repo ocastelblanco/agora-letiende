@@ -42,9 +42,20 @@ const eventoAgotado = {
   nombre: 'Stand up',
   descripcion: 'Comedia',
   fechaHora: '2026-09-10T01:00:00.000Z',
-  etapas: [],
+  etapas: [{ etapaId: 'et2', nombre: 'Única', precio: 30000, cierraEn: '2026-09-10T00:00:00.000Z', orden: 1 }],
   estado: 'agotado',
   productores: [],
+};
+
+// Vencido con margen amplio (año 2020) para no depender de cuándo corre la
+// prueba — mismo criterio ya usado en el resto de fixtures "en el pasado"
+// del proyecto.
+const eventoVencido = {
+  ...eventoPublicado,
+  eventoId: 'e3',
+  slug: 'evento-vencido',
+  fechaHora: '2020-01-10T00:00:00.000Z',
+  etapas: [{ etapaId: 'et3', nombre: 'Única', precio: 20000, cierraEn: '2020-01-05T00:00:00.000Z', orden: 1 }],
 };
 
 describe('handler de /api/eventos-publicos', () => {
@@ -56,10 +67,11 @@ describe('handler de /api/eventos-publicos', () => {
   });
 
   describe('GET /api/eventos-publicos', () => {
-    it('combina publicado y agotado, ordena por fechaHora y excluye productores', async () => {
+    it('combina publicado, agotado y cancelado (vigente), ordena por fechaHora y excluye productores', async () => {
       sendMock
         .mockResolvedValueOnce({ Items: [eventoPublicado] })
-        .mockResolvedValueOnce({ Items: [eventoAgotado] });
+        .mockResolvedValueOnce({ Items: [eventoAgotado] })
+        .mockResolvedValueOnce({ Items: [] });
 
       const respuesta = await invocar('GET');
 
@@ -74,7 +86,10 @@ describe('handler de /api/eventos-publicos', () => {
     });
 
     it('agrega imagenUrl/logotipoUrl calculadas en el backend cuando existen las keys', async () => {
-      sendMock.mockResolvedValueOnce({ Items: [eventoPublicado] }).mockResolvedValueOnce({ Items: [] });
+      sendMock
+        .mockResolvedValueOnce({ Items: [eventoPublicado] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] });
 
       const respuesta = await invocar('GET');
 
@@ -88,7 +103,10 @@ describe('handler de /api/eventos-publicos', () => {
     });
 
     it('no incluye imagenUrl/logotipoUrl cuando el evento no tiene esas keys', async () => {
-      sendMock.mockResolvedValueOnce({ Items: [eventoAgotado] }).mockResolvedValueOnce({ Items: [] });
+      sendMock
+        .mockResolvedValueOnce({ Items: [eventoAgotado] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] });
 
       const respuesta = await invocar('GET');
 
@@ -97,12 +115,12 @@ describe('handler de /api/eventos-publicos', () => {
       expect(cuerpo[0].logotipoUrl).toBeUndefined();
     });
 
-    it('usa Query sobre estado-fechaHora-index para cada estado visible, nunca Scan', async () => {
+    it('usa Query sobre estado-fechaHora-index para cada estado que puede ser visible, nunca Scan', async () => {
       sendMock.mockResolvedValue({ Items: [] });
 
       await invocar('GET');
 
-      expect(sendMock).toHaveBeenCalledTimes(2);
+      expect(sendMock).toHaveBeenCalledTimes(3);
       for (const llamada of sendMock.mock.calls) {
         const comando = llamada[0];
         expect(comando.constructor.name).toBe('QueryCommand');
@@ -111,7 +129,55 @@ describe('handler de /api/eventos-publicos', () => {
       const estadosConsultados = sendMock.mock.calls.map(
         (llamada) => llamada[0].input.ExpressionAttributeValues[':estado'],
       );
-      expect(estadosConsultados.sort()).toEqual(['agotado', 'publicado']);
+      expect(estadosConsultados.sort()).toEqual(['agotado', 'cancelado', 'publicado']);
+    });
+
+    it('incluye un evento cancelado mientras todavía está vigente (hotfix 3)', async () => {
+      const eventoCancelado = { ...eventoPublicado, eventoId: 'e4', slug: 'cancelado-vigente', estado: 'cancelado' };
+      sendMock
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [eventoCancelado] });
+
+      const respuesta = await invocar('GET');
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo).toHaveLength(1);
+      expect(cuerpo[0].slug).toBe('cancelado-vigente');
+      expect(cuerpo[0].estado).toBe('cancelado');
+    });
+
+    it('excluye un evento publicado cuya vigencia ya terminó (hotfix 1) y lo finaliza best-effort', async () => {
+      sendMock
+        .mockResolvedValueOnce({ Items: [eventoVencido] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({}); // UpdateCommand best-effort de finalizarSiVencido
+
+      const respuesta = await invocar('GET');
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo).toHaveLength(0);
+      expect(sendMock).toHaveBeenCalledTimes(4);
+      const comandoUpdate = sendMock.mock.calls[3][0];
+      expect(comandoUpdate.constructor.name).toBe('UpdateCommand');
+      expect(comandoUpdate.input.Key).toEqual({ eventoId: 'e3' });
+      expect(comandoUpdate.input.ExpressionAttributeValues[':finalizado']).toBe('finalizado');
+      expect(comandoUpdate.input.ExpressionAttributeValues[':estadoActual']).toBe('publicado');
+    });
+
+    it('excluye un evento cancelado cuya vigencia ya terminó (hotfix 1 + 3)', async () => {
+      const eventoCanceladoVencido = { ...eventoVencido, eventoId: 'e5', estado: 'cancelado' };
+      sendMock
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [eventoCanceladoVencido] })
+        .mockResolvedValueOnce({});
+
+      const respuesta = await invocar('GET');
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo).toHaveLength(0);
     });
   });
 
@@ -161,6 +227,7 @@ describe('handler de /api/eventos-publicos', () => {
       });
 
       expect(respuesta.statusCode).toBe(404);
+      expect(sendMock).toHaveBeenCalledTimes(1);
     });
 
     it('responde 404 si el evento existe pero está finalizado', async () => {
@@ -172,9 +239,10 @@ describe('handler de /api/eventos-publicos', () => {
       });
 
       expect(respuesta.statusCode).toBe(404);
+      expect(sendMock).toHaveBeenCalledTimes(1);
     });
 
-    it('responde 404 si el evento existe pero está cancelado', async () => {
+    it('devuelve 200 si el evento está cancelado pero todavía vigente (hotfix 3)', async () => {
       sendMock.mockResolvedValue({ Items: [{ ...eventoPublicado, estado: 'cancelado' }] });
 
       const respuesta = await invocar('GET', {
@@ -182,12 +250,43 @@ describe('handler de /api/eventos-publicos', () => {
         slug: 'concierto-jazz',
       });
 
+      expect(respuesta.statusCode).toBe(200);
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.estado).toBe('cancelado');
+    });
+
+    it('responde 404 si el evento está cancelado y su vigencia ya terminó, y lo finaliza best-effort', async () => {
+      sendMock
+        .mockResolvedValueOnce({ Items: [{ ...eventoVencido, estado: 'cancelado' }] })
+        .mockResolvedValueOnce({});
+
+      const respuesta = await invocar('GET', {
+        rawPath: '/api/eventos-publicos/evento-vencido',
+        slug: 'evento-vencido',
+      });
+
       expect(respuesta.statusCode).toBe(404);
+      expect(sendMock).toHaveBeenCalledTimes(2);
+      const comandoUpdate = sendMock.mock.calls[1][0];
+      expect(comandoUpdate.constructor.name).toBe('UpdateCommand');
+      expect(comandoUpdate.input.ExpressionAttributeValues[':estadoActual']).toBe('cancelado');
+    });
+
+    it('responde 404 si el evento publicado ya venció por vigencia, y lo finaliza best-effort', async () => {
+      sendMock.mockResolvedValueOnce({ Items: [eventoVencido] }).mockResolvedValueOnce({});
+
+      const respuesta = await invocar('GET', {
+        rawPath: '/api/eventos-publicos/evento-vencido',
+        slug: 'evento-vencido',
+      });
+
+      expect(respuesta.statusCode).toBe(404);
+      expect(sendMock).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('GET /sitemap.xml', () => {
-    it('genera un urlset XML con solo los eventos en estado publicado', async () => {
+    it('genera un urlset XML con solo los eventos en estado publicado y vigentes', async () => {
       sendMock.mockResolvedValue({ Items: [eventoPublicado] });
 
       const respuesta = await invocar('GET', { rawPath: '/sitemap.xml' });
@@ -201,6 +300,15 @@ describe('handler de /api/eventos-publicos', () => {
       expect(comando.constructor.name).toBe('QueryCommand');
       expect(comando.input.IndexName).toBe('estado-fechaHora-index');
       expect(comando.input.ExpressionAttributeValues[':estado']).toBe('publicado');
+    });
+
+    it('excluye un evento publicado cuya vigencia ya terminó, sin escribir en la base de datos', async () => {
+      sendMock.mockResolvedValue({ Items: [eventoVencido] });
+
+      const respuesta = await invocar('GET', { rawPath: '/sitemap.xml' });
+
+      expect(respuesta.body).not.toContain('evento-vencido');
+      expect(sendMock).toHaveBeenCalledTimes(1);
     });
 
     it('escapa caracteres especiales del slug en el XML', async () => {

@@ -71,6 +71,7 @@ const eventoPublicado = {
   eventoId: 'evt-1',
   slug: 'concierto-jazz',
   nombre: 'Concierto de jazz',
+  fechaHora: '2026-09-15T01:00:00.000Z',
   estado: 'publicado',
   maxBoletasPorCompra: 4,
   mediosPago: ['efectivo', 'transferencia'],
@@ -202,6 +203,29 @@ describe('POST /api/ventas-efectivo', () => {
 
     expect(respuesta.statusCode).toBe(404);
     expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 404 si el evento venció por vigencia aunque el estado siga publicado, y lo finaliza best-effort (hotfixes pre-producción)', async () => {
+    sendMock
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            ...eventoPublicado,
+            fechaHora: '2020-01-10T00:00:00.000Z',
+            etapas: [{ ...eventoPublicado.etapas[0], cierraEn: '2020-01-05T00:00:00.000Z' }],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({});
+
+    const respuesta = await invocar('POST', cuerpoValido);
+
+    expect(respuesta.statusCode).toBe(404);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    const comandoUpdate = sendMock.mock.calls[1][0];
+    expect(comandoUpdate.constructor.name).toBe('UpdateCommand');
+    expect(comandoUpdate.input.Key).toEqual({ eventoId: 'evt-1' });
   });
 
   // TODO.md Tarea 1 (T8): autorización real por evento — un portero solo

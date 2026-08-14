@@ -44,6 +44,7 @@ const eventoPublicado = {
   eventoId: 'evt-1',
   slug: 'concierto-jazz',
   nombre: 'Concierto de jazz',
+  fechaHora: '2026-09-15T01:00:00.000Z',
   estado: 'publicado',
   maxBoletasPorCompra: 4,
   plazoComprobanteMinutos: 10,
@@ -188,6 +189,46 @@ describe('POST /api/compras', () => {
 
     expect(respuesta.statusCode).toBe(404);
     expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 404 si el evento venció por vigencia aunque el estado siga publicado, y lo finaliza best-effort (hotfixes pre-producción)', async () => {
+    sendMock
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            ...eventoPublicado,
+            fechaHora: '2020-01-10T00:00:00.000Z',
+            etapas: [{ ...eventoPublicado.etapas[0], cierraEn: '2020-01-05T00:00:00.000Z' }],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({});
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-jazz', cantidad: 1, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(404);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    const comandoUpdate = sendMock.mock.calls[1][0];
+    expect(comandoUpdate.constructor.name).toBe('UpdateCommand');
+    expect(comandoUpdate.input.Key).toEqual({ eventoId: 'evt-1' });
+  });
+
+  it('no bloquea la compra si solo la última etapa cerró pero la fecha del evento todavía no pasó', async () => {
+    // Caso ya cubierto por el 409 de "ninguna etapa vigente" — confirma que
+    // la vigencia (hotfix 1) no lo intercepta antes con un 404 distinto.
+    sendMock.mockResolvedValueOnce({
+      Items: [{ ...eventoPublicado, etapas: [{ ...eventoPublicado.etapas[0], cierraEn: '2020-01-01T00:00:00.000Z' }] }],
+    });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-jazz', cantidad: 1, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
   it('responde 400 si la cantidad supera maxBoletasPorCompra', async () => {

@@ -11,6 +11,7 @@ import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { CanalCorreoSes } from '../services/notificaciones';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
+import { finalizarSiVencido, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import { esEmailValido, esEnteroPositivo, esNombreClienteValido, esTelefonoValido, esTextoValido } from '../lib/validaciones';
 import {
   EstadoCompra,
@@ -101,6 +102,18 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
     return respuestaJson(404, { mensaje: 'No existe un evento publicado con ese slug' });
   }
 
+  const ahora = new Date();
+
+  // Vigencia real (hotfixes pre-producción), no solo el `estado`
+  // persistido — mismo criterio que `crearCompra()`/`eventos-publicos.ts`:
+  // un evento cuya fecha Y el cierre de su última etapa ya pasaron se trata
+  // como finalizado aunque el campo `estado` todavía diga `publicado`, con
+  // la misma actualización best-effort.
+  if (haFinalizadoPorVigencia(eventoEncontrado, ahora)) {
+    await finalizarSiVencido(process.env['TABLA_EVENTOS'], eventoEncontrado.eventoId, eventoEncontrado.estado);
+    return respuestaJson(404, { mensaje: 'No existe un evento publicado con ese slug' });
+  }
+
   // Autorización real por evento (`TODO.md` Tarea 1, T8): un portero solo
   // puede vender en efectivo para los eventos donde está en `porteros` — un
   // administrador o productor asignado también pasan (`tieneAccesoAlEvento`,
@@ -124,7 +137,6 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
     });
   }
 
-  const ahora = new Date();
   const etapa = etapaVigente(eventoEncontrado.etapas, ahora);
   if (!etapa) {
     return respuestaJson(409, { mensaje: 'No hay una etapa de boletería vigente para este evento' });

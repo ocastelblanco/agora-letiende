@@ -34,9 +34,13 @@ const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/web
  * `app.routes.ts` (`TODO.md` Tarea 1, T6) — alta y edición de
  * `agora-eventos` en un único componente, distinguidos por el parámetro de
  * ruta `id` (`'nuevo'` = modo crear; un productor nunca llega a ese modo,
- * solo a la edición de un evento donde está asignado). `sillasTotales` solo
- * se fija al crear — la edición nunca la toca (motor de aforo, roadmap #8,
- * todavía no existe; ver `server/api/handlers/eventos.ts`).
+ * solo a la edición de un evento donde está asignado). `sillasTotales` es
+ * editable por `administrador` también al editar (hotfixes pre-producción:
+ * "el administrador debe poder editar el número de sillas totales de un
+ * evento, en todo momento") — el backend (`server/api/handlers/eventos.ts`)
+ * ajusta `sillasDisponibles` por la diferencia, nunca acepta ese campo
+ * directo del cliente. Un `productor` nunca puede tocarlo (no está en
+ * `CAMPOS_EDITABLES_PRODUCTOR`), así que sigue deshabilitado para ese rol.
  *
  * El parámetro `id` se recibe como Signal input (`withComponentInputBinding()`
  * en `app.config.ts`), no leyendo `ActivatedRoute.snapshot` una sola vez:
@@ -330,10 +334,11 @@ export class EditarEventoComponent {
       porteros: evento.porteros,
       estado: evento.estado,
     });
-    // `slug` y `sillasTotales` no se editan tras crear (el slug es la URL
-    // pública; sillasTotales es del motor de aforo, ver docstring arriba).
+    // `slug` no se edita tras crear (es la URL pública) — `sillasTotales`
+    // SÍ es editable en edición para un `administrador` (ver docstring de
+    // la clase); para un `productor` se deshabilita más abajo, junto con el
+    // resto de campos fuera de su alcance (TODO.md Tarea 1, T6).
     this.formulario.controls.slug.disable();
-    this.formulario.controls.sillasTotales.disable();
 
     for (const medio of MEDIOS_PAGO) {
       this.formulario.controls.mediosPago.controls[medio.valor].setValue(
@@ -372,6 +377,7 @@ export class EditarEventoComponent {
       this.formulario.controls.nombre.disable();
       this.formulario.controls.descripcion.disable();
       this.formulario.controls.fechaHora.disable();
+      this.formulario.controls.sillasTotales.disable();
       this.formulario.controls.productores.disable();
       this.formulario.controls.porteros.disable();
       this.formulario.controls.estado.disable();
@@ -477,6 +483,7 @@ export class EditarEventoComponent {
               nombre: valores.nombre,
               descripcion: valores.descripcion,
               fechaHora: desdeInputBogota(valores.fechaHora),
+              sillasTotales: valores.sillasTotales,
               maxBoletasPorCompra: valores.maxBoletasPorCompra,
               plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
               etapas: this.etapasFormulario(),

@@ -8,6 +8,7 @@ import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { AforoInsuficienteError, ErrorAforo, EventoNoPublicadoError, reservarSillas } from '../services/aforo';
 import { generarTokenEnlace } from '../lib/enlaces-magicos';
+import { finalizarSiVencido, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import { CanalCorreoSes } from '../services/notificaciones';
 import {
   esEmailValido,
@@ -48,6 +49,12 @@ export interface EventoParaCompra {
   slug: string;
   nombre: string;
   estado: string;
+  // Presente en el ítem real desde siempre (nunca la escribe compras.ts),
+  // declarada recién ahora porque `haFinalizadoPorVigencia()` (hotfixes
+  // pre-producción) la necesita — mismo motivo que `productores`/`porteros`
+  // abajo, mismo criterio de "tipar solo lo que se lee, cuando algo empieza
+  // a leerlo".
+  fechaHora: string;
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
   mediosPago: MedioPago[];
@@ -156,13 +163,27 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return respuestaJson(404, { mensaje: 'No existe un evento publicado con ese slug' });
   }
 
+  const ahora = new Date();
+
+  // Vigencia real (hotfixes pre-producción), no solo el `estado` persistido
+  // — mismo criterio que `eventos-publicos.ts`: un evento cuya fecha Y el
+  // cierre de su última etapa ya pasaron se trata como finalizado aunque el
+  // campo `estado` todavía diga `publicado`, con la misma actualización
+  // best-effort. Se chequea ANTES que `etapaVigente()` de abajo para que un
+  // evento realmente terminado responda el mismo 404 "no existe" en vez del
+  // 409 "no hay etapa vigente" (ese 409 es para el caso más común y distinto
+  // de un evento vigente cuyas etapas configuradas ya cerraron todas).
+  if (haFinalizadoPorVigencia(eventoEncontrado, ahora)) {
+    await finalizarSiVencido(process.env['TABLA_EVENTOS'], eventoEncontrado.eventoId, eventoEncontrado.estado);
+    return respuestaJson(404, { mensaje: 'No existe un evento publicado con ese slug' });
+  }
+
   if (datos['cantidad'] > eventoEncontrado.maxBoletasPorCompra) {
     return respuestaJson(400, {
       mensaje: `El máximo de boletas por compra es ${eventoEncontrado.maxBoletasPorCompra}`,
     });
   }
 
-  const ahora = new Date();
   const etapa = etapaVigente(eventoEncontrado.etapas, ahora);
   if (!etapa) {
     return respuestaJson(409, { mensaje: 'No hay una etapa de boletería vigente para este evento' });
