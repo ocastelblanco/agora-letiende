@@ -2,60 +2,15 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Estado al cierre de sesión (14/08/2026):** T7 fusionada (PR #39, validada en vivo por el usuario — "Todo funciona bien"). **T8 (Tarea 1, la última tarea del plan) implementada y verificada en esta sesión** (286 pruebas backend + 270 frontend en verde, `npm run build`/`build:api` sin errores): `tieneAccesoAlEvento()` generalizada para `portero`/`porteros`, chequeo aplicado en `ventas-efectivo.ts` y `boletas.ts` (con la decisión de rendimiento de la lectura extra documentada en el código), `listarEventosPanel()` generalizado a `exigirRol('portero')` y consumido por `SeleccionVentaEfectivoComponent`/`SeleccionPuertaComponent`, `CLAUDE.md` §5 A01 actualizado. Falta el último paso: abrir el PR para revisión humana (T7/PR #39 ya fusionado, así que la restricción de orden ya está satisfecha).
+**Estado al cierre de sesión (14/08/2026):** T7 fusionada (PR #39). **T8 (la última tarea de `docs/plan-pre-produccion.md`) implementada, verificada (286 pruebas backend + 270 frontend, builds limpios) y aprobada por el usuario en vivo sobre staging** ("Funcionamiento aprobado") — **PR #40 abierto, pendiente de fusión humana**. Con T8, **el plan completo de las 8 tareas queda agotado** — misma disciplina de recalcular al validar, no al fusionar, ya usada en cada tarea del plan (T1/PR #30, XLSX/PR #25, `etapaId`/PR #26, T5/PR #36, T6/PR #37, T7/PR #39). El motor JIT vuelve al roadmap normal: **Dominio personalizado pasa a ser la Tarea 1** (única especificación ya completa y sin bloqueos externos en el Backlog); el slot de Tarea 2 queda sin asignar (ver nota abajo) porque no hay un segundo ítem sin bloqueo externo ni sin desglosar.
 
-**Nota sobre el slot 2, deliberadamente sin tarea por ahora:** no hay una segunda tarea del plan disponible en paralelo con T8 (es la última). El usuario ya definió explícitamente (12/08/2026) que Bold/WhatsApp/Google Calendar/Dominio personalizado quedan detrás de las 8 tareas del plan **mientras dure el plan** — no se rellena el slot con un ítem del roadmap v2 solo por mantener la cuenta de "2 tareas". El slot 2 se reactiva recién cuando T8 se fusione: ahí el plan completo queda agotado y la siguiente recalculación vuelve al roadmap normal (Dominio personalizado pausado en el Backlog, o v2).
-
----
-
-## Tarea 1 — [FEATURE]: Autorización real por evento para venta en efectivo y validación en puerta
-
-**Origen:** `docs/ajustes-pre-producción.md`, sección "Ajustes a la lógica de negocio → Limitación de alcance de productores y porteros" (mismo ajuste de negocio que T7) · `docs/plan-pre-produccion.md` Fase 4, T8 — segunda y última mitad, la mitad de aplicación/autorización real. Depende de T7 (PR #39, todavía sin fusionar): el campo `porteros` ya existe en el código de esta misma rama, así que la implementación puede empezar sin esperar el merge — pero el PR de esta tarea no debe fusionarse antes que el de T7.
-
-**Alcance:**
-- Generalizar `tieneAccesoAlEvento()` (`server/api/lib/autorizacion.ts:54-62`) para que, además de `administrador` (bypass, sin cambios) y `productor` (chequeo contra `productores`, sin cambios), también resuelva `portero` contra el nuevo campo `porteros`. Es la única función que ya centraliza esta pertenencia (`CLAUDE.md` §5, A01) — generalizarla ahí, nunca crear una segunda función paralela.
-- Aplicar el chequeo en `server/api/handlers/ventas-efectivo.ts`: `exigirRol('portero')` ya existe; agregar `tieneAccesoAlEvento(eventoEncontrado, permisos)` justo después de `buscarEventoPublicadoPorSlug()` (el evento completo ya está resuelto en ese punto — sin lectura extra).
-- Aplicar el chequeo en `server/api/handlers/boletas.ts` (`POST /api/boletas/:codigo/validar`, `exigirRol('portero')`). **Cuidado de rendimiento a evaluar y documentar explícitamente, no dejar implícito:** hoy esa ruta hace una única escritura condicional sin lectura previa en el camino feliz (`ConditionExpression: estado = 'valida' AND eventoId = :eventoId`) — la ruta más sensible a latencia del sistema (`PRD.md` §8, escaneo en ráfaga el día del evento). Agregar el chequeo de pertenencia exige una lectura del evento antes de esa escritura condicional; evaluar si el costo de esa lectura extra es aceptable frente al riesgo de seguridad de dejarlo sin chequear (probablemente sí) y dejar la decisión escrita en el código, no solo en este documento.
-- Nuevo endpoint (o generalización de uno existente) que devuelva solo los eventos asignados al usuario autenticado según su rol (`portero` → por `porteros`; `productor` → por `productores`; `administrador` → todos). Candidato natural: generalizar `listarEventosPanel()` (`server/api/handlers/reportes.ts`), que ya hace exactamente esto para `productor`/`administrador` vía `tieneAccesoAlEvento` — no triplicar la lógica. Consumido por `SeleccionVentaEfectivoComponent` y `SeleccionPuertaComponent`, que hoy listan **todos** los eventos publicados sin filtrar (vía `EventosPublicosService`, sin ningún contexto de usuario ni `Authorization`) — cambian a un cliente autenticado. Evaluar si conviene que `GestionEventosComponent` (lista "Eventos" de T6) también migre a este mismo endpoint en vez de mantener su propio filtro vía `GET /api/eventos`.
-- **El DoD debe incluir** actualizar `CLAUDE.md` §5 A01: la regla ya escrita ahí habla solo de "productor... la pertenencia se verifica contra el campo productores del evento" — generalizar la redacción para incluir portero/`porteros` una vez esto esté implementado (no antes: `CLAUDE.md` documenta reglas ya vigentes en el código, no un estado futuro).
-
-**Archivos:** `server/api/lib/autorizacion.ts`/`.spec.ts`, `server/api/handlers/ventas-efectivo.ts`/`.spec.ts`, `server/api/handlers/boletas.ts`/`.spec.ts`, `server/api/handlers/reportes.ts`/`.spec.ts` (si se generaliza `listarEventosPanel`), `src/app/features/evento/venta-efectivo/seleccion-venta-efectivo.component.ts`/`.spec.ts`, `src/app/features/puerta/seleccion-puerta.component.ts`/`.spec.ts`, `CLAUDE.md` §5 A01.
-
-**Riesgo:** es la tarea "más grande y más sensible en seguridad de las cuatro fases" del plan (palabras del propio `docs/plan-pre-produccion.md`) — toca autorización real sobre dos rutas de dinero/control de acceso físico. Verificación arquitectónica independiente recomendada antes de abrir el PR, mismo criterio ya usado en T5/T6. La decisión de rendimiento de `boletas.ts` (lectura extra sí/no) tiene consecuencia directa en el requisito de UX más estricto del producto (`PRD.md` §8) — no tomarla a la ligera.
-
-**Dependencias:** T7 (PR #39) — necesita `porteros` en el modelo de `Evento`, ya presente en el código de esta rama. **No fusionar el PR de T8 antes que el de T7.**
-
-**Definition of done:**
-- [x] `tieneAccesoAlEvento()` resuelve `portero` contra `porteros`, generalizada en el mismo punto central — sin una segunda función paralela
-- [x] `POST /api/ventas-efectivo` rechaza a un `portero` no asignado al evento (403), sin lectura extra (el evento ya se resuelve en el camino feliz)
-- [x] `POST /api/boletas/:codigo/validar` rechaza a un `portero` no asignado al evento — decisión de rendimiento (lectura extra antes de la escritura condicional) evaluada y documentada explícitamente en el código
-- [x] Endpoint de "mis eventos asignados" nuevo o generalizado (`listarEventosPanel`, `exigirRol` bajado a `'portero'`), consumido por `SeleccionVentaEfectivoComponent`/`SeleccionPuertaComponent` en vez de la lista pública sin filtrar. Evaluado (no migrado, decisión deliberada): `GestionEventosComponent` sigue con `EventosService`/`GET /api/eventos` — su tabla necesita el `Evento` completo (columna `sillas`) y acciones de administrador (crear/eliminar) que `EventoPanel` no trae; migrarlo no ahorraba código y sí perdía una columna.
-- [x] `CLAUDE.md` §5 A01 actualizado para reflejar la regla ya vigente (portero + `porteros`, no solo productor)
-- [x] `npm run test` y `npm run test:api` en verde (286 backend, 270 frontend)
-- [x] `npm run build`/`build:api` sin errores
-- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**, y sin fusionarse antes que el PR de T7 (T7/PR #39 ya fusionado — restricción satisfecha; falta abrir el PR de esta tarea)
+**Nota sobre el slot 2, deliberadamente sin tarea por ahora:** de lo que queda en el roadmap tras agotar el plan, Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — están bloqueados por prerrequisitos externos no de código (llaves/alta de WABA, ver "Pendientes que no son de código" abajo), y Google Calendar (#22) — v2, Media prioridad — todavía no está desglosado a nivel de tarea atómica y tiene una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Ninguno de los dos es una tarea que se pueda tomar hoy sin antes resolver algo fuera de este repositorio. El slot 2 se reactiva en cuanto uno de los dos deje de estar bloqueado, o cuando Google Calendar se desglose con el detalle suficiente para ser una Tarea atómica.
 
 ---
 
-## Tarea 2 — sin asignar, T8 es la última tarea del plan
+## Tarea 1 — [FEATURE]: Dominio personalizado `agora.letiende.co`
 
-No hay una segunda tarea atómica disponible en paralelo con T8: es la última de las 8 tareas de `docs/plan-pre-produccion.md`. Ver la nota de la cabecera de este documento para el razonamiento completo de por qué este slot no se rellena con un ítem del roadmap v2 mientras tanto.
-
-**Se reactiva con el primer ítem del roadmap normal (Dominio personalizado, pausado en el Backlog, o v2) en cuanto T8 se fusione — ahí el plan completo queda agotado.**
-
----
-
-## Backlog
-
-Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, más grande que las tareas del plan de abajo y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
-
-**⚠️ Prioridad temporal, por delante de lo anterior:** el usuario definió `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) — deben completarse **en su totalidad** antes de cualquier prueba UAT, así que superan en prioridad a Bold/WhatsApp/Google Calendar/Dominio personalizado mientras dure este plan. Fase 1 completa (T1-T4), T5 (PR #36) y T6 (PR #37) fusionadas (ver `MEMORY.md` §2). T7 (modelo de datos y formulario: productores/porteros) implementada, verificada y **validada en vivo por el usuario** — **PR #39 abierto**, pendiente de fusión humana. El motor JIT tiene ahora **T8 activa como Tarea 1** — la última tarea del plan; el slot de Tarea 2 queda deliberadamente sin tarea (ver nota de cabecera) hasta que T8 se fusione, momento en el que el plan completo queda agotado.
-
-### Pausada, no eliminada — Dominio personalizado `agora.letiende.co`
-
-A pedido explícito del usuario (12/08/2026): queda detrás de las 8 tareas de `docs/plan-pre-produccion.md`, para poder usar ambos slots del motor JIT en el plan — no bloquea UAT (que corre contra `staging`, sin dominio propio). Especificación completa preservada tal cual, sin resumir, para retomarla sin re-derivar nada cuando el plan esté agotado:
-
-**Origen:** `tech-specs.md` §11 ítem 17 (depende solo de #2, infraestructura base, ya completa) · `tech-specs.md` §7.1 (diagrama de despliegue: CloudFront "opcional en v1, requerido para dominio propio") y §7.2 (tabla de entornos: `production` ya apunta a `https://agora.letiende.co`, todavía sin aprovisionar) · `CLAUDE.md` §7 (gotcha heredado de Babel: `NG_ALLOWED_HOSTS` debe configurarse junto con el dominio, no después de que producción falle)
+**Origen:** `tech-specs.md` §11 ítem 17 (depende solo de #2, infraestructura base, ya completa) · `tech-specs.md` §7.1 (diagrama de despliegue: CloudFront "opcional en v1, requerido para dominio propio") y §7.2 (tabla de entornos: `production` ya apunta a `https://agora.letiende.co`, todavía sin aprovisionar) · `CLAUDE.md` §7 (gotcha heredado de Babel: `NG_ALLOWED_HOSTS` debe configurarse junto con el dominio, no después de que producción falle). Pausada a pedido explícito del usuario (12/08/2026) detrás de las 8 tareas de `docs/plan-pre-produccion.md`, que ya quedaron agotadas con T8 — se retoma tal cual estaba especificada, sin re-derivar nada.
 
 **Alcance:** montar `agora.letiende.co` como dominio propio de `production`, con TLS, sobre la infraestructura ya desplegada (API Gateway HTTP API + Lambda SSR). `staging` sigue sin dominio propio (URL plana de API Gateway, sin cambios). No incluye nada de fase 2 (Bold, WhatsApp, Calendar).
 
@@ -79,6 +34,20 @@ A pedido explícito del usuario (12/08/2026): queda detrás de las 8 tareas de `
 - [ ] Verificado por CLI tras desplegar, no solo el IaC (certificado en estado `ISSUED`, dominio resuelve, `GET /` responde 200 con TLS válido)
 - [ ] Revisión de costo real agendada a las 48 horas del despliegue (`CLAUDE.md` §5-bis, paso 4)
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
+
+---
+
+## Tarea 2 — sin asignar, sin candidato sin bloqueo externo
+
+Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Google Calendar (#22) — v2, Media prioridad — sin desglosar todavía y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Ninguno es una tarea atómica lista para tomar hoy.
+
+**Se reactiva cuando alguno de los prerrequisitos externos de Bold/WhatsApp se resuelva, o cuando Google Calendar se desglose con el nivel de detalle de una tarea atómica.**
+
+---
+
+## Backlog
+
+Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) **completo** — T1-T4 (Fase 1), T5 (PR #36), T6 (PR #37), T7 (PR #39) fusionadas; T8 (PR #40) implementada, verificada y aprobada por el usuario, pendiente de fusión (ver `MEMORY.md` §2). Dominio personalizado (roadmap #17), la única especificación ya lista y sin bloqueos externos, pasa a ser la **Tarea 1** activa. De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
 
 ---
 
