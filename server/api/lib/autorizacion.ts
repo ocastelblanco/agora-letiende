@@ -24,13 +24,21 @@ export async function exigirRol(
     if (error instanceof ErrorAutenticacion) {
       return { autorizado: false, respuesta: respuestaJson(401, { mensaje: 'No autenticado' }) };
     }
+    console.error('verificarToken falló de forma inesperada', {
+      nombreError: error instanceof Error ? error.name : 'error desconocido',
+      mensajeError: error instanceof Error ? error.message : undefined,
+    });
     return { autorizado: false, respuesta: respuestaJson(500, { mensaje: 'Error interno' }) };
   }
 
   let permisos: PermisosUsuario | null;
   try {
     permisos = await resolverPermisos(email);
-  } catch {
+  } catch (error) {
+    console.error('resolverPermisos falló de forma inesperada', {
+      nombreError: error instanceof Error ? error.name : 'error desconocido',
+      mensajeError: error instanceof Error ? error.message : undefined,
+    });
     return { autorizado: false, respuesta: respuestaJson(500, { mensaje: 'Error interno' }) };
   }
 

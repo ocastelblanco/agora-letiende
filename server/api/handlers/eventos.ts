@@ -856,7 +856,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (
       default:
         return respuestaJson(405, { mensaje: 'Método no soportado' });
     }
-  } catch {
+  } catch (error) {
+    // Se registra el error real (sin datos personales del cliente, CLAUDE.md
+    // §5 A09) porque el 500 genérico de más abajo, sin esto, deja cualquier
+    // fallo del backend indistinguible en CloudWatch — solo aparecen las
+    // líneas START/END/REPORT de Lambda, sin pista de la causa.
+    console.error('actualizarEvento/crearEvento/eliminarEvento falló', {
+      metodo: evento.requestContext.http.method,
+      eventoId,
+      nombreError: error instanceof Error ? error.name : 'error desconocido',
+      mensajeError: error instanceof Error ? error.message : undefined,
+    });
     return respuestaJson(500, { mensaje: 'Error interno' });
   }
 };
