@@ -167,3 +167,9 @@ Cloud infraestructura,15/08/2026 01:25,15/08/2026 01:40,0:15:00,AI,Sonnet 5,Inve
 Specs definition,15/08/2026 01:40,15/08/2026 01:45,0:05:00,AI,Sonnet 5,Usuario exige SLA de 15 minutos pregunta mecanismo elige liberacion activa,Claude Code,cli,low
 Backend,15/08/2026 01:45,15/08/2026 02:05,0:20:00,AI,Sonnet 5,Implementa liberarReservasVencidas en aforo con reintento y permisos IAM con pruebas,Claude Code,cli,high
 Specs definition,15/08/2026 02:05,15/08/2026 02:25,0:20:00,AI,Sonnet 5,Documenta SLA de liberacion de aforo en TODO memoria commit al PR 42 abierto,Claude Code,cli,medium
+Workspace setting,15/08/2026 02:25,15/08/2026 02:30,0:05:00,AI,Sonnet 5,Confirma fusion del PR 42 limpieza estandar vuelta a main,Claude Code,cli,low
+Cloud infraestructura,15/08/2026 02:30,15/08/2026 03:10,0:40:00,AI,Sonnet 5,Audita estado real de produccion stack secretos tablas route53 y presupuesto por CLI,Claude Code,cli,high
+Specs definition,15/08/2026 03:10,15/08/2026 03:15,0:05:00,AI,Sonnet 5,Reporta gaps de lanzamiento pregunta mecanismo de dominio y correo admin,Claude Code,cli,low
+Cloud infraestructura,15/08/2026 03:15,15/08/2026 03:25,0:10:00,AI,Sonnet 5,Corrige secreto SES_REMITENTE con espacio y crea usuario administrador inicial,Claude Code,cli,medium
+Cloud infraestructura,15/08/2026 03:25,15/08/2026 04:05,0:40:00,AI,Sonnet 5,Implementa dominio personalizado en serverless replicando patron de Babel ADR-013,Claude Code,cli,high
+Specs definition,15/08/2026 04:05,15/08/2026 04:30,0:25:00,AI,Sonnet 5,Documenta ADR-013 auditoria de produccion en TODO y memoria abre PR de dominio,Claude Code,cli,medium
