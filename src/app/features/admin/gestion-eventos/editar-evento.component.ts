@@ -92,9 +92,20 @@ export class EditarEventoComponent {
    * que pedirlo devolvería 403 sin ningún beneficio — el productor ve estos
    * campos de solo lectura (ver plantilla), no necesita el directorio
    * completo de personal para eso.
+   *
+   * `productoresDisponibles` incluye también `administrador` (hotfix
+   * pre-producción, 14/08/2026): un administrador puede quedar asignado como
+   * productor de un evento puntual para recibir el correo `aviso_comprobante`
+   * y poder aprobar/rechazar compras por el enlace mágico, sin que eso le
+   * quite ni le agregue ningún permiso — `tieneAccesoAlEvento()` ya deja
+   * pasar a cualquier `administrador` sin mirar `productores` (bypass
+   * existente), así que esto es solo una conveniencia de notificación, no un
+   * cambio de autorización.
    */
   protected readonly productoresDisponibles = computed(() =>
-    this.usuariosService.usuarios().filter((u) => u.rol === 'productor'),
+    this.usuariosService
+      .usuarios()
+      .filter((u) => u.rol === 'productor' || u.rol === 'administrador'),
   );
   protected readonly porterosDisponibles = computed(() =>
     this.usuariosService.usuarios().filter((u) => u.rol === 'portero'),

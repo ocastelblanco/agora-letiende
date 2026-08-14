@@ -153,3 +153,17 @@ Backend,14/08/2026 22:05,14/08/2026 22:35,0:30:00,AI,Sonnet 5,Encuentra causa ra
 Cloud infraestructure,14/08/2026 22:35,14/08/2026 22:55,0:20:00,AI,Sonnet 5,Investiga correo aprobacion no recibido confirma en SES envio sin rebote solo demora de entrega,Claude Code,cli,medium
 Backend,14/08/2026 22:55,14/08/2026 23:05,0:10:00,AI,Sonnet 5,Investiga compra rechazada automaticamente sin accion del productor usuario aclara malentendido sin cambios,Claude Code,cli,medium
 Specs definition,14/08/2026 23:05,14/08/2026 23:30,0:25:00,AI,Sonnet 5,Recalcula motor JIT actualiza TODO memoria CLAUDE con gotcha commit final al PR,Claude Code,cli,medium
+Workspace setting,14/08/2026 23:30,14/08/2026 23:35,0:05:00,AI,Sonnet 5,Confirma fusion del PR 41 limpieza estandar vuelta a main y crea rama para nuevos hotfixes,Claude Code,cli,low
+Specs definition,14/08/2026 23:35,14/08/2026 23:40,0:05:00,AI,Sonnet 5,Pregunta al usuario destino del enlace en mensaje de aprobacion decide reformular texto,Claude Code,cli,low
+Backend,14/08/2026 23:40,14/08/2026 23:55,0:15:00,AI,Sonnet 5,Nombre visible del remitente en SES y reformula mensaje de compra ya resuelta con pruebas,Claude Code,cli,medium
+Frontend,14/08/2026 23:55,15/08/2026 00:05,0:10:00,AI,Sonnet 5,Administradores aparecen en desplegable de productores con test de regresion nuevo,Claude Code,cli,medium
+Specs definition,15/08/2026 00:05,15/08/2026 00:25,0:20:00,AI,Sonnet 5,Actualiza TODO y memoria con segunda ronda de hotfixes pausa dominio personalizado de nuevo,Claude Code,cli,medium
+Backend,15/08/2026 00:25,15/08/2026 00:30,0:05:00,AI,Sonnet 5,Abre el PR 42 con los tres hotfixes y confirma CI en verde,Claude Code,cli,low
+Cloud infraestructura,15/08/2026 00:30,15/08/2026 00:45,0:15:00,AI,Sonnet 5,Investiga rechazo fallido confirma doble envio real con CloudWatch y DynamoDB,Claude Code,cli,high
+Frontend,15/08/2026 00:45,15/08/2026 00:55,0:10:00,AI,Sonnet 5,Corrige doble envio con guarda de reentrada sincrona en aprobar y rechazar con test,Claude Code,cli,high
+Backend,15/08/2026 00:55,15/08/2026 01:05,0:10:00,AI,Sonnet 5,Persiste motivoRechazo en la compra para no perderlo si la peticion pierde la carrera,Claude Code,cli,medium
+Specs definition,15/08/2026 01:05,15/08/2026 01:25,0:20:00,AI,Sonnet 5,Documenta gotcha de doble envio en TODO memoria y CLAUDE commit al PR 42 abierto,Claude Code,cli,medium
+Cloud infraestructura,15/08/2026 01:25,15/08/2026 01:40,0:15:00,AI,Sonnet 5,Investiga silla no liberada verifica streams TTL y event source mapping sanos,Claude Code,cli,high
+Specs definition,15/08/2026 01:40,15/08/2026 01:45,0:05:00,AI,Sonnet 5,Usuario exige SLA de 15 minutos pregunta mecanismo elige liberacion activa,Claude Code,cli,low
+Backend,15/08/2026 01:45,15/08/2026 02:05,0:20:00,AI,Sonnet 5,Implementa liberarReservasVencidas en aforo con reintento y permisos IAM con pruebas,Claude Code,cli,high
+Specs definition,15/08/2026 02:05,15/08/2026 02:25,0:20:00,AI,Sonnet 5,Documenta SLA de liberacion de aforo en TODO memoria commit al PR 42 abierto,Claude Code,cli,medium

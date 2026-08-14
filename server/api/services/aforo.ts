@@ -1,4 +1,4 @@
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from './dynamodb';
 
 /**
@@ -60,24 +60,119 @@ async function clasificarFalloReserva(eventoId: string): Promise<ErrorAforo> {
   }
 }
 
+async function intentarReservar(eventoId: string, cantidad: number): Promise<void> {
+  await documentoDynamoDB.send(
+    new UpdateCommand({
+      TableName: process.env['TABLA_EVENTOS'],
+      Key: { eventoId },
+      UpdateExpression:
+        'SET sillasDisponibles = sillasDisponibles - :n, sillasReservadas = sillasReservadas + :n',
+      ConditionExpression: 'sillasDisponibles >= :n AND estado = :publicado',
+      ExpressionAttributeValues: { ':n': cantidad, ':publicado': 'publicado' },
+    }),
+  );
+}
+
+/**
+ * Libera activamente las reservas de ESTE evento cuyo `expiraEn` ya pasó,
+ * sin esperar al TTL de DynamoDB — hotfix pre-producción (14/08/2026): el
+ * TTL no ofrece ninguna garantía de tiempo ("típicamente 48 horas"), pero el
+ * SLA de negocio exige que competir por la última silla nunca espere más de
+ * 15 minutos a una reserva ya vencida (decisión tomada con el usuario,
+ * `AskUserQuestion`: liberación activa solo al competir por cupo, sin
+ * infraestructura nueva, en vez de un barrido programado). Se invoca
+ * exclusivamente desde `reservarSillas()` cuando la escritura condicional ya
+ * falló — nunca en el camino feliz, así que no le agrega costo a una
+ * reserva que de todas formas iba a tener éxito.
+ *
+ * Cada compra vencida se transiciona a `expirada` con su propia escritura
+ * condicional **antes** de liberar su aforo — evita liberar dos veces la
+ * misma reserva si el TTL real la borra mientras tanto (el consumidor de
+ * Streams de `liberar-reservas.ts` ignora `expirada`, no está en
+ * `ESTADOS_QUE_RETIENEN_AFORO`) o si dos reservas compitiendo la reclaman a
+ * la vez. Best-effort de principio a fin: cualquier fallo aquí nunca debe
+ * impedir el reintento de la reserva que sí importa — el TTL real sigue
+ * siendo la red de seguridad final.
+ */
+async function liberarReservasVencidas(eventoId: string): Promise<void> {
+  const ahoraEpoch = Math.floor(Date.now() / 1000);
+
+  let vencidas: Record<string, unknown>[];
+  try {
+    const resultado = await documentoDynamoDB.send(
+      new QueryCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        IndexName: 'eventoId-creadaEn-index',
+        KeyConditionExpression: 'eventoId = :eventoId',
+        FilterExpression: 'estado = :esperando AND expiraEn < :ahora',
+        ExpressionAttributeValues: {
+          ':eventoId': eventoId,
+          ':esperando': 'esperando_comprobante',
+          ':ahora': ahoraEpoch,
+        },
+      }),
+    );
+    vencidas = resultado.Items ?? [];
+  } catch {
+    return;
+  }
+
+  for (const compra of vencidas) {
+    const compraId = compra['compraId'];
+    const cantidadCompra = compra['cantidad'];
+    if (typeof compraId !== 'string' || typeof cantidadCompra !== 'number') {
+      continue;
+    }
+
+    try {
+      await documentoDynamoDB.send(
+        new UpdateCommand({
+          TableName: process.env['TABLA_COMPRAS'],
+          Key: { compraId },
+          UpdateExpression: 'SET estado = :expirada',
+          ConditionExpression: 'estado = :esperando',
+          ExpressionAttributeValues: { ':expirada': 'expirada', ':esperando': 'esperando_comprobante' },
+        }),
+      );
+    } catch {
+      // Condición fallida (alguien más ya la procesó) o cualquier otro
+      // error: se ignora esta compra puntual y se sigue con las demás.
+      continue;
+    }
+
+    try {
+      await liberarSillas(eventoId, cantidadCompra);
+    } catch {
+      // Best-effort — si esto falla, el TTL real de esa compra la recupera
+      // más adelante (su estado ya no retiene aforo según liberar-reservas.ts,
+      // así que ese camino tampoco duplicaría la liberación si llegara a
+      // tener éxito después).
+    }
+  }
+}
+
 /**
  * Reserva `cantidad` sillas al iniciar una compra (`tech-specs.md` §5.4
  * paso 1). Única escritura condicional: resta de `sillasDisponibles` y
  * suma a `sillasReservadas` a la vez, solo si hay aforo suficiente y el
- * evento está `publicado`.
+ * evento está `publicado`. Si la primera escritura falla, libera
+ * activamente las reservas vencidas de este evento (`liberarReservasVencidas`)
+ * y reintenta una sola vez antes de clasificar el fallo como definitivo.
  */
 export async function reservarSillas(eventoId: string, cantidad: number): Promise<void> {
   try {
-    await documentoDynamoDB.send(
-      new UpdateCommand({
-        TableName: process.env['TABLA_EVENTOS'],
-        Key: { eventoId },
-        UpdateExpression:
-          'SET sillasDisponibles = sillasDisponibles - :n, sillasReservadas = sillasReservadas + :n',
-        ConditionExpression: 'sillasDisponibles >= :n AND estado = :publicado',
-        ExpressionAttributeValues: { ':n': cantidad, ':publicado': 'publicado' },
-      }),
-    );
+    await intentarReservar(eventoId, cantidad);
+    return;
+  } catch (error) {
+    if (!esErrorCondicionFallida(error)) {
+      throw error;
+    }
+  }
+
+  await liberarReservasVencidas(eventoId);
+
+  try {
+    await intentarReservar(eventoId, cantidad);
   } catch (error) {
     if (!esErrorCondicionFallida(error)) {
       throw error;

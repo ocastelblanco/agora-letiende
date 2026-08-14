@@ -8,6 +8,13 @@ export interface CorreoAEnviar {
   html: string;
 }
 
+// Nombre visible del remitente (hotfix pre-producción, 14/08/2026) — hasta
+// ahora los correos mostraban el buzón crudo (`taquilla@letiende.co`) en vez
+// de un nombre reconocible. `Source` de SES admite el formato RFC 5322
+// `"Nombre" <correo>` directamente, sin tocar el secreto `SES_REMITENTE`
+// (que sigue siendo solo la dirección).
+const NOMBRE_REMITENTE = 'Taquilla Le Tiende';
+
 /**
  * Envoltura mínima de SES (`tech-specs.md` §5.6) — el resto del código
  * nunca llama a `SESClient` directamente, siempre pasa por
@@ -17,7 +24,7 @@ export interface CorreoAEnviar {
 export async function enviarCorreo(correo: CorreoAEnviar): Promise<void> {
   await clienteSes.send(
     new SendEmailCommand({
-      Source: process.env['SES_REMITENTE'],
+      Source: `"${NOMBRE_REMITENTE}" <${process.env['SES_REMITENTE']}>`,
       Destination: { ToAddresses: [correo.destinatario] },
       Message: {
         Subject: { Data: correo.asunto, Charset: 'UTF-8' },

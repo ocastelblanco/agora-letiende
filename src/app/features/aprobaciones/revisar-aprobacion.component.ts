@@ -61,6 +61,19 @@ export class RevisarAprobacionComponent {
   }
 
   protected async aprobar(): Promise<void> {
+    // Guarda de reentrada síncrona (hotfix pre-producción, 14/08/2026): el
+    // `[disabled]="enviando()"` del botón en la plantilla depende de que
+    // Angular vuelva a pintar el DOM tras `enviando.set(true)`, algo que no
+    // es instantáneo — un doble click/toque real puede disparar `aprobar()`
+    // dos veces antes de que el atributo `disabled` llegue a aplicarse,
+    // generando una segunda petición HTTP que la API rechaza con "ya fue
+    // resuelta" aunque la primera sí haya funcionado (confirmado en vivo en
+    // staging con dos invocaciones de Lambda a menos de 1 segundo de
+    // diferencia). Leer el Signal es síncrono y no depende de la vuelta a
+    // pintar, así que cierra la ventana de carrera por completo.
+    if (this.enviando()) {
+      return;
+    }
     this.enviando.set(true);
     this.errorAccion.set(null);
     try {
@@ -76,6 +89,10 @@ export class RevisarAprobacionComponent {
   }
 
   protected async rechazar(): Promise<void> {
+    // Misma guarda de reentrada que aprobar() — ver ese docstring.
+    if (this.enviando()) {
+      return;
+    }
     this.enviando.set(true);
     this.errorAccion.set(null);
     try {

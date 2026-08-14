@@ -23,8 +23,13 @@ const canalNotificacion = new CanalCorreoSes();
 // no identifica a un productor específico, así que "quién resolvió" queda
 // como una marca genérica, no un nombre real (decisión de alcance explícita,
 // TODO.md Tarea 2: CU-10 exige distinguir un "ya resuelta", no exige que el
-// agente invente una identidad que no puede verificar).
-const RESUELTO_POR_ENLACE = 'un productor del equipo (enlace de aprobación)';
+// agente invente una identidad que no puede verificar). Reformulado (hotfix
+// pre-producción, 14/08/2026): el paréntesis original ("un productor del
+// equipo (enlace de aprobación)") describía el mecanismo, no agregaba
+// información útil para quien lee el mensaje, y no hay ningún destino real
+// al que enlazarlo — se prefirió texto plano y simple sobre inventar un
+// enlace sin propósito claro.
+const RESUELTO_POR_ENLACE = 'otro miembro del equipo';
 
 interface ClienteCompra {
   nombre: string;
@@ -316,20 +321,35 @@ async function rechazarCompra(
       ? motivoBruto
       : undefined;
 
+  // `motivoRechazo` se persiste en la propia compra (hotfix pre-producción,
+  // 14/08/2026) — antes `motivo` solo viajaba hasta el correo `compra_rechazada`
+  // y nunca quedaba en DynamoDB. Bajo un doble envío real (dos peticiones
+  // casi simultáneas, ver CLAUDE.md §7), la que pierde la carrera responde
+  // 409 y su `motivo` se perdía para siempre sin dejar rastro — con esto
+  // queda en el registro (CLAUDE.md §5, A09: toda transición con
+  // consecuencia económica se registra) incluso si el correo llegara a
+  // fallar más abajo.
+  const asignaciones = ['estado = :rechazada', 'resueltoPor = :resueltoPor', 'resueltoEn = :ahora'];
+  const valoresExpresion: Record<string, unknown> = {
+    ':rechazada': 'rechazada',
+    ':enRevision': 'en_revision',
+    ':resueltoPor': RESUELTO_POR_ENLACE,
+    ':ahora': new Date().toISOString(),
+  };
+  if (motivo !== undefined) {
+    asignaciones.push('motivoRechazo = :motivo');
+    valoresExpresion[':motivo'] = motivo;
+  }
+
   try {
     // REMOVE expiraEn: misma defensa adicional que aprobarCompra arriba.
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+        UpdateExpression: `SET ${asignaciones.join(', ')} REMOVE expiraEn`,
         ConditionExpression: 'estado = :enRevision',
-        ExpressionAttributeValues: {
-          ':rechazada': 'rechazada',
-          ':enRevision': 'en_revision',
-          ':resueltoPor': RESUELTO_POR_ENLACE,
-          ':ahora': new Date().toISOString(),
-        },
+        ExpressionAttributeValues: valoresExpresion,
       }),
     );
   } catch (error) {

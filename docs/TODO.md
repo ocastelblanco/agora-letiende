@@ -2,15 +2,66 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Estado al cierre de sesión (14/08/2026, continuación):** los **tres hotfixes antes del paso a producción** quedaron implementados, verificados, **validados en vivo en staging por el usuario** y con **PR #41 listo para fusión** (mergeable, CI verde) — ver el resumen completo en `MEMORY.md` §2. Antes de la fusión, el propio PR encontró y corrigió **dos bugs reales en producción/staging** (ver `MEMORY.md` §7 y §9): un `ValidationException` real de DynamoDB al editar `sillasTotales` (el `ConditionExpression` no admite operadores aritméticos, a diferencia de `UpdateExpression`) y la falta de logging real en los `catch` genéricos que devuelven `Error interno` (corregido de forma permanente, no solo diagnóstica). Dos reportes adicionales del usuario durante la validación resultaron ser falsos positivos, sin cambio de código: un correo de aprobación que sí se envió (confirmado en `aws ses`) y tardó en llegar, y un rechazo automático que el propio usuario aclaró como malentendido. **Motor JIT recalculado:** con los tres hotfixes agotados, la Tarea 1 vuelve a **Dominio personalizado** (`agora.letiende.co`, roadmap #17), retomada de vuelta desde el Backlog con su especificación completa preservada tal cual. El slot de Tarea 2 sigue sin asignar (ver nota abajo).
+**Estado al cierre de sesión (14/08/2026, continuación):** PR #41 (tres hotfixes de vigencia/`sillasTotales`/`cancelado`) **fusionado** — ver el resumen completo en `MEMORY.md` §2/§7/§9. El usuario pidió directamente **tres hotfixes nuevos antes del paso a producción**, otra vez por delante del roadmap normal: (1) nombre visible del remitente de correo (`Taquilla Le Tiende`), (2) los administradores también aparecen en el desplegable de Productores al crear/editar un evento, y (3) se reformula el mensaje de "compra ya resuelta" quitando un paréntesis sin destino real. **Dominio personalizado vuelve a quedar pausado** en el Backlog (especificación preservada tal cual); la Tarea 1 pasa a estos tres hotfixes, implementados y verificados en esta misma sesión (321 pruebas backend + 271 frontend en verde, builds limpios) — **PR pendiente de abrir**. El slot de Tarea 2 sigue sin asignar (ver nota abajo).
 
 **Nota sobre el slot 2, deliberadamente sin tarea por ahora:** de lo que queda en el roadmap tras `docs/plan-pre-produccion.md`, Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — están bloqueados por prerrequisitos externos no de código (llaves/alta de WABA, ver "Pendientes que no son de código" abajo), y Google Calendar (#22) — v2, Media prioridad — todavía no está desglosado a nivel de tarea atómica y tiene una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). El slot 2 se reactiva en cuanto uno de los dos deje de estar bloqueado, cuando Google Calendar se desglose, o cuando se retome Dominio personalizado.
 
 ---
 
-## Tarea 1 — Dominio personalizado `agora.letiende.co`
+## Tarea 1 — [HOTFIX]: Correo, productores, mensaje de aprobación, doble envío y SLA de liberación de aforo
 
-**Origen:** `tech-specs.md` §11 ítem 17 (depende solo de #2, infraestructura base, ya completa) · `tech-specs.md` §7.1 (diagrama de despliegue: CloudFront "opcional en v1, requerido para dominio propio") y §7.2 (tabla de entornos: `production` ya apunta a `https://agora.letiende.co`, todavía sin aprovisionar) · `CLAUDE.md` §7 (gotcha heredado de Babel: `NG_ALLOWED_HOSTS` debe configurarse junto con el dominio, no después de que producción falle). Retomada del Backlog (14/08/2026) tras cerrarse los tres hotfixes antes de producción (PR #41, ver `MEMORY.md` §2/§9) — especificación preservada tal cual, sin re-derivar nada.
+**Origen:** pedido directo del usuario (14/08/2026, continuación), con prioridad explícita por delante del roadmap normal — mismo patrón ya usado con la ronda anterior de hotfixes (PR #41, fusionado). Dominio personalizado vuelve a pausarse en el Backlog. El cuarto y el quinto hotfix se agregaron a la misma rama/PR tras reportes en vivo durante la validación de los tres primeros.
+
+**Alcance:**
+
+1. **Nombre visible del remitente de correo.** Los correos transaccionales mostraban el buzón crudo `taquilla@letiende.co` en vez de un nombre reconocible. `Source` de `SendEmailCommand` (SES) admite el formato RFC 5322 `"Nombre" <correo>` directamente — se agregó una constante `NOMBRE_REMITENTE = 'Taquilla Le Tiende'` en `server/api/services/correo-ses.ts`, sin tocar el secreto `SES_REMITENTE` (que sigue siendo solo la dirección).
+2. **Administradores seleccionables como Productores.** El desplegable de "Productores" en `EditarEventoComponent` solo mostraba usuarios con `rol === 'productor'`, excluyendo a los administradores — que no podían quedar asignados a un evento puntual para recibir el correo `aviso_comprobante` ni aprobar/rechazar por el enlace mágico. `productoresDisponibles` ahora también incluye `rol === 'administrador'`. Sin cambios de autorización: `tieneAccesoAlEvento()` ya deja pasar a cualquier `administrador` sin mirar `productores` (bypass existente) — esto es solo una conveniencia de notificación. `porterosDisponibles` no cambia (fuera de alcance, el usuario solo pidió Productores).
+3. **Mensaje de "compra ya resuelta" sin paréntesis extraño.** El texto `Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).` (mostrado a un segundo productor que visita el mismo enlace de aprobación tras otro ya haberla resuelto) tenía un paréntesis sin ningún destino real al que enlazar — decisión explícita con el usuario (`AskUserQuestion`): sin nada en `MEMORY.md` que indicara un destino concreto, se reformuló a texto plano simple, `RESUELTO_POR_ENLACE = 'otro miembro del equipo'`, en vez de inventar un enlace sin propósito claro.
+4. **Doble envío real al rechazar una compra (reportado en vivo, ver `MEMORY.md` §7 para el detalle completo).** El productor veía "ya fue resuelta" aunque el rechazo sí se aplicó (el cliente recibió el correo) y el `motivo` que escribió nunca llegó — confirmado con CloudWatch (dos invocaciones de Lambda a menos de 1 segundo de diferencia) y DynamoDB (`resueltoEn` coincide con ese instante exacto): un doble click/toque real que el `[disabled]` del botón no alcanza a bloquear. Corregido con una guarda de reentrada síncrona en `RevisarAprobacionComponent.aprobar()`/`rechazar()`, y persistiendo `motivoRechazo` en la propia compra (antes solo viajaba hasta el correo, se perdía si esa petición perdía la carrera).
+5. **SLA de 15 minutos para liberar una reserva vencida por transferencia (reportado en vivo, ver `MEMORY.md` §7 para el detalle completo).** El TTL de DynamoDB no ofrece ninguna garantía de tiempo ("típicamente 48 horas"), pero el negocio exige que competir por la última silla nunca espere tanto a una reserva ya vencida. **Decisión tomada con el usuario (`AskUserQuestion`):** liberación activa solo al competir por cupo, sin infraestructura nueva (se descartó un barrido programado por EventBridge). `reservarSillas()` (`aforo.ts`), cuando la escritura condicional falla, ahora libera activamente las reservas vencidas de ese evento (`Query` sobre `eventoId-creadaEn-index` + transición condicional a `expirada` + `liberarSillas`) y reintenta una vez antes de clasificar el fallo como definitivo — nunca corre en el camino feliz. `ComprasLambdaRole`/`VentasEfectivoLambdaRole` ganan `Query`(GSI)/`UpdateItem` sobre `agora-compras`.
+
+**Decisiones tomadas con el usuario antes de implementar (`AskUserQuestion`):** para el punto 3, no inventar un destino de enlace sin evidencia en la documentación del proyecto — reformular el texto en su lugar. Para el punto 5, liberación activa al competir por cupo en vez de un barrido programado — sin infraestructura nueva.
+
+**Archivos:**
+- `server/api/services/correo-ses.ts`/`.spec.ts` — `NOMBRE_REMITENTE`, `Source` con formato RFC 5322.
+- `src/app/features/admin/gestion-eventos/editar-evento.component.ts`/`.spec.ts` — `productoresDisponibles` incluye `administrador`.
+- `server/api/handlers/aprobaciones.ts`/`.spec.ts` — `RESUELTO_POR_ENLACE` reformulado, `motivoRechazo` persistido condicionalmente.
+- `src/app/features/aprobaciones/revisar-aprobacion.component.ts`/`.spec.ts` — guarda de reentrada síncrona en `aprobar()`/`rechazar()`.
+- `src/app/core/api/aprobaciones.service.spec.ts` — texto de prueba actualizado al nuevo mensaje.
+- `server/api/services/aforo.ts`/`.spec.ts` — `liberarReservasVencidas()`, `reservarSillas()` reintenta tras liberar.
+- `serverless.yml` — `Query`/`UpdateItem` sobre `agora-compras` para `ComprasLambdaRole`/`VentasEfectivoLambdaRole`.
+
+**Definition of done:**
+- [x] El remitente de los correos muestra "Taquilla Le Tiende" en vez del buzón crudo
+- [x] Un administrador aparece en el desplegable de Productores y, si se lo selecciona, recibe el correo de aviso de comprobante y puede aprobar/rechazar por el enlace
+- [x] El mensaje de "compra ya resuelta" ya no tiene un paréntesis sin destino
+- [x] Un doble click/toque real en "Aprobar"/"Rechazar" no dispara una segunda petición HTTP
+- [x] `motivoRechazo` queda persistido en la compra, no solo en el correo
+- [x] Una reserva vencida se libera activamente al competir por cupo, sin depender solo del TTL
+- [x] `npm run test` (272) y `npm run test:api` (325) en verde
+- [x] `npm run build`/`build:api` sin errores
+- [x] Auditoría de costos sin coincidencias nuevas (`grep` del patrón de `CLAUDE.md` §5-bis) — solo permisos IAM adicionales sobre una tabla ya existente
+- [ ] Todo entregado en una rama con PR abierto — **sin fusionar**
+
+---
+
+## Tarea 2 — sin asignar, sin candidato sin bloqueo externo
+
+Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Google Calendar (#22) — v2, Media prioridad — sin desglosar todavía y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Ninguno es una tarea atómica lista para tomar hoy.
+
+**Se reactiva cuando alguno de los prerrequisitos externos de Bold/WhatsApp se resuelva, o cuando Google Calendar se desglose con el nivel de detalle de una tarea atómica.**
+
+---
+
+## Backlog
+
+Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) **completo y fusionado** — T1-T4 (Fase 1), T5 (PR #36), T6 (PR #37), T7 (PR #39) y T8 (PR #40) fusionadas (ver `MEMORY.md` §2). Tres hotfixes antes del paso a producción (vigencia/`finalizado`, `sillasTotales` editable, `cancelado` visible) **fusionados** (PR #41, ver `MEMORY.md` §2/§7/§9). De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
+
+### Pausada, no eliminada — Dominio personalizado `agora.letiende.co`
+
+A pedido de la segunda ronda de hotfixes urgentes (14/08/2026): queda detrás de esa tarea, otra vez. Especificación completa preservada tal cual, sin resumir, para retomarla sin re-derivar nada:
+
+**Origen:** `tech-specs.md` §11 ítem 17 (depende solo de #2, infraestructura base, ya completa) · `tech-specs.md` §7.1 (diagrama de despliegue: CloudFront "opcional en v1, requerido para dominio propio") y §7.2 (tabla de entornos: `production` ya apunta a `https://agora.letiende.co`, todavía sin aprovisionar) · `CLAUDE.md` §7 (gotcha heredado de Babel: `NG_ALLOWED_HOSTS` debe configurarse junto con el dominio, no después de que producción falle)
 
 **Alcance:** montar `agora.letiende.co` como dominio propio de `production`, con TLS, sobre la infraestructura ya desplegada (API Gateway HTTP API + Lambda SSR). `staging` sigue sin dominio propio (URL plana de API Gateway, sin cambios). No incluye nada de fase 2 (Bold, WhatsApp, Calendar).
 
@@ -34,20 +85,6 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 - [ ] Verificado por CLI tras desplegar, no solo el IaC (certificado en estado `ISSUED`, dominio resuelve, `GET /` responde 200 con TLS válido)
 - [ ] Revisión de costo real agendada a las 48 horas del despliegue (`CLAUDE.md` §5-bis, paso 4)
 - [ ] Todo entregado en una rama `feature/*` con PR abierto — **sin fusionar**
-
----
-
-## Tarea 2 — sin asignar, sin candidato sin bloqueo externo
-
-Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Google Calendar (#22) — v2, Media prioridad — sin desglosar todavía y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Ninguno es una tarea atómica lista para tomar hoy.
-
-**Se reactiva cuando alguno de los prerrequisitos externos de Bold/WhatsApp se resuelva, o cuando Google Calendar se desglose con el nivel de detalle de una tarea atómica.**
-
----
-
-## Backlog
-
-Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) **completo y fusionado** — T1-T4 (Fase 1), T5 (PR #36), T6 (PR #37), T7 (PR #39) y T8 (PR #40) fusionadas (ver `MEMORY.md` §2). Tres hotfixes antes del paso a producción (vigencia/`finalizado`, `sillasTotales` editable, `cancelado` visible) **validados en vivo en staging por el usuario, PR #41 listo para fusión** (ver `MEMORY.md` §2/§9) — Dominio personalizado retomado como Tarea 1 activa arriba. De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
 
 ---
 

@@ -62,7 +62,7 @@ describe('RevisarAprobacionComponent', () => {
   it('muestra el error del backend si el token ya fue resuelto o expiró', async () => {
     const obtenerDetalleMock = vi
       .fn()
-      .mockResolvedValue({ exito: false, error: 'Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).' });
+      .mockResolvedValue({ exito: false, error: 'Esta compra ya fue resuelta por otro miembro del equipo.' });
     const { fixture } = configurarPrueba({ obtenerDetalleMock });
 
     await activarConToken(fixture, 'token-x');
@@ -116,5 +116,30 @@ describe('RevisarAprobacionComponent', () => {
     await fixture.componentInstance['rechazar']();
 
     expect(rechazarMock).toHaveBeenCalledWith('token-x', undefined);
+  });
+
+  it('regresión: un doble click real (dos invocaciones sin esperar la primera) solo dispara una petición al servicio (hotfix pre-producción, 14/08/2026)', async () => {
+    // Promesa controlada a mano para simular una petición en curso — el
+    // segundo click debe llegar mientras la primera todavía no resolvió,
+    // que es exactamente la ventana de carrera real reportada en staging
+    // (dos invocaciones de Lambda a menos de 1 segundo de diferencia).
+    let resolverPrimera!: (valor: { exito: true }) => void;
+    const rechazarMock = vi.fn().mockReturnValueOnce(
+      new Promise<{ exito: true }>((resolve) => {
+        resolverPrimera = resolve;
+      }),
+    );
+    const { fixture } = configurarPrueba({ rechazarMock });
+    await activarConToken(fixture, 'token-x');
+    fixture.componentInstance['formularioRechazo'].controls.motivo.setValue('No corresponde el monto');
+
+    const primeraLlamada = fixture.componentInstance['rechazar']();
+    const segundaLlamada = fixture.componentInstance['rechazar'](); // "doble click" antes de que la primera resuelva
+    resolverPrimera({ exito: true });
+    await Promise.all([primeraLlamada, segundaLlamada]);
+    fixture.detectChanges();
+
+    expect(rechazarMock).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.textContent).toContain('Compra rechazada');
   });
 });

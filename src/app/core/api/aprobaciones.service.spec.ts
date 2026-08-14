@@ -98,14 +98,14 @@ describe('AprobacionesService', () => {
       const promesa = servicio.obtenerDetalle('token-x');
       const peticion = httpMock.expectOne('/api/aprobaciones/token-x');
       peticion.flush(
-        { mensaje: 'Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).' },
+        { mensaje: 'Esta compra ya fue resuelta por otro miembro del equipo.' },
         { status: 409, statusText: 'Conflict' },
       );
 
       const resultado = await promesa;
       expect(resultado).toEqual({
         exito: false,
-        error: 'Esta compra ya fue resuelta por un productor del equipo (enlace de aprobación).',
+        error: 'Esta compra ya fue resuelta por otro miembro del equipo.',
       });
     });
   });
