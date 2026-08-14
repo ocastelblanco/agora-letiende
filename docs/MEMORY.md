@@ -72,16 +72,16 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 
 ### Pendiente (v1 — MVP)
 
-- [ ] Dominio personalizado `agora.letiende.co` — Tarea 1 activa de `TODO.md`
+Ninguno — **v1 completa, incluido Dominio personalizado (PR #43, 14/08/2026)**. Ver `docs/roadmap-v2-v3.md` para lo que sigue, en lenguaje no técnico dirigido a los socios de Le Tiende.
 
 ### Pendiente (v2)
 
-- [ ] Pago automático con Bold
-- [ ] Notificaciones por WhatsApp
+- [ ] Pago automático con Bold — bloqueado por prerrequisito externo (llaves de Bold)
+- [ ] Notificaciones por WhatsApp — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo)
 - [ ] Exportación PDF (XLSX ya implementado y fusionado, PR #25)
-- [ ] Etapas de boletería con cierre automático, interfaz pública (roadmap #23) — Tarea 2 activa de `TODO.md`
-- [ ] Sincronización con Google Calendar (roadmap #22) — sin desglosar, más grande que #23 y con una decisión externa pendiente
-- [ ] Otros medios de pago (Bre-B, referencia de efectivo)
+- [ ] Sincronización con Google Calendar (roadmap #22) — sin desglosar, decisión externa pendiente (mecanismo de autenticación)
+
+Ya no pendientes, resueltos antes de lo previsto: Etapas de boletería con cierre automático (roadmap #23, PR #28) y Otros medios de pago — Bre-B resultó ser un tipo de transferencia bancaria común, cubierto por el medio de pago `transferencia` ya existente desde v1, sin desarrollo adicional (decisión del 06/08/2026).
 
 ---
 

@@ -2,7 +2,7 @@
 
 Documento de requisitos de producto de **Ágora**, la aplicación de boletería del teatro de Le Tiende. Está escrito en lenguaje de negocio: describe **qué** hace el producto y **para quién**, no cómo se implementa. El detalle técnico vive en `tech-specs.md`.
 
-**Estado del documento:** versión inicial (31/07/2026). Ninguna funcionalidad está implementada todavía; la columna de estado refleja esa realidad y debe actualizarse a medida que el roadmap avance.
+**Estado del documento:** actualizado el 14/08/2026. **La v1 completa (§6) ya está en producción** en `https://agora.letiende.co`. Para el detalle de qué sigue después de v1 dirigido a los socios de Le Tiende (v2/v3, en lenguaje no técnico), ver `docs/roadmap-v2-v3.md`.
 
 ---
 
@@ -206,9 +206,9 @@ El administrador crea, edita y elimina las personas con acceso al sistema, regis
 
 Cuando el evento tenga habilitada la cuenta Bold de Le Tiende como medio de pago, el cliente paga en línea y el sistema recibe la confirmación directamente de la pasarela. En ese caso **no hay comprobante que cargar ni aprobación que esperar**: las boletas se emiten en el momento. Es el flujo que más trabajo le ahorra al productor.
 
-### 5.9 Otros medios de pago (v2)
+### 5.9 Otros medios de pago (v1, ya resuelto)
 
-Además de Bold y del efectivo, el administrador puede habilitar transferencias a cuentas de otras entidades financieras mediante Bre-B, cargando el código QR correspondiente. Para el pago en efectivo, el administrador indica una referencia (por defecto, Le Tiende), una dirección física y unos horarios de atención (por defecto, los de Le Tiende).
+**Decisión revisada (06/08/2026):** originalmente se había considerado Bre-B como un medio de pago aparte, con su propio código QR. En la práctica, Bre-B es un tipo de transferencia bancaria común — el medio de pago `transferencia`, ya disponible desde v1, lo cubre sin necesidad de un mecanismo separado. Para el pago en efectivo, el administrador indica una referencia (por defecto, Le Tiende), una dirección física y unos horarios de atención (por defecto, los de Le Tiende).
 
 ### 5.10 Notificaciones por WhatsApp (v2)
 
@@ -241,18 +241,19 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Código QR del evento para afiches | Media |
 | Panel de control básico (vendidas, disponibles, ingresados) | Media |
 
-Con el ciclo completo mínimo ya construido, el paso a producción de v1 exige una ronda de ajustes de endurecimiento y refinamiento previa a las pruebas UAT — no funcionalidades nuevas, sino correcciones de alcance de roles, reorganización de navegación y pulido de interfaz sobre lo ya construido. Ver `docs/plan-pre-produccion.md` para el desglose técnico completo (8 tareas: UI menor, reestructuración del menú, alcance de productor sobre sus eventos, y limitación de alcance de productor/portero por evento).
+**✅ v1 completa y en producción (14/08/2026)**, en `https://agora.letiende.co`. Antes del paso a producción se hizo una ronda de ajustes de endurecimiento y refinamiento previa a UAT — no funcionalidades nuevas, sino correcciones de alcance de roles, reorganización de navegación y pulido de interfaz sobre lo ya construido (ver `docs/plan-pre-produccion.md` para el desglose técnico completo), más una ronda final de hotfixes reales encontrados validando en vivo (ver `docs/MEMORY.md` §2/§7 para el detalle). Para qué sigue después de v1, dirigido a los socios de Le Tiende en lenguaje no técnico, ver **`docs/roadmap-v2-v3.md`**.
 
 ### v2 — Automatización y alcance comercial
 
-| Funcionalidad | Prioridad |
-|---|---|
-| Pago automático con Bold | **Alta** |
-| Notificaciones por WhatsApp | **Alta** |
-| Exportación de reportes en XLSX y PDF | Media |
-| Etapas de boletería con cierre automático por fecha | Media |
-| Sincronización con Google Calendar | Media |
-| Otros medios de pago (Bre-B con QR, referencia de efectivo) | Media |
+**Detalle no técnico de cada ítem, requisitos externos y qué necesitamos de Le Tiende para avanzar:** ver `docs/roadmap-v2-v3.md`.
+
+| Funcionalidad | Prioridad | Estado |
+|---|---|---|
+| Pago automático con Bold | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (llaves de Bold) |
+| Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
+| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado |
+| Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
+| Sincronización con Google Calendar | Media | 🟡 No iniciado |
 
 ### v3 — Ideas no comprometidas
 
