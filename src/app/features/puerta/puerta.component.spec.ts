@@ -26,6 +26,7 @@ const eventoEjemplo: EventoPublico = {
   nombre: 'Concierto de jazz',
   descripcion: 'Una noche de jazz',
   fechaHora: '2026-09-15T01:00:00.000Z',
+  administradoPorLeTiende: true,
   sillasTotales: 100,
   sillasDisponibles: 80,
   sillasReservadas: 5,

@@ -64,7 +64,45 @@
             </ul>
           }
 
-          @if (detalleEvento.estado === 'publicado' && detalleEvento.sillasDisponibles > 0) {
+          @if (esBoleteriaExterna()) {
+            @if (detalleEvento.vinculoExterno && detalleEvento.vinculoExternoUrl) {
+              <div>
+                <span class="mb-2 block text-xs font-semibold uppercase tracking-widest text-primary/60">
+                  Más información:
+                </span>
+                <a
+                  [href]="detalleEvento.vinculoExternoUrl"
+                  target="_blank"
+                  rel="noopener"
+                  class="flex h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90"
+                >
+                  @switch (detalleEvento.vinculoExterno.tipo) {
+                    @case ('whatsapp') {
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                        <path
+                          d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.06-1.33A10 10 0 1 0 12 2Zm0 2a8 8 0 0 1 6.65 12.44l-.24.37.53 1.94-1.99-.52-.37.22A8 8 0 1 1 12 4Zm-3.1 3.6c-.2 0-.53.08-.8.38-.28.3-1.06 1.04-1.06 2.53 0 1.5 1.09 2.94 1.24 3.14.15.2 2.1 3.2 5.09 4.36 2.5.98 3.01.78 3.55.74.54-.05 1.75-.71 2-1.4.25-.68.25-1.27.17-1.4-.07-.12-.27-.2-.57-.35-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.65.07-.3-.15-1.24-.46-2.37-1.47-.87-.78-1.46-1.74-1.63-2.04-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.6-1.53-.85-2.09-.22-.53-.45-.47-.62-.48Z"
+                        />
+                      </svg>
+                    }
+                    @case ('instagram') {
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="5" />
+                        <circle cx="12" cy="12" r="4" />
+                        <circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none" />
+                      </svg>
+                    }
+                    @case ('web') {
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+                      </svg>
+                    }
+                  }
+                  <span>Ver más</span>
+                </a>
+              </div>
+            }
+          } @else if (detalleEvento.estado === 'publicado' && detalleEvento.sillasDisponibles > 0) {
             <a
               [routerLink]="['/evento', detalleEvento.slug, 'comprar']"
               class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90"

@@ -71,84 +71,145 @@
           }
         </div>
 
-        <div>
-          <label for="sillasTotales" class="mb-1 block text-sm font-semibold text-primary">
-            Sillas totales
-          </label>
-          <input
-            id="sillasTotales"
-            type="number"
-            formControlName="sillasTotales"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          />
-          @if (!modoCrear()) {
-            <p class="mt-1 text-xs text-primary/60">
-              Cambiar este valor ajusta las sillas disponibles por la diferencia. No puedes bajar el
-              aforo por debajo de lo ya vendido o reservado.
-            </p>
-          }
-        </div>
-
-        <div>
-          <label for="maxBoletasPorCompra" class="mb-1 block text-sm font-semibold text-primary">
-            Máximo de boletas por compra
-          </label>
-          <input
-            id="maxBoletasPorCompra"
-            type="number"
-            formControlName="maxBoletasPorCompra"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-          />
-        </div>
-
-        <div>
-          <label
-            for="plazoComprobanteMinutos"
-            class="mb-1 block text-sm font-semibold text-primary"
-          >
-            Plazo para subir el comprobante (minutos)
-          </label>
-          <input
-            id="plazoComprobanteMinutos"
-            type="number"
-            formControlName="plazoComprobanteMinutos"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-          />
-        </div>
-
-        @if (esProductor()) {
-          <div>
-            <span class="mb-1 block text-sm font-semibold text-primary">Productores</span>
-            <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
-              {{ productoresParaMostrar() }}
-            </p>
+        @if (!esProductor()) {
+          <div class="flex items-center justify-between rounded-xl border border-primary/20 px-3 py-2">
+            <div>
+              <span class="block text-sm font-semibold text-primary">Boletería administrada por Le Tiende</span>
+              <span class="block text-xs text-primary/60">
+                Desactívalo para eventos con boletería externa (WhatsApp, Instagram, web) — Ágora
+                solo lo anuncia, no vende ni controla el aforo.
+              </span>
+            </div>
+            <mat-slide-toggle formControlName="administradoPorLeTiende" />
           </div>
+        }
+
+        @if (administradoPorLeTiende()) {
           <div>
-            <span class="mb-1 block text-sm font-semibold text-primary">Porteros</span>
-            <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
-              {{ porterosParaMostrar() }}
-            </p>
-          </div>
-        } @else {
-          <mat-form-field appearance="outline">
-            <mat-label>Productores</mat-label>
-            <mat-select formControlName="productores" multiple>
-              @for (usuario of productoresDisponibles(); track usuario.email) {
-                <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
-              }
-            </mat-select>
-            @if (formulario.controls.productores.invalid && formulario.controls.productores.touched) {
-              <mat-error>Se necesita al menos un productor.</mat-error>
+            <label for="sillasTotales" class="mb-1 block text-sm font-semibold text-primary">
+              Sillas totales
+            </label>
+            <input
+              id="sillasTotales"
+              type="number"
+              formControlName="sillasTotales"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            @if (!modoCrear()) {
+              <p class="mt-1 text-xs text-primary/60">
+                Cambiar este valor ajusta las sillas disponibles por la diferencia. No puedes bajar el
+                aforo por debajo de lo ya vendido o reservado.
+              </p>
             }
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Porteros</mat-label>
-            <mat-select formControlName="porteros" multiple>
-              @for (usuario of porterosDisponibles(); track usuario.email) {
-                <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+          </div>
+
+          <div>
+            <label for="maxBoletasPorCompra" class="mb-1 block text-sm font-semibold text-primary">
+              Máximo de boletas por compra
+            </label>
+            <input
+              id="maxBoletasPorCompra"
+              type="number"
+              formControlName="maxBoletasPorCompra"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+          </div>
+
+          <div>
+            <label
+              for="plazoComprobanteMinutos"
+              class="mb-1 block text-sm font-semibold text-primary"
+            >
+              Plazo para subir el comprobante (minutos)
+            </label>
+            <input
+              id="plazoComprobanteMinutos"
+              type="number"
+              formControlName="plazoComprobanteMinutos"
+              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+          </div>
+
+          @if (esProductor()) {
+            <div>
+              <span class="mb-1 block text-sm font-semibold text-primary">Productores</span>
+              <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
+                {{ productoresParaMostrar() }}
+              </p>
+            </div>
+            <div>
+              <span class="mb-1 block text-sm font-semibold text-primary">Porteros</span>
+              <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
+                {{ porterosParaMostrar() }}
+              </p>
+            </div>
+          } @else {
+            <mat-form-field appearance="outline">
+              <mat-label>Productores</mat-label>
+              <mat-select formControlName="productores" multiple>
+                @for (usuario of productoresDisponibles(); track usuario.email) {
+                  <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+                }
+              </mat-select>
+              @if (formulario.controls.productores.invalid && formulario.controls.productores.touched) {
+                <mat-error>Se necesita al menos un productor.</mat-error>
               }
-            </mat-select>
-          </mat-form-field>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Porteros</mat-label>
+              <mat-select formControlName="porteros" multiple>
+                @for (usuario of porterosDisponibles(); track usuario.email) {
+                  <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+        } @else {
+          <div formGroupName="vinculoExterno" class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3">
+            <h2 class="text-sm font-semibold text-primary">Más información</h2>
+            <p class="text-xs text-primary/60">
+              El público verá un enlace "MÁS INFORMACIÓN" hacia este vínculo en vez del flujo de compra.
+            </p>
+            <mat-form-field appearance="outline">
+              <mat-label>Tipo de vínculo</mat-label>
+              <mat-select formControlName="tipo">
+                @for (tipo of tiposVinculoDisponibles; track tipo.valor) {
+                  <mat-option [value]="tipo.valor">{{ tipo.etiqueta }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <div>
+              @switch (formulario.controls.vinculoExterno.controls.tipo.value) {
+                @case ('whatsapp') {
+                  <label for="vinculoValor" class="mb-1 block text-xs text-primary/60">
+                    9 dígitos (se arma como https://wa.me/57 + el número)
+                  </label>
+                }
+                @case ('instagram') {
+                  <label for="vinculoValor" class="mb-1 block text-xs text-primary/60">
+                    Usuario de Instagram, sin @ (se arma como https://www.instagram.com/ + el usuario)
+                  </label>
+                }
+                @default {
+                  <label for="vinculoValor" class="mb-1 block text-xs text-primary/60">
+                    URL completa, debe empezar con https://
+                  </label>
+                }
+              }
+              <input
+                id="vinculoValor"
+                type="text"
+                formControlName="valor"
+                class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+              />
+              @if (
+                formulario.controls.vinculoExterno.controls.valor.invalid &&
+                formulario.controls.vinculoExterno.controls.valor.touched
+              ) {
+                <p class="mt-1 text-xs text-danger">Valor inválido para el tipo de vínculo seleccionado.</p>
+              }
+            </div>
+          </div>
         }
 
         @if (!modoCrear()) {
@@ -168,97 +229,99 @@
           </div>
         }
 
-        <fieldset formGroupName="mediosPago" class="flex flex-col gap-2">
-          <legend class="mb-1 text-sm font-semibold text-primary">Medios de pago</legend>
-          @for (medio of mediosPagoDisponibles; track medio.valor) {
-            <label class="flex items-center gap-2 text-sm text-primary">
-              <input type="checkbox" [formControlName]="medio.valor" />
-              {{ medio.etiqueta }}
-            </label>
-          }
-          @if (etapas.length === 0 && !esProductor()) {
-            <p class="text-xs text-primary/60">
-              Bold se habilita al agregar al menos una etapa de boletería.
-            </p>
-          }
-        </fieldset>
+        @if (administradoPorLeTiende()) {
+          <fieldset formGroupName="mediosPago" class="flex flex-col gap-2">
+            <legend class="mb-1 text-sm font-semibold text-primary">Medios de pago</legend>
+            @for (medio of mediosPagoDisponibles; track medio.valor) {
+              <label class="flex items-center gap-2 text-sm text-primary">
+                <input type="checkbox" [formControlName]="medio.valor" />
+                {{ medio.etiqueta }}
+              </label>
+            }
+            @if (etapas.length === 0 && !esProductor()) {
+              <p class="text-xs text-primary/60">
+                Bold se habilita al agregar al menos una etapa de boletería.
+              </p>
+            }
+          </fieldset>
 
-        <div>
-          <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
-            <div class="flex items-center gap-2">
-              @if (!esProductor()) {
-                <button mat-stroked-button type="button" (click)="agregarEtapa()">
-                  Agregar etapa
-                </button>
-              }
-              <button
-                type="button"
-                class="text-xs font-semibold text-primary/60"
-                [attr.aria-expanded]="etapasExpandido()"
-                (click)="alternarEtapasExpandido()"
-              >
-                {{ etapasExpandido() ? 'Ocultar' : 'Mostrar' }}
-              </button>
-            </div>
-          </div>
-
-          @if (!etapasExpandido()) {
-            <p class="text-xs text-primary/60">{{ etapas.length }} etapa(s) configurada(s).</p>
-          }
-          @if (etapas.length === 0) {
-            <p class="text-xs text-primary/60">
-              Sin etapas, este evento no cobra nada — solo controla el aforo.
-            </p>
-          }
-
-          @if (etapasExpandido()) {
-            <div formArrayName="etapas" class="flex flex-col gap-4">
-              @for (grupo of etapas.controls; track grupo; let indice = $index) {
-                <div
-                  [formGroupName]="indice"
-                  class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
+          <div>
+            <div class="mb-2 flex items-center justify-between">
+              <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
+              <div class="flex items-center gap-2">
+                @if (!esProductor()) {
+                  <button mat-stroked-button type="button" (click)="agregarEtapa()">
+                    Agregar etapa
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="text-xs font-semibold text-primary/60"
+                  [attr.aria-expanded]="etapasExpandido()"
+                  (click)="alternarEtapasExpandido()"
                 >
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
-                    @if (!esProductor()) {
-                      <button
-                        mat-stroked-button
-                        color="warn"
-                        type="button"
-                        (click)="quitarEtapa(indice)"
-                      >
-                        Quitar
-                      </button>
-                    }
-                  </div>
-
-                  <input
-                    type="text"
-                    formControlName="nombre"
-                    placeholder="Nombre (ej. Preventa)"
-                    class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                  />
-                  <input
-                    type="number"
-                    formControlName="precio"
-                    placeholder="Precio en COP"
-                    class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                  />
-                  <p class="-mt-2 text-xs text-primary/60">
-                    {{ grupo.controls.precio.value | precio }}
-                  </p>
-                  <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
-                  <input
-                    type="datetime-local"
-                    formControlName="cierraEn"
-                    class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                  />
-                </div>
-              }
+                  {{ etapasExpandido() ? 'Ocultar' : 'Mostrar' }}
+                </button>
+              </div>
             </div>
-          }
-        </div>
+
+            @if (!etapasExpandido()) {
+              <p class="text-xs text-primary/60">{{ etapas.length }} etapa(s) configurada(s).</p>
+            }
+            @if (etapas.length === 0) {
+              <p class="text-xs text-primary/60">
+                Sin etapas, este evento no cobra nada — solo controla el aforo.
+              </p>
+            }
+
+            @if (etapasExpandido()) {
+              <div formArrayName="etapas" class="flex flex-col gap-4">
+                @for (grupo of etapas.controls; track grupo; let indice = $index) {
+                  <div
+                    [formGroupName]="indice"
+                    class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
+                  >
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
+                      @if (!esProductor()) {
+                        <button
+                          mat-stroked-button
+                          color="warn"
+                          type="button"
+                          (click)="quitarEtapa(indice)"
+                        >
+                          Quitar
+                        </button>
+                      }
+                    </div>
+
+                    <input
+                      type="text"
+                      formControlName="nombre"
+                      placeholder="Nombre (ej. Preventa)"
+                      class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                    />
+                    <input
+                      type="number"
+                      formControlName="precio"
+                      placeholder="Precio en COP"
+                      class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                    />
+                    <p class="-mt-2 text-xs text-primary/60">
+                      {{ grupo.controls.precio.value | precio }}
+                    </p>
+                    <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
+                    <input
+                      type="datetime-local"
+                      formControlName="cierraEn"
+                      class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                    />
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
 
         <div class="flex flex-col gap-3">
           <h2 class="text-sm font-semibold text-primary">Imagen y logotipo</h2>

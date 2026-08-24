@@ -5,12 +5,19 @@ import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { merge } from 'rxjs';
 import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
 import { UsuariosService } from '../../../core/api/usuarios.service';
-import { DatosEtapaBoleteria, Evento, MedioPago } from '../../../core/models/evento.model';
+import {
+  DatosEtapaBoleteria,
+  Evento,
+  MedioPago,
+  TipoVinculo,
+  VinculoExterno,
+} from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
 import { desdeInputBogota, paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
 import { slugificar } from '../../../shared/utilidades/slugificar';
@@ -25,6 +32,22 @@ const MEDIOS_PAGO: readonly { valor: MedioPago; etiqueta: string }[] = [
 ];
 
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+// v2 (roadmap #25) — mismo criterio de validación que el backend
+// (`server/api/handlers/eventos.ts`, `normalizarVinculoExterno`): el
+// backend siempre revalida, esto es solo para dar feedback inmediato en el
+// formulario (CLAUDE.md §5, A04/A08).
+const TIPOS_VINCULO: readonly { valor: TipoVinculo; etiqueta: string }[] = [
+  { valor: 'whatsapp', etiqueta: 'WhatsApp' },
+  { valor: 'instagram', etiqueta: 'Instagram' },
+  { valor: 'web', etiqueta: 'Página web' },
+];
+const PATRONES_VALOR_VINCULO: Record<TipoVinculo, RegExp> = {
+  whatsapp: /^\d{9}$/,
+  instagram: /^[A-Za-z0-9._]{1,30}$/,
+  web: /^https:\/\/.{1,256}$/,
+};
+const PREFIJO_VINCULO_WEB = 'https://';
 
 /**
  * Rutas protegidas `/mis-eventos/eventos/nuevo` (exclusiva de
@@ -67,7 +90,14 @@ const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/web
  */
 @Component({
   selector: 'app-editar-evento',
-  imports: [ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatSelectModule, PrecioPipe],
+  imports: [
+    ReactiveFormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatSelectModule,
+    MatSlideToggleModule,
+    PrecioPipe,
+  ],
   templateUrl: './editar-evento.component.html',
 })
 export class EditarEventoComponent {
@@ -82,6 +112,7 @@ export class EditarEventoComponent {
   protected readonly esProductor = computed(() => this.servicioAuth.rol() === 'productor');
 
   protected readonly mediosPagoDisponibles = MEDIOS_PAGO;
+  protected readonly tiposVinculoDisponibles = TIPOS_VINCULO;
 
   /**
    * Opciones de los selectores de `productores`/`porteros` (TODO.md Tarea 1,
@@ -146,6 +177,14 @@ export class EditarEventoComponent {
     nombre: ['', Validators.required],
     descripcion: ['', Validators.required],
     fechaHora: ['', Validators.required],
+    // v2 (roadmap #25) — `true` por defecto: Ágora administra la boletería.
+    // En `false`, sincronizarBoleteriaExterna() (constructor) oculta la
+    // necesidad de productores y habilita `vinculoExterno` en su lugar.
+    administradoPorLeTiende: this.fb.nonNullable.control<boolean>(true),
+    vinculoExterno: this.fb.nonNullable.group({
+      tipo: this.fb.nonNullable.control<TipoVinculo>('whatsapp'),
+      valor: ['', Validators.required],
+    }),
     sillasTotales: [100, [Validators.required, Validators.min(1)]],
     maxBoletasPorCompra: [4, [Validators.required, Validators.min(1)]],
     plazoComprobanteMinutos: [10, [Validators.required, Validators.min(1)]],
@@ -229,6 +268,54 @@ export class EditarEventoComponent {
     this.etapas.removeAt(indice);
   }
 
+  /**
+   * v2 (roadmap #25) — refleja el valor real del control `administradoPorLeTiende`
+   * como Signal, para que la plantilla pueda ocultar (no solo deshabilitar)
+   * las secciones de boletería con `@if`. Se actualiza desde la suscripción
+   * a `valueChanges` en el constructor, incluida la precarga de un evento
+   * existente (`precargarFormulario()` usa `patchValue`, que también emite).
+   */
+  protected readonly administradoPorLeTiende = signal(true);
+
+  /**
+   * v2 (roadmap #25) — un evento con boletería externa no necesita
+   * productores asignados (nadie va a aprobar comprobantes ni recibir
+   * avisos de compra) y en su lugar exige `vinculoExterno`: alterna cuál de
+   * los dos controles está habilitado, para que `formulario.invalid` refleje
+   * la regla real sin depender de ocultar campos con `@if` en la plantilla
+   * (la validez de Angular ignora un control deshabilitado). El resto de
+   * campos de boletería (`sillasTotales`, `etapas`, `mediosPago`, etc.) no
+   * necesita este tratamiento: sus valores por defecto ya son válidos, así
+   * que ocultarlos con `@if` basta — el backend los normaliza de todas
+   * formas cuando `administradoPorLeTiende` es `false` (`server/api/handlers/eventos.ts`).
+   */
+  private sincronizarBoleteriaExterna(administrado: boolean): void {
+    this.administradoPorLeTiende.set(administrado);
+    if (administrado) {
+      if (!this.esProductor()) {
+        this.formulario.controls.productores.enable();
+      }
+      this.formulario.controls.vinculoExterno.disable();
+    } else {
+      this.formulario.controls.productores.disable();
+      this.formulario.controls.vinculoExterno.enable();
+    }
+  }
+
+  /**
+   * v2 (roadmap #25) — el patrón exigido a `vinculoExterno.valor` depende
+   * del `tipo` elegido (mismo criterio que el backend, `normalizarVinculoExterno`
+   * en `server/api/handlers/eventos.ts`, que siempre revalida). Se reaplica
+   * cada vez que el administrador cambia el tipo, para no arrastrar el
+   * patrón del tipo anterior.
+   */
+  private actualizarValidadoresVinculo(): void {
+    const tipo = this.formulario.controls.vinculoExterno.controls.tipo.value;
+    const valorControl = this.formulario.controls.vinculoExterno.controls.valor;
+    valorControl.setValidators([Validators.required, Validators.pattern(PATRONES_VALOR_VINCULO[tipo])]);
+    valorControl.updateValueAndValidity({ emitEvent: false });
+  }
+
   constructor() {
     // Selectores de productores/porteros (TODO.md Tarea 1, T7) — solo se
     // carga el directorio si NO es productor (ver docstring de
@@ -301,6 +388,20 @@ export class EditarEventoComponent {
     )
       .pipe(takeUntilDestroyed())
       .subscribe(() => this.actualizarSlugAutomatico());
+
+    // v2 (roadmap #25) — arranca deshabilitado: el valor por defecto de
+    // `administradoPorLeTiende` es `true` (ver docstring de
+    // `sincronizarBoleteriaExterna`), así que `vinculoExterno` no debe
+    // bloquear la validez del formulario hasta que se desactive.
+    this.formulario.controls.vinculoExterno.disable();
+    this.actualizarValidadoresVinculo();
+
+    this.formulario.controls.administradoPorLeTiende.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((valor) => this.sincronizarBoleteriaExterna(valor));
+    this.formulario.controls.vinculoExterno.controls.tipo.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.actualizarValidadoresVinculo());
   }
 
   /**
@@ -332,6 +433,8 @@ export class EditarEventoComponent {
       nombre: '',
       descripcion: '',
       fechaHora: '',
+      administradoPorLeTiende: true,
+      vinculoExterno: { tipo: 'whatsapp', valor: '' },
       sillasTotales: 100,
       maxBoletasPorCompra: 4,
       plazoComprobanteMinutos: 10,
@@ -342,6 +445,11 @@ export class EditarEventoComponent {
     });
     this.formulario.controls.slug.enable();
     this.formulario.controls.sillasTotales.enable();
+    // v2 (roadmap #25) — reset() no garantiza reevaluar el enabled/disabled
+    // de administradoPorLeTiende/vinculoExterno (mismo motivo que
+    // sillasTotales.enable() arriba): se fuerza explícitamente al estado
+    // correspondiente a `administradoPorLeTiende: true`.
+    this.sincronizarBoleteriaExterna(true);
     // v2 (roadmap #24) — un evento nuevo inicia sin etapas (boletería
     // opcional): antes se precargaba una etapa vacía por defecto.
     this.etapas.clear();
@@ -370,11 +478,23 @@ export class EditarEventoComponent {
     this.imagenKey.set(evento.imagenKey);
     this.logotipoKey.set(evento.logotipoKey);
 
+    // v2 (roadmap #25) — retrocompatibilidad: un evento creado antes de esta
+    // tarea no tiene el atributo (`?? true`, mismo criterio que el backend
+    // en `listarEventos()`/`aVistaPublica()`). El input "web" muestra la URL
+    // completa (con el prefijo `https://` antepuesto) aunque `valor` solo
+    // guarde la parte variable — ver `vinculoExternoDesdeFormulario()`.
+    const administradoPorLeTiende = evento.administradoPorLeTiende ?? true;
+    const vinculo = evento.vinculoExterno;
+
     this.formulario.patchValue({
       slug: evento.slug,
       nombre: evento.nombre,
       descripcion: evento.descripcion,
       fechaHora: paraInputBogota(evento.fechaHora),
+      administradoPorLeTiende,
+      vinculoExterno: vinculo
+        ? { tipo: vinculo.tipo, valor: vinculo.tipo === 'web' ? `${PREFIJO_VINCULO_WEB}${vinculo.valor}` : vinculo.valor }
+        : undefined,
       sillasTotales: evento.sillasTotales,
       maxBoletasPorCompra: evento.maxBoletasPorCompra,
       plazoComprobanteMinutos: evento.plazoComprobanteMinutos,
@@ -382,6 +502,12 @@ export class EditarEventoComponent {
       porteros: evento.porteros,
       estado: evento.estado,
     });
+    // No depende únicamente de que patchValue() dispare de vuelta la
+    // suscripción a `administradoPorLeTiende.valueChanges` (mismo criterio
+    // que el resto de este componente, ver docstring de la clase sobre la
+    // "segunda capa" sin depender de la reactividad del formulario).
+    this.sincronizarBoleteriaExterna(administradoPorLeTiende);
+
     // `slug` no se edita tras crear (es la URL pública) — `sillasTotales`
     // SÍ es editable en edición para un `administrador` (ver docstring de
     // la clase); para un `productor` se deshabilita más abajo, junto con el
@@ -434,6 +560,8 @@ export class EditarEventoComponent {
       this.formulario.controls.nombre.disable();
       this.formulario.controls.descripcion.disable();
       this.formulario.controls.fechaHora.disable();
+      this.formulario.controls.administradoPorLeTiende.disable();
+      this.formulario.controls.vinculoExterno.disable();
       this.formulario.controls.sillasTotales.disable();
       this.formulario.controls.productores.disable();
       this.formulario.controls.porteros.disable();
@@ -460,6 +588,23 @@ export class EditarEventoComponent {
       cierraEn: desdeInputBogota(grupo.controls.cierraEn.value),
       orden: indice + 1,
     }));
+  }
+
+  /**
+   * v2 (roadmap #25) — traduce el grupo `vinculoExterno` del formulario
+   * (donde el tipo "web" muestra la URL completa) al `VinculoExterno` que
+   * espera el backend (`valor` sin el prefijo fijo, tech-specs.md §4.3): le
+   * quita el prefijo `https://` que el propio formulario le antepuso en
+   * `precargarFormulario()`. El backend siempre revalida el resultado
+   * (`normalizarVinculoExterno`), esto es solo para no duplicar el prefijo.
+   */
+  private vinculoExternoDesdeFormulario(): VinculoExterno {
+    const grupo = this.formulario.controls.vinculoExterno.getRawValue();
+    const valor =
+      grupo.tipo === 'web' && grupo.valor.startsWith(PREFIJO_VINCULO_WEB)
+        ? grupo.valor.slice(PREFIJO_VINCULO_WEB.length)
+        : grupo.valor;
+    return { tipo: grupo.tipo, valor };
   }
 
   /**
@@ -495,6 +640,7 @@ export class EditarEventoComponent {
           nombre: valores.nombre,
           descripcion: valores.descripcion,
           fechaHora: desdeInputBogota(valores.fechaHora),
+          administradoPorLeTiende: valores.administradoPorLeTiende,
           sillasTotales: valores.sillasTotales,
           maxBoletasPorCompra: valores.maxBoletasPorCompra,
           plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
@@ -502,6 +648,9 @@ export class EditarEventoComponent {
           mediosPago: this.mediosPagoSeleccionados(),
           productores: valores.productores,
           porteros: valores.porteros,
+          ...(valores.administradoPorLeTiende
+            ? {}
+            : { vinculoExterno: this.vinculoExternoDesdeFormulario() }),
         });
 
         if (resultado.exito) {
@@ -540,6 +689,7 @@ export class EditarEventoComponent {
               nombre: valores.nombre,
               descripcion: valores.descripcion,
               fechaHora: desdeInputBogota(valores.fechaHora),
+              administradoPorLeTiende: valores.administradoPorLeTiende,
               sillasTotales: valores.sillasTotales,
               maxBoletasPorCompra: valores.maxBoletasPorCompra,
               plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
@@ -548,6 +698,9 @@ export class EditarEventoComponent {
               productores: valores.productores,
               porteros: valores.porteros,
               estado: valores.estado as Evento['estado'],
+              ...(valores.administradoPorLeTiende
+                ? {}
+                : { vinculoExterno: this.vinculoExternoDesdeFormulario() }),
             },
       );
 

@@ -11,6 +11,7 @@ const eventoEjemplo: EventoPublico = {
   descripcion: 'Una noche de jazz',
   imagenUrl: 'https://agora-activos-test.s3.us-east-1.amazonaws.com/eventos/e1/imagen-abc.png',
   fechaHora: '2026-09-15T01:00:00.000Z',
+  administradoPorLeTiende: true,
   sillasTotales: 100,
   sillasDisponibles: 80,
   sillasReservadas: 5,
