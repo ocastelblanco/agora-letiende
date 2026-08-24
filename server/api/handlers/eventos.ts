@@ -8,6 +8,7 @@ import {
   DeleteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
@@ -54,6 +55,14 @@ const PLAZO_COMPROBANTE_MINUTOS_NEUTRO = 10;
 // lista solo acota qué `Content-Type` puede pedir la URL prefirmada.
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const TAMANO_MAXIMO_IMAGEN_BYTES = 10 * 1024 * 1024;
+
+// v2 (roadmap #25, hallazgo de code review) — mismo criterio que
+// `ESTADOS_QUE_RETIENEN_AFORO` en `liberar-reservas.ts:17-21`: estos son los
+// únicos estados de compra que todavía retienen aforo del evento. Se usa
+// para bloquear la desactivación de `administradoPorLeTiende` mientras haya
+// compras en curso — de lo contrario quedarían huérfanas (`aprobarCompra`
+// en `aprobaciones.ts` traga `ErrorAforo` y de todas formas emite boletas).
+const ESTADOS_QUE_RETIENEN_AFORO = ['iniciada', 'esperando_comprobante', 'en_revision'] as const;
 
 function esErrorCondicionFallida(error: unknown): boolean {
   return error instanceof Error && error.name === 'ConditionalCheckFailedException';
@@ -266,18 +275,25 @@ function normalizarVinculoExterno(valor: unknown): VinculoExternoEntrada | null 
 
   // 'web' — nunca incluye ya el prefijo (se antepone al mostrarlo), y debe
   // formar una URL https válida una vez antepuesto.
-  if (dato.length > 256 || dato.startsWith('https://')) {
+  if (dato.length > 256 || /^https:\/\//i.test(dato)) {
     return null;
   }
+  let url: URL;
   try {
-    const url = new URL(`https://${dato}`);
+    url = new URL(`https://${dato}`);
     if (url.protocol !== 'https:') {
       return null;
     }
   } catch {
     return null;
   }
-  return { tipo: tipoValido, valor: dato };
+  // Se persiste la forma canónica ya re-parseada (`url.href`), no `dato` tal
+  // cual (hallazgo de code review): el parser WHATWG de `URL` descarta
+  // silenciosamente tabs/saltos de línea al construir `url` arriba, así que
+  // un `dato` con caracteres de control pasaría esta validación pero se
+  // guardaría en DynamoDB todavía con esos caracteres dentro si se
+  // persistiera el original en vez de `url.href`.
+  return { tipo: tipoValido, valor: url.href.slice('https://'.length) };
 }
 
 /**
@@ -560,6 +576,15 @@ async function actualizarEvento(
   }
   const desactivaBoleteria = datos['administradoPorLeTiende'] === false;
 
+  // A diferencia de `crearEvento` (que solo persiste `vinculoExterno` dentro
+  // de la rama `administradoPorLeTiende === false`), aquí se procesa
+  // siempre que venga en el payload, sin importar el valor resultante de
+  // `administradoPorLeTiende` (hallazgo de code review: asimetría entre los
+  // dos code paths). Es intencional: permite editar `vinculoExterno` de
+  // forma aislada sin tener que reenviar el toggle completo en el mismo
+  // PUT, y es inerte mientras `administradoPorLeTiende` sea `true` — tanto
+  // el frontend como la vista pública lo ignoran en ese caso. No se agrega
+  // una lectura extra del evento actual solo para este chequeo.
   if (datos['vinculoExterno'] !== undefined) {
     const vinculo = normalizarVinculoExterno(datos['vinculoExterno']);
     if (!vinculo) {
@@ -789,6 +814,39 @@ async function actualizarEvento(
   }
 
   if (desactivaBoleteria) {
+    // v2 (roadmap #25, hallazgo de code review) — antes de neutralizar el
+    // aforo, verifica que no haya compras de este evento todavía reteniendo
+    // aforo (mismo criterio que `ESTADOS_QUE_RETIENEN_AFORO`). Sin esta
+    // guarda, esas compras quedarían huérfanas: `aprobarCompra()` en
+    // aprobaciones.ts traga `ErrorAforo` en un try/catch y de todas formas
+    // emite boletas, dejando el evento con su aforo permanentemente en 0/0
+    // sin reflejar la realidad. Solo se consulta en esta rama — no le
+    // agrega costo al camino feliz de un PUT que no toca
+    // `administradoPorLeTiende`.
+    const comprasEnCurso = await documentoDynamoDB.send(
+      new QueryCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        IndexName: 'eventoId-creadaEn-index',
+        KeyConditionExpression: 'eventoId = :eventoId',
+        FilterExpression: 'estado = :iniciada OR estado = :esperandoComprobante OR estado = :enRevision',
+        ExpressionAttributeValues: {
+          ':eventoId': eventoId,
+          ':iniciada': ESTADOS_QUE_RETIENEN_AFORO[0],
+          ':esperandoComprobante': ESTADOS_QUE_RETIENEN_AFORO[1],
+          ':enRevision': ESTADOS_QUE_RETIENEN_AFORO[2],
+        },
+      }),
+    );
+    const cantidadEnCurso = (comprasEnCurso.Items ?? []).length;
+    if (cantidadEnCurso > 0) {
+      return respuestaJson(409, {
+        mensaje:
+          `No se puede desactivar la boletería administrada: hay ${cantidadEnCurso} compra(s) en curso ` +
+          'para este evento (iniciada/esperando comprobante/en revisión). Resuélvelas o espera a que ' +
+          'expiren antes de desactivar.',
+      });
+    }
+
     // Fuerza el valor neutro de cada campo de boletería en esta misma
     // escritura (ver el comentario junto a `desactivaBoleteria` más arriba)
     // — `sillasTotales`/`sillasDisponibles`/`sillasReservadas` se fuerzan en

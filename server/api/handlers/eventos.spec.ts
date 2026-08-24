@@ -979,7 +979,10 @@ describe('handler de /api/eventos', () => {
       });
 
       it('desactiva administradoPorLeTiende con vinculoExterno válido: normaliza los campos de boletería a valores neutros, ignorando lo que mande el cliente para ellos', async () => {
-        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+        // 1er send: QueryCommand de compras en curso (sin resultados, no
+        // bloquea la desactivación). 2do send: el UpdateCommand real.
+        sendMock.mockResolvedValueOnce({ Items: [] });
+        sendMock.mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
 
         await invocar('PUT', {
           eventoId: 'e1',
@@ -997,9 +1000,14 @@ describe('handler de /api/eventos', () => {
 
         // Sin ningún GetCommand extra: los bloques de sillasTotales/etapas
         // (los únicos que necesitan leer el evento actual) se saltan por
-        // completo cuando desactivaBoleteria es true.
-        expect(sendMock).toHaveBeenCalledTimes(1);
-        const comandoUpdate = sendMock.mock.calls[0][0];
+        // completo cuando desactivaBoleteria es true. Sí hay un QueryCommand
+        // extra (verificación de compras en curso, hallazgo de code review).
+        expect(sendMock).toHaveBeenCalledTimes(2);
+        const comandoQuery = sendMock.mock.calls[0][0];
+        expect(comandoQuery.input.IndexName).toBe('eventoId-creadaEn-index');
+        expect(comandoQuery.input.ExpressionAttributeValues[':eventoId']).toBe('e1');
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
         const valores = comandoUpdate.input.ExpressionAttributeValues;
         expect(valores[':administradoPorLeTiende']).toBe(false);
         expect(valores[':vinculoExterno']).toEqual({ tipo: 'whatsapp', valor: '300123456' });
@@ -1012,6 +1020,47 @@ describe('handler de /api/eventos', () => {
         expect(valores[':porteros']).toEqual([]);
         expect(valores[':maxBoletasPorCompra']).toBe(1);
         expect(valores[':plazoComprobanteMinutos']).toBe(10);
+      });
+
+      it('responde 409 y no escribe nada si hay una compra "esperando_comprobante" para el evento (hallazgo de code review)', async () => {
+        sendMock.mockResolvedValueOnce({
+          Items: [{ compraId: 'c1', eventoId: 'e1', estado: 'esperando_comprobante' }],
+        });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(409);
+        expect(JSON.parse(respuesta.body!).mensaje).toContain('compra(s) en curso');
+        // Solo el QueryCommand de verificación — nunca llega a escribir el
+        // UpdateCommand que neutralizaría el aforo.
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('permite desactivar administradoPorLeTiende cuando las únicas compras del evento ya están resueltas (aprobada/rechazada/expirada)', async () => {
+        // El FilterExpression real de DynamoDB (estado = iniciada/esperando_
+        // comprobante/en_revision) ya excluye del lado del servidor las
+        // compras aprobada/rechazada/expirada — el mock simula ese
+        // resultado ya filtrado devolviendo Items vacío, mismo criterio que
+        // el resto de la suite para QueryCommand con FilterExpression.
+        sendMock.mockResolvedValueOnce({ Items: [] });
+        sendMock.mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(sendMock).toHaveBeenCalledTimes(2);
       });
 
       it('permite reactivar administradoPorLeTiende: true sin exigir vinculoExterno', async () => {
