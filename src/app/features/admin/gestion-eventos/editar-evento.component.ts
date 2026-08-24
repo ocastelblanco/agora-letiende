@@ -283,21 +283,29 @@ export class EditarEventoComponent {
    * avisos de compra) y en su lugar exige `vinculoExterno`: alterna cuál de
    * los dos controles está habilitado, para que `formulario.invalid` refleje
    * la regla real sin depender de ocultar campos con `@if` en la plantilla
-   * (la validez de Angular ignora un control deshabilitado). El resto de
-   * campos de boletería (`sillasTotales`, `etapas`, `mediosPago`, etc.) no
-   * necesita este tratamiento: sus valores por defecto ya son válidos, así
-   * que ocultarlos con `@if` basta — el backend los normaliza de todas
-   * formas cuando `administradoPorLeTiende` es `false` (`server/api/handlers/eventos.ts`).
+   * (la validez de Angular ignora un control deshabilitado). `maxBoletasPorCompra`
+   * y `plazoComprobanteMinutos` no necesitan este tratamiento: sus valores
+   * neutros (`1` y `10`, respectivamente, ver `server/api/handlers/eventos.ts`)
+   * ya satisfacen sus propios validadores, así que ocultarlos con `@if`
+   * basta. `sillasTotales` es distinto y SÍ necesita este mismo tratamiento:
+   * su valor neutro del backend es `0` (`SILLAS_TOTALES_NEUTRO`), que no
+   * satisface su propio `Validators.min(1)` — sin deshabilitarlo aquí, un
+   * evento de boletería externa recargado desde el backend (`sillasTotales: 0`)
+   * deja `formulario.invalid` en `true` de forma silenciosa (el campo está
+   * oculto tras el `@if`, así que el usuario nunca ve el error) y "Guardar
+   * cambios" no hace nada visible (bug real reportado, 24/08/2026).
    */
   private sincronizarBoleteriaExterna(administrado: boolean): void {
     this.administradoPorLeTiende.set(administrado);
     if (administrado) {
       if (!this.esProductor()) {
         this.formulario.controls.productores.enable();
+        this.formulario.controls.sillasTotales.enable();
       }
       this.formulario.controls.vinculoExterno.disable();
     } else {
       this.formulario.controls.productores.disable();
+      this.formulario.controls.sillasTotales.disable();
       this.formulario.controls.vinculoExterno.enable();
     }
   }

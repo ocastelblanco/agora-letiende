@@ -370,6 +370,37 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.administradoPorLeTiende.value).toBe(true);
       expect(componente['formulario'].controls.vinculoExterno.disabled).toBe(true);
     });
+
+    it('regresión: precarga un evento externo con sillasTotales: 0 (valor neutro del backend) sin dejar el formulario inválido en silencio', async () => {
+      // Bug real reportado (24/08/2026): al crear un evento con boletería
+      // externa, el backend siempre devuelve sillasTotales: 0
+      // (SILLAS_TOTALES_NEUTRO). sincronizarBoleteriaExterna() no
+      // deshabilitaba ese control, así que Validators.min(1) lo dejaba
+      // inválido en silencio (el campo está oculto tras el @if) y "Guardar
+      // cambios" no hacía nada visible.
+      const eventoExternoSinSillas: Evento = {
+        ...eventoExistente,
+        administradoPorLeTiende: false,
+        sillasTotales: 0,
+        vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+      };
+      const actualizarEventoMock = vi
+        .fn()
+        .mockResolvedValue({ exito: true, evento: eventoExternoSinSillas });
+      const { fixture } = configurarPrueba({
+        eventos: [eventoExternoSinSillas],
+        actualizarEventoMock,
+      });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['formulario'].controls.sillasTotales.disabled).toBe(true);
+      expect(componente['formulario'].valid).toBe(true);
+
+      await componente['guardar']();
+
+      expect(actualizarEventoMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   // v2, roadmap #24 — boletería opcional.
