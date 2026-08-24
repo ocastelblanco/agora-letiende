@@ -261,23 +261,41 @@ export interface EtapaBoleteria {
 
 export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
 
+// v2 (roadmap #25) — vínculo hacia el canal real de venta de un evento con
+// boletería externa. `valor` guarda solo la parte variable (sin el prefijo
+// fijo de cada tipo); la URL completa se construye anteponiendo el prefijo.
+export type TipoVinculo = 'whatsapp' | 'instagram' | 'web';
+
+export interface VinculoExterno {
+  tipo: TipoVinculo;
+  valor: string;
+}
+
 export interface Evento {
   eventoId: string;           // Clave primaria (UUID)
   slug: string;               // Índice secundario global — URL pública
   nombre: string;
   descripcion: string;
   imagenKey?: string;         // Clave en S3 de activos
-  logotipoKey?: string;
+  logotipoKey?: string;       // Sin uso si `administradoPorLeTiende` es `false` — no hay boleta que lo lleve
   fechaHora: string;          // ISO 8601 UTC — se muestra en America/Bogota
+  // v2 (roadmap #25) — `true` por defecto (retrocompatible con todo evento
+  // existente). En `false`, Ágora no vende ni controla el aforo del evento:
+  // los campos de boletería de abajo dejan de exigirse/mostrarse y en su
+  // lugar aplica `vinculoExterno`.
+  administradoPorLeTiende: boolean;
+  vinculoExterno?: VinculoExterno;   // Solo si administradoPorLeTiende === false
   sillasTotales: number;
   sillasDisponibles: number;  // Solo se modifica con escritura condicional
   sillasReservadas: number;
+  // v2 (roadmap #24) — puede ser `[]`: un evento sin etapas no cobra nada,
+  // solo controla aforo. El cobro se activa al agregar la primera etapa.
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
-  mediosPago: MedioPago[];
+  mediosPago: MedioPago[];    // Sin etapas, solo admite 'efectivo'/'transferencia' — nunca 'bold'
   plazoComprobanteMinutos: number;   // Por defecto 10
   productores: string[];      // Correos; deben existir en agora-usuarios
-  redesSociales?: Record<string, string>;
+  porteros: string[];         // Análogo a productores, opcional
   estado: EstadoEvento;
   googleCalendarEventId?: string;    // v2
   creadoEn: string;
@@ -297,7 +315,7 @@ export interface Compra {
   eventoId: string;           // Índice secundario global
   cliente: { nombre: string; telefono: string; email: string };
   cantidad: number;
-  etapaId: string;
+  etapaId?: string;           // v2 (roadmap #24) — ausente si el evento no tiene etapas
   valorUnitario: number;      // Calculado en el backend, nunca recibido del cliente
   valorTotal: number;
   medioPago: MedioPago;
@@ -319,7 +337,7 @@ export interface Boleta {
   eventoId: string;           // Índice secundario global
   compraId: string;
   numeroEnCompra: number;     // 1..n dentro de la compra
-  etapaId: string;
+  etapaId?: string;           // v2 (roadmap #24) — ausente si el evento no tiene etapas
   valorUnitario: number;
   estado: EstadoBoleta;
   ingresoEn?: string;
@@ -734,3 +752,5 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 21 | **v2** — Exportación XLSX/PDF | Ampliación de `handlers/reportes.ts` | 16 |
 | 22 | **v2** — Google Calendar | `services/google-calendar.ts` | 6 |
 | 23 | **v2** — Etapas de boletería con cierre automático por fecha (interfaz pública) | `shared/utilidades/etapa-vigente.ts` (nuevo, `etapaVigenteParaMostrar` centralizada), ampliación de `features/evento/detalle-evento.component.ts`/`.html`; `features/evento/comprar/comprar.component.ts` y `features/evento/venta-efectivo/venta-efectivo.component.ts` migrados a consumirla | 9, 14 |
+| 24 | **v2** — Boletería opcional (aforo sin cobro) | `server/api/handlers/eventos.ts` (`normalizarEtapas`/`normalizarMediosPago` sin mínimo de etapas, rechazo de `bold` sin etapas), `server/api/handlers/compras.ts` (generaliza el camino hoy rechazado en líneas 192-197 para compras sin comprobante ni aprobación), `server/api/lib/vigencia-evento.ts` (finalización solo por `fechaHora` sin etapas), `features/evento/detalle-evento.component.ts`/`.html` (texto "Adquirir boletas"), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`FormArray` de etapas inicia vacío, checkbox `bold` deshabilitado sin etapas) | 9, 14, 23 |
+| 25 | **v2** — Eventos con boletería externa | `core/models/evento.model.ts` (`administradoPorLeTiende`, `TipoVinculo`, `VinculoExterno`), `server/api/handlers/eventos.ts` (`normalizarVinculoExterno`), `server/api/handlers/eventos-publicos.ts` (`aVistaPublica` expone `administradoPorLeTiende`/`vinculoExterno`), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`mat-slide-toggle`, sección "Más información"), `features/evento/detalle-evento.component.ts`/`.html` (bloque "MÁS INFORMACIÓN:" con ícono + enlace) | 6, 7 |

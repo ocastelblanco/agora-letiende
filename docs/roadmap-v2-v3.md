@@ -1,7 +1,7 @@
 # Roadmap de Ágora — Qué sigue después del lanzamiento
 
 **Dirigido a:** los socios de Le Tiende.
-**Última actualización:** 14 de agosto de 2026.
+**Última actualización:** 24 de agosto de 2026.
 
 Este documento explica, en lenguaje sencillo, qué funcionalidades quedan pendientes en Ágora (la boletería del teatro) después del primer lanzamiento, por qué se dejaron para después, y **qué necesitamos de ustedes** para poder avanzar en cada una. No es un documento técnico — el detalle de arquitectura vive en `docs/tech-specs.md`, y el detalle completo de producto en `docs/PRD.md`.
 
@@ -28,10 +28,12 @@ La v2 se enfoca en quitarle trabajo manual al equipo (sobre todo a los productor
 
 | Funcionalidad | Qué le resuelve a Le Tiende | Qué necesitamos de ustedes | Estado |
 |---|---|---|---|
+| **Boletería opcional (aforo sin cobro)** | Hoy todo evento necesita al menos un precio configurado, aunque sea $0. Con esto, un evento puede no tener ninguna etapa de boletería — sirve solo para controlar el aforo (por ejemplo, un conversatorio de entrada libre con cupo limitado), sin fingir un cobro que no existe. La adquisición queda disponible directamente en línea o en taquilla, sin pasar por comprobante ni aprobación. | Nada de su parte — es trabajo interno de desarrollo. | 🟡 No iniciado |
+| **Eventos con boletería externa** | Hay eventos que se realizan en el teatro pero cuya boletería la vende un tercero. Con esto, ese evento igual se anuncia en la Cartelera de Ágora (con su imagen y su código QR para el afiche), pero en vez de un botón de compra muestra un enlace de WhatsApp, Instagram o una página web hacia donde el interesado debe ir a conseguir su boleta. | Nada de su parte — es trabajo interno de desarrollo. | 🟡 No iniciado |
+| **Sincronización con Google Calendar** | Cada evento que se crea en Ágora aparece automáticamente en el calendario de `letiende.co@gmail.com`, sin tener que agregarlo a mano. | Confirmar que ese es el calendario correcto a sincronizar, y darnos acceso a la cuenta de Google Calendar correspondiente. | 🟡 No iniciado |
 | **Pago automático con Bold** | El cliente paga en línea con tarjeta u otros medios de Bold, y el sistema confirma el pago solo — sin comprobante que cargar ni productor que apruebe. Es la mejora que más tiempo le ahorra al equipo. | Activar (o confirmar que ya está activa) la cuenta Bold de Le Tiende, y generar las llaves de acceso a su API. | 🟡 No iniciado |
 | **Notificaciones por WhatsApp** | Todo lo que hoy llega por correo (enlace para cargar el comprobante, aviso de aprobación al productor, entrega de la boleta) llegaría también por WhatsApp — el canal donde hoy realmente ocurre la conversación con el cliente. | Ver la sección 4 abajo — es el requisito más largo de resolver de todo este documento. | 🟡 No iniciado, depende de un trámite de Meta |
 | **Exportación de reportes en PDF** | Complementa la exportación en Excel (que ya funciona hoy) con un formato listo para imprimir o compartir sin abrir una hoja de cálculo. | Nada de su parte — es trabajo interno de desarrollo. | 🟡 No iniciado |
-| **Sincronización con Google Calendar** | Cada evento que se crea en Ágora aparece automáticamente en el calendario de `letiende.co@gmail.com`, sin tener que agregarlo a mano. | Confirmar que ese es el calendario correcto a sincronizar, y darnos acceso a la cuenta de Google Calendar correspondiente. | 🟡 No iniciado |
 
 **Ya resuelto, sin necesidad de desarrollo adicional:** en el planteamiento original se había considerado un medio de pago aparte para transferencias por Bre-B, con un código QR propio. En la práctica, Bre-B es simplemente un tipo de transferencia bancaria común — el medio de pago **"Transferencia"**, que ya funciona desde el lanzamiento, ya lo cubre. No hace falta construir nada extra para esto.
 
