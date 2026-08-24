@@ -190,6 +190,40 @@ describe('ComprarComponent', () => {
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 
+  // v2, roadmap #24 — boletería opcional: sin etapas, la adquisición se
+  // resuelve de inmediato (estado 'aprobada'), sin plazo de comprobante.
+  describe('evento sin etapas (boletería opcional)', () => {
+    const eventoSinEtapas: EventoPublico = { ...eventoEjemplo, etapas: [] };
+
+    it('muestra "Adquirir boletas" en el título y en el botón de envío', async () => {
+      const { fixture } = configurarPrueba({ evento: eventoSinEtapas });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Adquirir boletas');
+      expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent).toContain(
+        'Adquirir',
+      );
+    });
+
+    it('muestra la confirmación inmediata con la cantidad de boletas emitidas, sin fecha límite', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 0, boletas: 2 },
+      });
+      const { fixture } = configurarPrueba({ evento: eventoSinEtapas, crearCompraMock });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['compraCreada']()).not.toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('¡Listo!');
+      expect(fixture.nativeElement.textContent).toContain('2 boleta(s)');
+      expect(fixture.nativeElement.textContent).not.toContain('Debes hacerlo antes de las');
+    });
+  });
+
   it('muestra el error del backend en un snackbar y no borra el formulario ante un fallo (ej. aforo insuficiente)', async () => {
     const crearCompraMock = vi
       .fn()

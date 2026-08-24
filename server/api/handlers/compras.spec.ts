@@ -1,14 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendMock, reservarSillasMock, generarTokenEnlaceMock, enviarMock } = vi.hoisted(() => ({
+const {
+  sendMock,
+  reservarSillasMock,
+  confirmarSillasMock,
+  emitirBoletasMock,
+  firmarCodigoBoletaMock,
+  generarTokenEnlaceMock,
+  enviarMock,
+} = vi.hoisted(() => ({
   sendMock: vi.fn(),
   reservarSillasMock: vi.fn(),
+  confirmarSillasMock: vi.fn(),
+  emitirBoletasMock: vi.fn(),
+  firmarCodigoBoletaMock: vi.fn(),
   generarTokenEnlaceMock: vi.fn(),
   enviarMock: vi.fn(),
 }));
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 vi.mock('../lib/enlaces-magicos', () => ({ generarTokenEnlace: generarTokenEnlaceMock }));
+// v2, roadmap #24 — necesarios solo para la rama "adquisición sin etapas"
+// (boletería opcional), mismo criterio de mock que ventas-efectivo.spec.ts.
+vi.mock('../lib/firma-boletas', () => ({ firmarCodigoBoleta: firmarCodigoBoletaMock }));
+vi.mock('../services/boleteria', () => ({ emitirBoletas: emitirBoletasMock }));
 vi.mock('../services/notificaciones', () => ({
   CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
     this.enviar = enviarMock;
@@ -19,10 +34,10 @@ const { handler, etapaVigente } = await import('./compras');
 const { AforoInsuficienteError, EventoNoPublicadoError } = await import('../services/aforo');
 
 // aforo.ts sí se importa real (no se mockea el módulo completo) para poder
-// lanzar sus clases de error reales — solo su función se reemplaza.
+// lanzar sus clases de error reales — solo sus funciones se reemplazan.
 vi.mock('../services/aforo', async () => {
   const real = await vi.importActual<typeof import('../services/aforo')>('../services/aforo');
-  return { ...real, reservarSillas: reservarSillasMock };
+  return { ...real, reservarSillas: reservarSillasMock, confirmarSillas: confirmarSillasMock };
 });
 
 class ConditionalCheckFailedException extends Error {
@@ -75,14 +90,24 @@ async function invocar(metodo: string, opciones?: Parameters<typeof crearPeticio
   return respuesta as { statusCode: number; body?: string };
 }
 
+const eventoSinEtapas = { ...eventoPublicado, slug: 'charla-libre', etapas: [] };
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(AHORA);
   sendMock.mockReset();
   reservarSillasMock.mockReset();
+  confirmarSillasMock.mockReset();
+  emitirBoletasMock.mockReset();
+  firmarCodigoBoletaMock.mockReset();
   generarTokenEnlaceMock.mockReset();
   enviarMock.mockReset();
   generarTokenEnlaceMock.mockReturnValue({ token: 'token-en-claro', hash: 'hash-derivado' });
+  confirmarSillasMock.mockResolvedValue(undefined);
+  emitirBoletasMock.mockResolvedValue([
+    { boletaId: 'bol-1', eventoId: 'evt-1', compraId: 'compra-1', numeroEnCompra: 1, valorUnitario: 0, estado: 'valida', emitidaEn: AHORA.toISOString() },
+  ]);
+  firmarCodigoBoletaMock.mockReturnValue('firma-simulada');
   enviarMock.mockResolvedValue(undefined);
 });
 
@@ -315,6 +340,124 @@ describe('POST /api/compras', () => {
     });
 
     expect(respuesta.statusCode).toBe(409);
+  });
+});
+
+// v2, roadmap #24 — boletería opcional: un evento sin etapas no cobra nada,
+// solo controla aforo. Reserva, confirma y emite las boletas en la misma
+// operación, sin comprobante ni aprobación — mismo camino que
+// ventas-efectivo.ts, pero iniciado en línea por el propio cliente.
+describe('POST /api/compras — adquisición sin etapas (boletería opcional)', () => {
+  it('reserva, confirma y emite boletas de inmediato, con montoTotal 0 y estado aprobada', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Items: [eventoSinEtapas] }) // QueryCommand por slug
+      .mockResolvedValueOnce({}); // PutCommand de la compra
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'charla-libre', cantidad: 2, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.estado).toBe('aprobada');
+    expect(cuerpo.montoTotal).toBe(0);
+    expect(cuerpo.boletas).toBe(1);
+    expect(cuerpo.expiraEn).toBeUndefined();
+
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(emitirBoletasMock).toHaveBeenCalledWith({
+      compraId: expect.any(String),
+      eventoId: 'evt-1',
+      montoTotal: 0,
+      cantidad: 2,
+    });
+    // Nunca se llama con un etapaId inventado — sencillamente ausente.
+    expect(emitirBoletasMock.mock.calls[0][0]).not.toHaveProperty('etapaId');
+
+    const comandoPut = sendMock.mock.calls[1]?.[0];
+    expect(comandoPut.input.Item).toMatchObject({
+      eventoId: 'evt-1',
+      cantidad: 2,
+      montoTotal: 0,
+      medioPago: 'transferencia',
+      estado: 'aprobada',
+    });
+    expect(comandoPut.input.Item.etapaId).toBeUndefined();
+    expect(comandoPut.input.Item.tokenComprobanteHash).toBeUndefined();
+    expect(comandoPut.input.Item.expiraEn).toBeUndefined();
+
+    expect(enviarMock).toHaveBeenCalledWith(
+      { correo: 'ana@correo.com', nombre: 'Ana Pérez' },
+      'boletas_emitidas',
+      expect.objectContaining({ nombreEvento: 'Concierto de jazz' }),
+    );
+    // Nunca el enlace de comprobante — este camino no tiene comprobante.
+    expect(generarTokenEnlaceMock).not.toHaveBeenCalled();
+  });
+
+  it('no exige ninguna etapa vigente ni rechaza por etapa gratuita — se resuelve antes de esa validación', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoSinEtapas] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'charla-libre', cantidad: 1, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+  });
+
+  it('responde 400 si la cantidad supera maxBoletasPorCompra, igual que con etapas', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoSinEtapas] });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'charla-libre', cantidad: 10, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 409 con las sillas disponibles reales cuando el aforo no alcanza', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoSinEtapas] });
+    reservarSillasMock.mockRejectedValueOnce(new AforoInsuficienteError(1));
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'charla-libre', cantidad: 3, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.sillasDisponibles).toBe(1);
+  });
+
+  it('no revierte la adquisición si la emisión de boletas o el correo fallan (best-effort)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoSinEtapas] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+    emitirBoletasMock.mockRejectedValueOnce(new Error('DynamoDB no disponible'));
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'charla-libre', cantidad: 1, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.boletas).toBe(0);
+  });
+
+  it('responde 409 si colisiona el compraId al persistir (condición fallida)', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Items: [eventoSinEtapas] })
+      .mockRejectedValueOnce(new ConditionalCheckFailedException());
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'charla-libre', cantidad: 1, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(confirmarSillasMock).not.toHaveBeenCalled();
   });
 });
 

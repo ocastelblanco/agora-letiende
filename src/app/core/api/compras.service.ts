@@ -20,7 +20,12 @@ export interface CompraCreada {
   estado: string;
   cantidad: number;
   montoTotal: number;
-  expiraEn: string;
+  // v2 (roadmap #24) — ausente cuando el evento no tiene etapas: la
+  // adquisición se resuelve de inmediato, sin plazo de comprobante.
+  expiraEn?: string;
+  // v2 (roadmap #24) — presente solo en ese mismo caso: cuántas boletas ya
+  // se emitieron en la misma respuesta.
+  boletas?: number;
 }
 
 export type ResultadoCrearCompra =

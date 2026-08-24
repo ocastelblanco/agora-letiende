@@ -352,4 +352,47 @@ describe('POST /api/ventas-efectivo', () => {
 
     expect(respuesta.statusCode).toBe(405);
   });
+
+  // v2, roadmap #24 — boletería opcional: un evento sin etapas no cobra
+  // nada, solo controla aforo. La venta en taquilla ya era inmediata sin
+  // comprobante; con etapas: [] simplemente no hay precio ni etapaId que
+  // asociar.
+  describe('evento sin etapas (boletería opcional)', () => {
+    const eventoSinEtapas = { ...eventoPublicado, etapas: [] };
+
+    it('reserva, confirma y emite boletas con montoTotal 0 y sin etapaId', async () => {
+      sendMock.mockResolvedValueOnce({ Items: [eventoSinEtapas] }).mockResolvedValueOnce({});
+      reservarSillasMock.mockResolvedValueOnce(undefined);
+
+      const respuesta = await invocar('POST', cuerpoValido);
+
+      expect(respuesta.statusCode).toBe(201);
+      const cuerpo = JSON.parse(respuesta.body ?? '{}');
+      expect(cuerpo.estado).toBe('aprobada');
+      expect(cuerpo.montoTotal).toBe(0);
+      expect(cuerpo.boletas).toBe(1);
+
+      expect(emitirBoletasMock).toHaveBeenCalledWith({
+        compraId: expect.any(String),
+        eventoId: 'evt-1',
+        etapaId: undefined,
+        montoTotal: 0,
+        cantidad: 2,
+      });
+
+      const comandoPut = sendMock.mock.calls[1]?.[0];
+      expect(comandoPut.input.Item.etapaId).toBeUndefined();
+      expect(comandoPut.input.Item.montoTotal).toBe(0);
+      expect(comandoPut.input.Item.medioPago).toBe('efectivo');
+    });
+
+    it('no exige ninguna etapa vigente ni rechaza por etapa gratuita', async () => {
+      sendMock.mockResolvedValueOnce({ Items: [eventoSinEtapas] }).mockResolvedValueOnce({});
+      reservarSillasMock.mockResolvedValueOnce(undefined);
+
+      const respuesta = await invocar('POST', cuerpoValido);
+
+      expect(respuesta.statusCode).toBe(201);
+    });
+  });
 });

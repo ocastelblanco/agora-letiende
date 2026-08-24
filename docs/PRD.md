@@ -202,7 +202,7 @@ Además pueden **descargar la lista completa de boletas** con: datos del cliente
 
 El administrador crea, edita y elimina las personas con acceso al sistema, registrando nombre, correo de Gmail y rol. El acceso del equipo se hace con la cuenta de Google; el cliente nunca necesita cuenta.
 
-### 5.8 Boletería opcional (v2)
+### 5.8 Boletería opcional (v2) — ✅ implementado
 
 Hoy todo evento exige al menos una etapa de boletería con un precio, aunque sea $0. Con esta funcionalidad, un evento puede no tener ninguna etapa configurada — el arreglo de etapas inicia vacío tanto al crear como al editar el evento. Mientras no tenga ninguna, el evento **no cobra nada**: sirve únicamente para controlar el aforo (por ejemplo, un conversatorio o una charla de entrada libre con cupo limitado). El cobro se activa exclusivamente cuando el administrador agrega una o más etapas; mientras eso no ocurra, el medio de pago Bold no puede habilitarse para ese evento — solo `efectivo` (adquisición en taquilla) y `transferencia` (adquisición en línea).
 
@@ -263,7 +263,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 
 | Funcionalidad | Prioridad | Estado |
 |---|---|---|
-| Boletería opcional (aforo sin cobro) | **Alta** | 🟡 No iniciado |
+| Boletería opcional (aforo sin cobro) | **Alta** | ✅ Implementado y validado en vivo en staging (roadmap #24, PR #46) — pendiente de fusionar |
 | Eventos con boletería externa | **Alta** | 🟡 No iniciado |
 | Sincronización con Google Calendar | Media | 🟡 No iniciado |
 | Pago automático con Bold | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (llaves de Bold) |

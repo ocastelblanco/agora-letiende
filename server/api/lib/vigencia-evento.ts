@@ -12,12 +12,15 @@ const ESTADOS_QUE_PUEDEN_VENCER = new Set(['publicado', 'agotado', 'cancelado'])
 /**
  * Fin real de un evento: el más tardío entre su `fechaHora` y el cierre de
  * su etapa que más tarde cierra (por `cierraEn`, nunca por `orden` — mismo
- * criterio que `etapaVigente()` en `handlers/compras.ts`). Todo evento tiene
- * al menos una etapa (`normalizarEtapas()` lo exige en `handlers/eventos.ts`),
- * así que `etapas` nunca está vacío aquí.
+ * criterio que `etapaVigente()` en `handlers/compras.ts`). Un evento sin
+ * etapas (v2, roadmap #24 — boletería opcional) no tiene ningún cierre que
+ * considerar: su vigencia depende solo de `fechaHora`.
  */
 function finDeVigencia(evento: EventoParaVigencia): number {
   const finFecha = new Date(evento.fechaHora).getTime();
+  if (evento.etapas.length === 0) {
+    return finFecha;
+  }
   const finEtapas = Math.max(...evento.etapas.map((etapa) => new Date(etapa.cierraEn).getTime()));
   return Math.max(finFecha, finEtapas);
 }

@@ -6,7 +6,15 @@ import type {
 } from 'aws-lambda';
 import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
-import { AforoInsuficienteError, ErrorAforo, EventoNoPublicadoError, reservarSillas } from '../services/aforo';
+import {
+  AforoInsuficienteError,
+  ErrorAforo,
+  EventoNoPublicadoError,
+  confirmarSillas,
+  reservarSillas,
+} from '../services/aforo';
+import { emitirBoletas } from '../services/boleteria';
+import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { generarTokenEnlace } from '../lib/enlaces-magicos';
 import { finalizarSiVencido, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import { CanalCorreoSes } from '../services/notificaciones';
@@ -29,6 +37,13 @@ const canalNotificacion = new CanalCorreoSes();
 // `ventas-efectivo.ts` (venta presencial, también un flujo de compra) la
 // reutiliza sin duplicar el texto.
 export const VERSION_TERMINOS_ACTUAL = '2026-08-07';
+
+// v2 (roadmap #24) — actor responsable (CLAUDE.md §5, A09) de una compra sin
+// etapas: se emite sola, sin comprobante ni aprobación humana, así que no
+// hay ningún productor ni portero real que registrar como resolutor. Mismo
+// criterio que `RESUELTO_POR_ENLACE` en `aprobaciones.ts`: una marca fija y
+// honesta sobre el mecanismo, no una identidad inventada.
+const RESUELTO_POR_SISTEMA = 'sistema (boletería sin cobro)';
 
 export type EstadoCompra = 'esperando_comprobante' | 'en_revision' | 'aprobada' | 'rechazada' | 'expirada';
 
@@ -119,6 +134,117 @@ export function etapaVigente(etapas: EtapaBoleteria[], ahora: Date): EtapaBolete
 }
 
 /**
+ * v2 (roadmap #24) — rama de `crearCompra()` para un evento sin etapas de
+ * boletería: no cobra nada, solo controla aforo. Reserva, confirma y emite
+ * las boletas en la misma operación, sin comprobante ni aprobación —
+ * `montoTotal` siempre 0 y `etapaId` ausente (`emitirBoletas()` ya lo admite
+ * opcional). Reutiliza exactamente las mismas primitivas que
+ * `crearVentaEfectivo()` en `ventas-efectivo.ts` (`confirmarSillas`,
+ * `emitirBoletas`, `canalNotificacion`), ninguna se reimplementa
+ * (`CLAUDE.md` §5, A08).
+ */
+async function crearAdquisicionSinEtapas(
+  eventoEncontrado: EventoParaCompra,
+  cantidad: number,
+  clienteDatos: Record<string, unknown>,
+  ahora: Date,
+): Promise<APIGatewayProxyResultV2> {
+  try {
+    await reservarSillas(eventoEncontrado.eventoId, cantidad);
+  } catch (error) {
+    if (error instanceof AforoInsuficienteError) {
+      return respuestaJson(409, { mensaje: error.message, sillasDisponibles: error.sillasDisponibles });
+    }
+    if (error instanceof ErrorAforo) {
+      return respuestaJson(409, { mensaje: error.message });
+    }
+    throw error;
+  }
+
+  const compraId = randomUUID();
+  // Sin etapaId/tokenComprobanteHash/tokenAprobacionHash/expiraEn — mismo
+  // criterio que crearVentaEfectivo(): esta compra nace y muere `aprobada`
+  // en la misma operación, nunca pasa por esperando_comprobante/en_revision.
+  const compra = {
+    compraId,
+    eventoId: eventoEncontrado.eventoId,
+    cantidad,
+    cliente: {
+      nombre: clienteDatos['nombre'],
+      telefono: clienteDatos['telefono'],
+      correo: clienteDatos['correo'],
+    },
+    montoTotal: 0,
+    medioPago: 'transferencia' as MedioPago,
+    estado: 'aprobada' as EstadoCompra,
+    autorizacionDatosAceptadaEn: ahora.toISOString(),
+    versionTerminos: VERSION_TERMINOS_ACTUAL,
+    resueltoPor: RESUELTO_POR_SISTEMA,
+    resueltoEn: ahora.toISOString(),
+    creadaEn: ahora.toISOString(),
+  };
+
+  try {
+    await documentoDynamoDB.send(
+      new PutCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        Item: compra,
+        ConditionExpression: 'attribute_not_exists(compraId)',
+      }),
+    );
+  } catch (error) {
+    if (esErrorCondicionFallida(error)) {
+      return respuestaJson(409, { mensaje: 'No se pudo crear la compra, intenta de nuevo' });
+    }
+    throw error;
+  }
+
+  try {
+    await confirmarSillas(eventoEncontrado.eventoId, cantidad);
+  } catch (error) {
+    if (!(error instanceof ErrorAforo)) {
+      throw error;
+    }
+    console.error('confirmarSillas falló tras una adquisición sin etapas', { compraId });
+  }
+
+  let boletasEmitidas = 0;
+  try {
+    const boletas = await emitirBoletas({
+      compraId,
+      eventoId: eventoEncontrado.eventoId,
+      montoTotal: 0,
+      cantidad,
+    });
+    boletasEmitidas = boletas.length;
+
+    const urlBase = process.env['URL_BASE_APP'] ?? '';
+    const urlsBoletas = boletas.map(
+      (boleta) => `${urlBase}/boleta/${boleta.boletaId}.${firmarCodigoBoleta(boleta.boletaId)}`,
+    );
+    await canalNotificacion.enviar(
+      { correo: clienteDatos['correo'] as string, nombre: clienteDatos['nombre'] as string },
+      'boletas_emitidas',
+      { nombreEvento: eventoEncontrado.nombre, urlsBoletas },
+    );
+  } catch (error) {
+    const nombreError = error instanceof Error ? error.name : 'error desconocido';
+    console.error('La emisión de boletas o su notificación falló tras una adquisición sin etapas', {
+      compraId,
+      nombreError,
+    });
+  }
+
+  return respuestaJson(201, {
+    compraId,
+    estado: compra.estado,
+    cantidad,
+    montoTotal: 0,
+    boletas: boletasEmitidas,
+  });
+}
+
+/**
  * `POST /api/compras` — inicia una compra, reserva el aforo con `aforo.ts`
  * y envía por correo el enlace para cargar el comprobante. Público, con el
  * mismo criterio de `tech-specs.md` §8.3: el precio y la etapa vigente se
@@ -182,6 +308,18 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return respuestaJson(400, {
       mensaje: `El máximo de boletas por compra es ${eventoEncontrado.maxBoletasPorCompra}`,
     });
+  }
+
+  // v2 (roadmap #24) — boletería opcional: un evento sin etapas no cobra
+  // nada, solo controla aforo. Reserva, confirma y emite en la misma
+  // operación — mismo patrón que `crearVentaEfectivo()` en
+  // `ventas-efectivo.ts`, pero iniciado en línea por el propio cliente
+  // (`medioPago: 'transferencia'`), sin comprobante ni aprobación del
+  // productor. Se resuelve ANTES de `etapaVigente()`: sin etapas, esa
+  // función siempre devolvería `null` y produciría el 409 "no hay etapa
+  // vigente", que sería un mensaje incorrecto para este caso.
+  if (eventoEncontrado.etapas.length === 0) {
+    return await crearAdquisicionSinEtapas(eventoEncontrado, datos['cantidad'], clienteDatos, ahora);
   }
 
   const etapa = etapaVigente(eventoEncontrado.etapas, ahora);

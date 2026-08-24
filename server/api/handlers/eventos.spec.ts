@@ -182,8 +182,20 @@ describe('handler de /api/eventos', () => {
       expect(respuesta.statusCode).toBe(400);
     });
 
-    it('responde 400 si etapas está vacío', async () => {
+    // v2, roadmap #24 — boletería opcional: etapas: [] es válido, el evento
+    // no cobra nada y solo controla aforo.
+    it('acepta etapas vacío — boletería opcional sin cobro', async () => {
+      sendMock.mockResolvedValue({});
+
       const respuesta = await invocar('POST', { cuerpo: { ...eventoValido, etapas: [] } });
+
+      expect(respuesta.statusCode).toBe(201);
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.etapas).toEqual([]);
+    });
+
+    it('responde 400 si etapas no es un arreglo', async () => {
+      const respuesta = await invocar('POST', { cuerpo: { ...eventoValido, etapas: 'no-es-un-arreglo' } });
 
       expect(respuesta.statusCode).toBe(400);
     });
@@ -194,6 +206,26 @@ describe('handler de /api/eventos', () => {
       });
 
       expect(respuesta.statusCode).toBe(400);
+    });
+
+    // v2, roadmap #24 — Bold exige al menos una etapa configurada.
+    it('responde 400 si mediosPago incluye bold sin ninguna etapa', async () => {
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, etapas: [], mediosPago: ['efectivo', 'bold'] },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('acepta mediosPago con bold cuando sí hay al menos una etapa', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, mediosPago: ['efectivo', 'bold'] },
+      });
+
+      expect(respuesta.statusCode).toBe(201);
     });
 
     // TODO.md Tarea 1 (T7): el documento de negocio exige al menos un
@@ -665,6 +697,74 @@ describe('handler de /api/eventos', () => {
         await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
 
         expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    // v2, roadmap #24 — invariante "Bold exige al menos una etapa" aplicada
+    // también en la edición, no solo al crear.
+    describe('Bold exige al menos una etapa (roadmap #24)', () => {
+      it('responde 400 si mediosPago trae bold y el payload también vacía etapas', async () => {
+        sendMock.mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { etapas: [], mediosPago: ['efectivo', 'bold'] },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        // Solo el GetCommand de leerEventoActual() — nunca llega al UpdateCommand.
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('responde 400 si mediosPago trae bold y el evento actual no tiene ninguna etapa', async () => {
+        sendMock.mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [] } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { mediosPago: ['efectivo', 'bold'] },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+
+      it('acepta mediosPago con bold si el evento actual ya tiene etapas', async () => {
+        sendMock
+          .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { mediosPago: ['efectivo', 'bold'] },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+      });
+
+      it('retira bold automáticamente si un PUT vacía las etapas sin tocar mediosPago', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }], mediosPago: ['efectivo', 'bold'] },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { etapas: [] } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.UpdateExpression).toContain('#mediosPago');
+        expect(comandoUpdate.input.ExpressionAttributeValues[':mediosPago']).toEqual(['efectivo']);
+      });
+
+      it('no toca mediosPago si un PUT vacía las etapas y bold no estaba habilitado', async () => {
+        sendMock
+          .mockResolvedValueOnce({
+            Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }], mediosPago: ['efectivo'] },
+          })
+          .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', { eventoId: 'e1', cuerpo: { etapas: [] } });
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        expect(comandoUpdate.input.UpdateExpression).not.toContain('#mediosPago');
       });
     });
   });

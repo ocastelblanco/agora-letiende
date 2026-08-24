@@ -2,33 +2,31 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Estado al cierre de sesión (24/08/2026):** el usuario decidió no esperar más retroalimentación de producción para estas dos funcionalidades puntuales y las toma como las dos próximas tareas del motor JIT: **Boletería opcional** (roadmap #24) y **Eventos con boletería externa** (roadmap #25), ambas v2, Alta prioridad, diseñadas y documentadas en el PR #45 (`docs: planea boletería opcional y eventos con boletería externa (v2)`) — ver `PRD.md` §5.8-§5.9, `tech-specs.md` §4.3 (modelo de datos) y §11 (#24-#25 con archivos principales por tocar), y `roadmap-v2-v3.md` §2. Ninguna depende de un prerrequisito externo (a diferencia de Bold/WhatsApp) ni de una decisión pendiente (a diferencia de Google Calendar) — ambas son 100% desarrollo interno y quedan listas para iniciar en cuanto se fusione el PR #45.
+**Estado al cierre de sesión (24/08/2026, continuación):** **Boletería opcional (roadmap #24) completa** — implementada, corregido un gap de infraestructura encontrado por el usuario en staging (`ComprasLambdaRole`/`environment` de la función `compras` sin `agora-boletas`, ver `MEMORY.md` §7), y **validada en vivo por el usuario**: adquisición en línea y en taquilla de un evento sin etapas emiten boletas de inmediato y el correo llega correctamente. Todo en el PR #46, **todavía sin fusionar** — motor JIT recalculado ya en anticipación de esa fusión: **Eventos con boletería externa** (roadmap #25) sube a Tarea 1. Tarea 2 queda sin candidato sin bloqueo (sin cambios respecto a la sesión anterior — ver abajo).
 
 ---
 
-## Tarea 1 — Boletería opcional (aforo sin cobro) — roadmap #24
-
-Un evento puede iniciar sin ninguna etapa de boletería (`etapas: []`): no cobra nada, solo controla aforo. El cobro se activa al agregar la primera etapa. Mientras no haya etapas, `mediosPago` solo admite `efectivo`/`transferencia` (nunca `bold`), el botón en `/evento/:slug` dice "Adquirir boletas" en vez de "Comprar boletas", y la adquisición se resuelve sin comprobante ni aprobación del productor — boletas emitidas y enviadas por correo de inmediato. Generaliza el camino hoy rechazado explícitamente en `server/api/handlers/compras.ts:192-197` ("Las boletas gratuitas todavía no están soportadas").
-
-**Archivos principales** (detalle completo en `tech-specs.md` §11 #24): `server/api/handlers/eventos.ts` (`normalizarEtapas`/`normalizarMediosPago` sin mínimo de etapas), `server/api/handlers/compras.ts` (camino sin comprobante/aprobación), `server/api/lib/vigencia-evento.ts` (finalización solo por `fechaHora` sin etapas), `features/evento/detalle-evento.component.ts`/`.html`, `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`FormArray` de etapas inicia vacío, checkbox `bold` deshabilitado sin etapas).
-
-**Se completa cuando:** build pasa, specs actualizadas (`editar-evento.component.spec.ts`, `detalle-evento.component.spec.ts`), y se prueba manualmente el flujo de compra sin etapas (en línea y en taquilla) en staging.
-
----
-
-## Tarea 2 — Eventos con boletería externa — roadmap #25
+## Tarea 1 — Eventos con boletería externa — roadmap #25
 
 Nuevo campo `Evento.administradoPorLeTiende: boolean` (default `true`). En `false`, el evento se anuncia en la Cartelera pero Ágora no vende ni controla su aforo: se ocultan Sillas totales, Máx. boletas, Plazo de comprobante, Medios de pago, Etapas, Productores y Porteros (Estado se mantiene visible y editable); en su lugar el administrador configura un vínculo externo tipado (WhatsApp `https://wa.me/57` + 9 dígitos, Instagram `https://www.instagram.com/` + hasta 30 caracteres `[A-Za-z0-9._]`, o Vínculo web `https://` + hasta 256 caracteres URL-encoded). En `/evento/:slug`, el botón de compra se reemplaza por "MÁS INFORMACIÓN:" + ícono según el tipo + el enlace completo.
 
 **Archivos principales** (detalle completo en `tech-specs.md` §11 #25): `core/models/evento.model.ts` (`administradoPorLeTiende`, `TipoVinculo`, `VinculoExterno`), `server/api/handlers/eventos.ts` (`normalizarVinculoExterno`, validación por tipo en frontend y backend), `server/api/handlers/eventos-publicos.ts` (`aVistaPublica` expone los campos nuevos), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`mat-slide-toggle`, sección "Más información"), `features/evento/detalle-evento.component.ts`/`.html` (bloque "MÁS INFORMACIÓN:" con ícono SVG inline + enlace `target="_blank" rel="noopener"`).
 
-**Se completa cuando:** build pasa, specs actualizadas, y se prueba manualmente un evento externo de punta a punta (toggle en el formulario, vínculo validado por tipo, visualización en `/evento/:slug`) en staging.
+**Se completa cuando:** build pasa, specs actualizadas, y se prueba manualmente un evento externo de punta a punta (toggle en el formulario, vínculo validado por tipo, visualización en `/evento/:slug`) en staging. **Antes de dar por buena la política IAM/`environment` de cualquier función tocada, listar explícitamente cada dependencia nueva que gane (`server/`/`lib/` compartidos incluidos) contra `serverless.yml`** — lección repetida por tercera vez en este proyecto, ver `MEMORY.md` §7 (24/08/2026).
+
+---
+
+## Tarea 2 — sin asignar, sin candidato sin bloqueo externo
+
+Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Google Calendar (#22) — v2, Media prioridad — sin desglosar todavía y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Ninguno es una tarea atómica lista para tomar hoy.
+
+**Se reactiva cuando alguno de los prerrequisitos externos de Bold/WhatsApp se resuelva, cuando Google Calendar se desglose con el nivel de detalle de una tarea atómica, o cuando se fusione el PR #46 y libere un segundo candidato del backlog.**
 
 ---
 
 ## Backlog
 
-Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) **completo y fusionado** — T1-T4 (Fase 1), T5 (PR #36), T6 (PR #37), T7 (PR #39) y T8 (PR #40) fusionadas (ver `MEMORY.md` §2). Tres hotfixes antes del paso a producción (vigencia/`finalizado`, `sillasTotales` editable, `cancelado` visible) **fusionados** (PR #41). Segunda ronda de hotfixes (correo, productores, mensaje de aprobación, doble envío, SLA de aforo) **fusionados** (PR #42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. De v2 (roadmap #19-22): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar).
+Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas, desglosadas de `docs/ajustes-pre-producción.md`) **completo y fusionado** — T1-T4 (Fase 1), T5 (PR #36), T6 (PR #37), T7 (PR #39) y T8 (PR #40) fusionadas (ver `MEMORY.md` §2). Tres hotfixes antes del paso a producción (vigencia/`finalizado`, `sillasTotales` editable, `cancelado` visible) **fusionados** (PR #41). Segunda ronda de hotfixes (correo, productores, mensaje de aprobación, doble envío, SLA de aforo) **fusionados** (PR #42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) implementada y validada en vivo en staging por el usuario (PR #46) — pendiente de fusionar.** De v2 (roadmap #19-22, #25): Bold (#19) y WhatsApp (#20) — **Alta** prioridad pero bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Queda sin desglosar: Google Calendar (#22) — Media prioridad, con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Eventos con boletería externa (#25) es la Tarea 1 activa (ver arriba).
 
 ---
 

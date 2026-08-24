@@ -9,7 +9,9 @@ export interface BoletaEmitida {
   eventoId: string;
   compraId: string;
   numeroEnCompra: number;
-  etapaId: string;
+  // v2 (roadmap #24) — ausente cuando la compra es de un evento sin etapas
+  // de boletería (boletería opcional sin cobro).
+  etapaId?: string;
   valorUnitario: number;
   estado: EstadoBoleta;
   emitidaEn: string;
@@ -18,7 +20,7 @@ export interface BoletaEmitida {
 export interface CompraParaEmision {
   compraId: string;
   eventoId: string;
-  etapaId: string;
+  etapaId?: string;
   montoTotal: number;
   cantidad: number;
 }
