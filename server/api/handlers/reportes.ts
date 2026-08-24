@@ -127,6 +127,16 @@ async function obtenerDatosCrudosDelEvento(
  * tabla pequeña — la prohibición de `Scan` de `TODO.md` Tarea 2 aplica solo
  * a `obtenerPanelEvento` (métricas), que sí tiene GSIs provisionados para
  * ese propósito.
+ *
+ * v2 (roadmap #25) — además excluye eventos con `administradoPorLeTiende:
+ * false` (boletería externa): al no administrar Le Tiende su boletería, esos
+ * eventos siempre tienen `sillasTotales: 0`, `etapas: []` y `mediosPago: []`
+ * (neutralizados por `eventos.ts`), así que no hay aforo que mostrar en el
+ * panel de métricas, nada que vender en efectivo, ni ninguna boleta que
+ * validar en puerta — el filtro aplica a los tres selectores que comparten
+ * este endpoint, no solo al panel. Mismo criterio de retrocompatibilidad que
+ * `listarEventos()` (`eventos.ts`): `!== false` trata un evento sin ese
+ * atributo (creado antes de esta tarea) como `true` por defecto.
  */
 async function listarEventosPanel(evento: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const autorizacion = await exigirRol(evento, 'portero');
@@ -137,8 +147,10 @@ async function listarEventosPanel(evento: APIGatewayProxyEventV2): Promise<APIGa
   const resultado = await documentoDynamoDB.send(
     new ScanCommand({ TableName: process.env['TABLA_EVENTOS'] }),
   );
-  const eventosPropios = (resultado.Items ?? []).filter((item) =>
-    tieneAccesoAlEvento(item, autorizacion.permisos),
+  const eventosPropios = (resultado.Items ?? []).filter(
+    (item) =>
+      tieneAccesoAlEvento(item, autorizacion.permisos) &&
+      item['administradoPorLeTiende'] !== false,
   );
 
   return respuestaJson(

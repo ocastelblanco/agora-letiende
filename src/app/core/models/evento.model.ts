@@ -9,6 +9,20 @@ export interface EtapaBoleteria {
   orden: number;
 }
 
+/**
+ * v2 (roadmap #25) — vínculo hacia el canal real de venta de un evento con
+ * boletería externa (`administradoPorLeTiende === false`). `valor` guarda
+ * solo la parte variable, sin el prefijo fijo de cada tipo; la URL completa
+ * se construye anteponiendo ese prefijo: whatsapp → `https://wa.me/57`,
+ * instagram → `https://www.instagram.com/`, web → `https://` (tech-specs.md §4.3).
+ */
+export type TipoVinculo = 'whatsapp' | 'instagram' | 'web';
+
+export interface VinculoExterno {
+  tipo: TipoVinculo;
+  valor: string;
+}
+
 /** Registro completo de `agora-eventos` (server/api/handlers/eventos.ts). */
 export interface Evento {
   eventoId: string;
@@ -18,6 +32,12 @@ export interface Evento {
   imagenKey?: string;
   logotipoKey?: string;
   fechaHora: string;
+  // v2 (roadmap #25) — `true` por defecto, retrocompatible con todo evento
+  // existente. En `false`, Ágora no vende ni controla el aforo del evento:
+  // los campos de boletería de abajo se normalizan a valores neutros en el
+  // backend y en su lugar aplica `vinculoExterno`.
+  administradoPorLeTiende: boolean;
+  vinculoExterno?: VinculoExterno;
   sillasTotales: number;
   sillasDisponibles: number;
   sillasReservadas: number;
@@ -55,6 +75,11 @@ export interface DatosNuevoEvento {
   nombre: string;
   descripcion: string;
   fechaHora: string;
+  // v2 (roadmap #25) — el backend normaliza los campos de boletería a
+  // valores neutros cuando esto es `false`, sin importar lo que se envíe
+  // para ellos (CLAUDE.md §5, A04/A08); en ese caso `vinculoExterno` es
+  // obligatorio.
+  administradoPorLeTiende: boolean;
   sillasTotales: number;
   maxBoletasPorCompra: number;
   etapas: DatosEtapaBoleteria[];
@@ -63,6 +88,7 @@ export interface DatosNuevoEvento {
   /** Opcional al crear — puede quedar vacío (`TODO.md` Tarea 1, T7). */
   porteros?: string[];
   plazoComprobanteMinutos?: number;
+  vinculoExterno?: VinculoExterno;
 }
 
 /**
@@ -76,6 +102,8 @@ export interface DatosEditarEvento {
   nombre?: string;
   descripcion?: string;
   fechaHora?: string;
+  /** v2 (roadmap #25) — al enviarse en `false`, el backend exige `vinculoExterno` en el mismo PUT. */
+  administradoPorLeTiende?: boolean;
   sillasTotales?: number;
   maxBoletasPorCompra?: number;
   plazoComprobanteMinutos?: number;
@@ -86,6 +114,7 @@ export interface DatosEditarEvento {
   estado?: EstadoEvento;
   imagenKey?: string;
   logotipoKey?: string;
+  vinculoExterno?: VinculoExterno;
 }
 
 /**
@@ -107,6 +136,13 @@ export interface EventoPublico {
   imagenUrl?: string;
   logotipoUrl?: string;
   fechaHora: string;
+  // v2 (roadmap #25) — `true` por defecto (normalizado en el backend,
+  // `eventos-publicos.ts`, `aVistaPublica`). En `false`, el detalle público
+  // no muestra el flujo de compra sino `vinculoExterno`/`vinculoExternoUrl`.
+  administradoPorLeTiende: boolean;
+  vinculoExterno?: VinculoExterno;
+  /** URL completa ya construida por el backend (prefijo fijo + `vinculoExterno.valor`). */
+  vinculoExternoUrl?: string;
   sillasTotales: number;
   sillasDisponibles: number;
   sillasReservadas: number;

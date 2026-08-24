@@ -13,6 +13,7 @@ const eventoEjemplo: EventoPublico = {
   descripcion: 'Una noche de jazz en Le Tiende',
   imagenUrl: 'https://agora-activos-test.s3.us-east-1.amazonaws.com/eventos/e1/imagen-abc.png',
   fechaHora: '2026-09-15T01:00:00.000Z',
+  administradoPorLeTiende: true,
   sillasTotales: 100,
   sillasDisponibles: 80,
   sillasReservadas: 5,
@@ -96,6 +97,41 @@ describe('DetalleEventoComponent', () => {
     expect(enlace).not.toBeNull();
     expect(enlace?.textContent).toContain('Adquirir boletas');
     expect(enlace?.textContent).not.toContain('Comprar boletas');
+  });
+
+  // v2 (roadmap #25) — eventos con boletería externa.
+  describe('boletería externa (roadmap #25)', () => {
+    const eventoExterno: EventoPublico = {
+      ...eventoEjemplo,
+      administradoPorLeTiende: false,
+      vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+      vinculoExternoUrl: 'https://wa.me/573001234567',
+    };
+
+    it('muestra el bloque "MÁS INFORMACIÓN" en vez del botón de compra', async () => {
+      const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExterno });
+      const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.nativeElement.textContent).toContain('Más información');
+      const enlace: HTMLAnchorElement | null = fixture.nativeElement.querySelector(
+        'a[href="https://wa.me/573001234567"]',
+      );
+      expect(enlace).not.toBeNull();
+      expect(enlace?.getAttribute('target')).toBe('_blank');
+      expect(enlace?.getAttribute('rel')).toBe('noopener');
+      expect(fixture.nativeElement.querySelector('a[href="/evento/concierto-jazz/comprar"]')).toBeNull();
+    });
+
+    it('no muestra el bloque "MÁS INFORMACIÓN" cuando administradoPorLeTiende es true', async () => {
+      const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo });
+      const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.nativeElement.textContent).not.toContain('Más información');
+    });
   });
 
   it('no muestra el botón "Comprar boletas" si el evento está agotado', async () => {

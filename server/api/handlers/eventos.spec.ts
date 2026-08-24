@@ -124,7 +124,17 @@ describe('handler de /api/eventos', () => {
       const respuesta = await invocar('GET');
 
       expect(respuesta.statusCode).toBe(200);
-      expect(JSON.parse(respuesta.body!)).toEqual([{ eventoId: 'e1' }]);
+      // v2 (roadmap #25) — administradoPorLeTiende se normaliza a `true`
+      // cuando el ítem persistido no tiene el atributo (retrocompatibilidad).
+      expect(JSON.parse(respuesta.body!)).toEqual([{ eventoId: 'e1', administradoPorLeTiende: true }]);
+    });
+
+    it('respeta administradoPorLeTiende: false persistido, sin sobrescribirlo', async () => {
+      sendMock.mockResolvedValue({ Items: [{ eventoId: 'e2', administradoPorLeTiende: false }] });
+
+      const respuesta = await invocar('GET');
+
+      expect(JSON.parse(respuesta.body!)).toEqual([{ eventoId: 'e2', administradoPorLeTiende: false }]);
     });
   });
 
@@ -288,6 +298,174 @@ describe('handler de /api/eventos', () => {
       const respuesta = await invocar('POST', { cuerpo: eventoValido });
 
       expect(respuesta.statusCode).toBe(409);
+    });
+
+    // v2 (roadmap #25) — eventos con boletería externa.
+    describe('administradoPorLeTiende / vinculoExterno (roadmap #25)', () => {
+      it('crea el evento con administradoPorLeTiende: true por defecto cuando no viene en el payload', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.administradoPorLeTiende).toBe(true);
+        expect(cuerpo.vinculoExterno).toBeUndefined();
+      });
+
+      it('responde 400 si administradoPorLeTiende no es booleano', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, administradoPorLeTiende: 'si' },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('con administradoPorLeTiende: false, exige vinculoExterno válido', async () => {
+        const { sillasTotales: _s, maxBoletasPorCompra: _m, etapas: _e, mediosPago: _mp, productores: _p, ...base } = eventoValido;
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...base, administradoPorLeTiende: false },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('con administradoPorLeTiende: false y vinculoExterno whatsapp válido, normaliza los campos de boletería a valores neutros', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+            // Ignorados: el backend nunca confía en estos campos cuando
+            // administradoPorLeTiende es false (CLAUDE.md §5, A04/A08).
+            sillasTotales: 5000,
+            maxBoletasPorCompra: 99,
+            etapas: [etapaValida],
+            mediosPago: ['bold'],
+            productores: ['alguien@letiende.co'],
+            porteros: ['otro@letiende.co'],
+            plazoComprobanteMinutos: 999,
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(201);
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.administradoPorLeTiende).toBe(false);
+        expect(cuerpo.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '3001234567' });
+        expect(cuerpo.sillasTotales).toBe(0);
+        expect(cuerpo.sillasDisponibles).toBe(0);
+        expect(cuerpo.sillasReservadas).toBe(0);
+        expect(cuerpo.etapas).toEqual([]);
+        expect(cuerpo.mediosPago).toEqual([]);
+        expect(cuerpo.productores).toEqual([]);
+        expect(cuerpo.porteros).toEqual([]);
+        expect(cuerpo.maxBoletasPorCompra).toBe(1);
+        expect(cuerpo.plazoComprobanteMinutos).toBe(10);
+      });
+
+      it('rechaza vinculoExterno whatsapp con un valor que no son 10 dígitos', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '12345' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+
+      it('rechaza vinculoExterno instagram con caracteres fuera de [A-Za-z0-9._]', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'instagram', valor: 'usuario con espacios' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+
+      it('acepta vinculoExterno instagram válido', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'instagram', valor: 'le_tiende.oficial' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(201);
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.vinculoExterno).toEqual({ tipo: 'instagram', valor: 'le_tiende.oficial' });
+      });
+
+      it('rechaza vinculoExterno web cuyo valor ya incluye el prefijo https://', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'web', valor: 'https://forms.gle/abc123' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
+
+      it('acepta vinculoExterno web sin el prefijo, y arma una URL https válida al anteponerlo', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'web', valor: 'forms.gle/abc123' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(201);
+        const cuerpo = JSON.parse(respuesta.body!);
+        expect(cuerpo.vinculoExterno).toEqual({ tipo: 'web', valor: 'forms.gle/abc123' });
+      });
+
+      it('rechaza vinculoExterno con un tipo desconocido', async () => {
+        const respuesta = await invocar('POST', {
+          cuerpo: {
+            slug: eventoValido.slug,
+            nombre: eventoValido.nombre,
+            descripcion: eventoValido.descripcion,
+            fechaHora: eventoValido.fechaHora,
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'facebook', valor: 'algo' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+      });
     });
   });
 
@@ -765,6 +943,149 @@ describe('handler de /api/eventos', () => {
 
         const comandoUpdate = sendMock.mock.calls[1][0];
         expect(comandoUpdate.input.UpdateExpression).not.toContain('#mediosPago');
+      });
+    });
+
+    // v2 (roadmap #25) — eventos con boletería externa.
+    describe('administradoPorLeTiende / vinculoExterno (roadmap #25)', () => {
+      it('responde 400 si administradoPorLeTiende no es booleano', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { administradoPorLeTiende: 'si' },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('responde 400 si desactiva administradoPorLeTiende sin vinculoExterno en el mismo PUT, sin escribir en DynamoDB', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { administradoPorLeTiende: false },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('responde 400 si vinculoExterno es inválido para el tipo', async () => {
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { vinculoExterno: { tipo: 'whatsapp', valor: 'no-son-digitos' } },
+        });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('desactiva administradoPorLeTiende con vinculoExterno válido: normaliza los campos de boletería a valores neutros, ignorando lo que mande el cliente para ellos', async () => {
+        // 1er send: QueryCommand de compras en curso (sin resultados, no
+        // bloquea la desactivación). 2do send: el UpdateCommand real.
+        sendMock.mockResolvedValueOnce({ Items: [] });
+        sendMock.mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+            // Debe ignorarse por completo: ni se valida ni se escribe tal
+            // cual (CLAUDE.md §5, A04/A08).
+            sillasTotales: 5000,
+            etapas: [{ nombre: 'X', precio: 1, cierraEn: '2026-09-01T00:00:00.000Z', orden: 1 }],
+            mediosPago: ['bold'],
+            productores: ['alguien@letiende.co'],
+          },
+        });
+
+        // Sin ningún GetCommand extra: los bloques de sillasTotales/etapas
+        // (los únicos que necesitan leer el evento actual) se saltan por
+        // completo cuando desactivaBoleteria es true. Sí hay un QueryCommand
+        // extra (verificación de compras en curso, hallazgo de code review).
+        expect(sendMock).toHaveBeenCalledTimes(2);
+        const comandoQuery = sendMock.mock.calls[0][0];
+        expect(comandoQuery.input.IndexName).toBe('eventoId-creadaEn-index');
+        expect(comandoQuery.input.ExpressionAttributeValues[':eventoId']).toBe('e1');
+
+        const comandoUpdate = sendMock.mock.calls[1][0];
+        const valores = comandoUpdate.input.ExpressionAttributeValues;
+        expect(valores[':administradoPorLeTiende']).toBe(false);
+        expect(valores[':vinculoExterno']).toEqual({ tipo: 'whatsapp', valor: '3001234567' });
+        expect(valores[':sillasTotales']).toBe(0);
+        expect(valores[':sillasDisponibles']).toBe(0);
+        expect(valores[':sillasReservadas']).toBe(0);
+        expect(valores[':etapas']).toEqual([]);
+        expect(valores[':mediosPago']).toEqual([]);
+        expect(valores[':productores']).toEqual([]);
+        expect(valores[':porteros']).toEqual([]);
+        expect(valores[':maxBoletasPorCompra']).toBe(1);
+        expect(valores[':plazoComprobanteMinutos']).toBe(10);
+      });
+
+      it('responde 409 y no escribe nada si hay una compra "esperando_comprobante" para el evento (hallazgo de code review)', async () => {
+        sendMock.mockResolvedValueOnce({
+          Items: [{ compraId: 'c1', eventoId: 'e1', estado: 'esperando_comprobante' }],
+        });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(409);
+        expect(JSON.parse(respuesta.body!).mensaje).toContain('compra(s) en curso');
+        // Solo el QueryCommand de verificación — nunca llega a escribir el
+        // UpdateCommand que neutralizaría el aforo.
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('permite desactivar administradoPorLeTiende cuando las únicas compras del evento ya están resueltas (aprobada/rechazada/expirada)', async () => {
+        // El FilterExpression real de DynamoDB (estado = iniciada/esperando_
+        // comprobante/en_revision) ya excluye del lado del servidor las
+        // compras aprobada/rechazada/expirada — el mock simula ese
+        // resultado ya filtrado devolviendo Items vacío, mismo criterio que
+        // el resto de la suite para QueryCommand con FilterExpression.
+        sendMock.mockResolvedValueOnce({ Items: [] });
+        sendMock.mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(sendMock).toHaveBeenCalledTimes(2);
+      });
+
+      it('permite reactivar administradoPorLeTiende: true sin exigir vinculoExterno', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { administradoPorLeTiende: true },
+        });
+
+        expect(respuesta.statusCode).toBe(200);
+        const comandoUpdate = sendMock.mock.calls[0][0];
+        expect(comandoUpdate.input.ExpressionAttributeValues[':administradoPorLeTiende']).toBe(true);
+      });
+
+      it('un productor con "administradoPorLeTiende" en el payload: 403, sin escribir en DynamoDB', async () => {
+        exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosProductor });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: { administradoPorLeTiende: false, vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' } },
+        });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
       });
     });
   });

@@ -110,6 +110,16 @@ export class DetalleEventoComponent {
     return new Date(etapa.cierraEn).getTime() <= Date.now();
   }
 
+  /**
+   * v2 (roadmap #25) — `administradoPorLeTiende === false` reemplaza el
+   * flujo de compra por el bloque "MÁS INFORMACIÓN" hacia `vinculoExterno`.
+   * Comparación explícita contra `false` (no solo `!valor`): un evento
+   * creado antes de esta tarea ya llega normalizado a `true` desde el
+   * backend (`eventos-publicos.ts`, `aVistaPublica`), pero esta plantilla no
+   * depende de esa normalización para ser retrocompatible.
+   */
+  protected readonly esBoleteriaExterna = computed(() => this.evento()?.administradoPorLeTiende === false);
+
   /** Fecha límite de cierre de una etapa, en hora de Bogotá (`CLAUDE.md` §4). */
   protected etapaCierraEnLegible(etapa: EtapaBoleteria): string {
     return paraInputBogota(etapa.cierraEn).replace('T', ' ');

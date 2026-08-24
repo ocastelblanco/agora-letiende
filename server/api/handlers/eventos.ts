@@ -8,6 +8,7 @@ import {
   DeleteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
@@ -28,6 +29,7 @@ const URL_BASE_PRODUCCION = 'https://agora.letiende.co';
 
 export type EstadoEvento = 'borrador' | 'publicado' | 'agotado' | 'finalizado' | 'cancelado';
 export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
+export type TipoVinculo = 'whatsapp' | 'instagram' | 'web';
 
 const ESTADOS_VALIDOS: readonly EstadoEvento[] = [
   'borrador',
@@ -37,12 +39,30 @@ const ESTADOS_VALIDOS: readonly EstadoEvento[] = [
   'cancelado',
 ];
 const MEDIOS_PAGO_VALIDOS: readonly MedioPago[] = ['bold', 'efectivo', 'transferencia'];
+const TIPOS_VINCULO_VALIDOS: readonly TipoVinculo[] = ['whatsapp', 'instagram', 'web'];
+
+// v2 (roadmap #25) — boletería externa: valores neutros que se fuerzan en la
+// escritura cuando administradoPorLeTiende es false, sin importar lo que
+// mande el cliente para estos campos (CLAUDE.md §5, A04/A08). sillasTotales/
+// sillasDisponibles en 0 basta para que aforo.ts rechace cualquier reserva
+// de forma natural — no hace falta bloquear compras.ts a mano.
+const SILLAS_TOTALES_NEUTRO = 0;
+const MAX_BOLETAS_POR_COMPRA_NEUTRO = 1;
+const PLAZO_COMPROBANTE_MINUTOS_NEUTRO = 10;
 
 // Comprobantes usan el mismo criterio (CLAUDE.md §5, A08): nunca SVG (vector
 // de XSS), el tipo se restringe por magic bytes en la carga, no aquí — esta
 // lista solo acota qué `Content-Type` puede pedir la URL prefirmada.
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const TAMANO_MAXIMO_IMAGEN_BYTES = 10 * 1024 * 1024;
+
+// v2 (roadmap #25, hallazgo de code review) — mismo criterio que
+// `ESTADOS_QUE_RETIENEN_AFORO` en `liberar-reservas.ts:17-21`: estos son los
+// únicos estados de compra que todavía retienen aforo del evento. Se usa
+// para bloquear la desactivación de `administradoPorLeTiende` mientras haya
+// compras en curso — de lo contrario quedarían huérfanas (`aprobarCompra`
+// en `aprobaciones.ts` traga `ErrorAforo` y de todas formas emite boletas).
+const ESTADOS_QUE_RETIENEN_AFORO = ['iniciada', 'esperando_comprobante', 'en_revision'] as const;
 
 function esErrorCondicionFallida(error: unknown): boolean {
   return error instanceof Error && error.name === 'ConditionalCheckFailedException';
@@ -212,6 +232,70 @@ function normalizarPorteros(valor: unknown): string[] | null {
   return normalizarCorreos(valor, 0);
 }
 
+interface VinculoExternoEntrada {
+  tipo: TipoVinculo;
+  valor: string;
+}
+
+const PATRON_VINCULO_WHATSAPP = /^\d{10}$/;
+const PATRON_VINCULO_INSTAGRAM = /^[A-Za-z0-9._]{1,30}$/;
+
+/**
+ * v2 (roadmap #25) — valida el vínculo externo de un evento con boletería
+ * externa (`administradoPorLeTiende === false`), nunca confiando en la
+ * validación ya hecha del lado de Angular (CLAUDE.md §5, A04/A08). `valor`
+ * guarda solo la parte variable, sin el prefijo fijo de cada tipo
+ * (tech-specs.md §4.3): whatsapp exige exactamente 10 dígitos (prefijo fijo
+ * `https://wa.me/57`), instagram hasta 30 caracteres `[A-Za-z0-9._]`
+ * (prefijo fijo `https://www.instagram.com/`), y web hasta 256 caracteres
+ * que formen una URL https válida al anteponerle el prefijo fijo `https://`
+ * (nunca debe incluir ese prefijo ya en `valor`).
+ */
+function normalizarVinculoExterno(valor: unknown): VinculoExternoEntrada | null {
+  if (typeof valor !== 'object' || valor === null) {
+    return null;
+  }
+  const registro = valor as Record<string, unknown>;
+  const tipo = registro['tipo'];
+  const dato = registro['valor'];
+  if (typeof tipo !== 'string' || !(TIPOS_VINCULO_VALIDOS as readonly string[]).includes(tipo)) {
+    return null;
+  }
+  if (typeof dato !== 'string' || dato.length === 0) {
+    return null;
+  }
+  const tipoValido = tipo as TipoVinculo;
+
+  if (tipoValido === 'whatsapp') {
+    return PATRON_VINCULO_WHATSAPP.test(dato) ? { tipo: tipoValido, valor: dato } : null;
+  }
+  if (tipoValido === 'instagram') {
+    return PATRON_VINCULO_INSTAGRAM.test(dato) ? { tipo: tipoValido, valor: dato } : null;
+  }
+
+  // 'web' — nunca incluye ya el prefijo (se antepone al mostrarlo), y debe
+  // formar una URL https válida una vez antepuesto.
+  if (dato.length > 256 || /^https:\/\//i.test(dato)) {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(`https://${dato}`);
+    if (url.protocol !== 'https:') {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  // Se persiste la forma canónica ya re-parseada (`url.href`), no `dato` tal
+  // cual (hallazgo de code review): el parser WHATWG de `URL` descarta
+  // silenciosamente tabs/saltos de línea al construir `url` arriba, así que
+  // un `dato` con caracteres de control pasaría esta validación pero se
+  // guardaría en DynamoDB todavía con esos caracteres dentro si se
+  // persistiera el original en vez de `url.href`.
+  return { tipo: tipoValido, valor: url.href.slice('https://'.length) };
+}
+
 /**
  * `GET /api/eventos` — un `administrador` ve todos los eventos; un
  * `productor` solo los que tiene asignados en `productores`
@@ -223,7 +307,13 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
     new ScanCommand({ TableName: process.env['TABLA_EVENTOS'] }),
   );
   const items = resultado.Items ?? [];
-  const visibles = items.filter((item) => tieneAccesoAlEvento(item as Record<string, unknown>, permisos));
+  const visibles = items
+    .filter((item) => tieneAccesoAlEvento(item as Record<string, unknown>, permisos))
+    // v2 (roadmap #25) — retrocompatibilidad: un evento creado antes de esta
+    // tarea no tiene el atributo en DynamoDB. Se normaliza aquí a `true` (el
+    // valor por defecto) para que la respuesta siempre cumpla el contrato de
+    // `Evento.administradoPorLeTiende: boolean` (no opcional).
+    .map((item) => ({ ...item, administradoPorLeTiende: item['administradoPorLeTiende'] !== false }));
   return respuestaJson(200, visibles);
 }
 
@@ -235,64 +325,108 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const datos = (cuerpo ?? {}) as Record<string, unknown>;
 
   if (
+    datos['administradoPorLeTiende'] !== undefined &&
+    typeof datos['administradoPorLeTiende'] !== 'boolean'
+  ) {
+    return respuestaJson(400, { mensaje: 'administradoPorLeTiende debe ser booleano' });
+  }
+  // v2 (roadmap #25) — true por defecto, retrocompatible.
+  const administradoPorLeTiende = datos['administradoPorLeTiende'] !== false;
+
+  if (
     !esSlugValido(datos['slug']) ||
     !esTextoValido(datos['nombre'], 200) ||
     !esTextoValido(datos['descripcion'], 5000) ||
-    !esFechaIsoValida(datos['fechaHora']) ||
-    !esEnteroPositivo(datos['sillasTotales']) ||
-    !esEnteroPositivo(datos['maxBoletasPorCompra'])
+    !esFechaIsoValida(datos['fechaHora'])
   ) {
     return respuestaJson(400, {
-      mensaje: 'slug, nombre, descripcion, fechaHora, sillasTotales y maxBoletasPorCompra son obligatorios y deben ser válidos',
+      mensaje: 'slug, nombre, descripcion y fechaHora son obligatorios y deben ser válidos',
     });
   }
 
-  const etapas = normalizarEtapas(datos['etapas']);
-  if (!etapas) {
-    return respuestaJson(400, { mensaje: 'etapas debe ser un arreglo de etapas válidas (puede estar vacío)' });
-  }
+  let sillasTotales: number = SILLAS_TOTALES_NEUTRO;
+  let maxBoletasPorCompra: number = MAX_BOLETAS_POR_COMPRA_NEUTRO;
+  let etapas: EtapaBoleteriaEntrada[] = [];
+  let mediosPago: MedioPago[] = [];
+  let productores: string[] = [];
+  let porteros: string[] = [];
+  let plazoComprobanteMinutos: number = PLAZO_COMPROBANTE_MINUTOS_NEUTRO;
+  let vinculoExterno: VinculoExternoEntrada | undefined;
 
-  const mediosPago = normalizarMediosPago(datos['mediosPago']);
-  if (!mediosPago) {
-    return respuestaJson(400, { mensaje: 'mediosPago debe ser un arreglo con al menos un medio válido' });
-  }
-  if (bloqueaBoldSinEtapas(mediosPago, etapas.length > 0)) {
-    return respuestaJson(400, {
-      mensaje: 'Bold no se puede habilitar en un evento sin etapas de boletería',
-    });
-  }
+  if (administradoPorLeTiende) {
+    if (!esEnteroPositivo(datos['sillasTotales']) || !esEnteroPositivo(datos['maxBoletasPorCompra'])) {
+      return respuestaJson(400, {
+        mensaje: 'sillasTotales y maxBoletasPorCompra son obligatorios y deben ser válidos',
+      });
+    }
+    sillasTotales = datos['sillasTotales'];
+    maxBoletasPorCompra = datos['maxBoletasPorCompra'];
 
-  const productores = normalizarProductores(datos['productores'] ?? []);
-  if (!productores) {
-    return respuestaJson(400, {
-      mensaje: 'productores debe ser un arreglo de al menos un correo válido',
-    });
-  }
+    const etapasNormalizadas = normalizarEtapas(datos['etapas']);
+    if (!etapasNormalizadas) {
+      return respuestaJson(400, { mensaje: 'etapas debe ser un arreglo de etapas válidas (puede estar vacío)' });
+    }
+    etapas = etapasNormalizadas;
 
-  const porteros = normalizarPorteros(datos['porteros'] ?? []);
-  if (!porteros) {
-    return respuestaJson(400, { mensaje: 'porteros debe ser un arreglo de correos válidos' });
-  }
+    const mediosPagoNormalizados = normalizarMediosPago(datos['mediosPago']);
+    if (!mediosPagoNormalizados) {
+      return respuestaJson(400, { mensaje: 'mediosPago debe ser un arreglo con al menos un medio válido' });
+    }
+    mediosPago = mediosPagoNormalizados;
+    if (bloqueaBoldSinEtapas(mediosPago, etapas.length > 0)) {
+      return respuestaJson(400, {
+        mensaje: 'Bold no se puede habilitar en un evento sin etapas de boletería',
+      });
+    }
 
-  const plazoComprobanteMinutos = esEnteroPositivo(datos['plazoComprobanteMinutos'])
-    ? datos['plazoComprobanteMinutos']
-    : 10;
+    const productoresNormalizados = normalizarProductores(datos['productores'] ?? []);
+    if (!productoresNormalizados) {
+      return respuestaJson(400, {
+        mensaje: 'productores debe ser un arreglo de al menos un correo válido',
+      });
+    }
+    productores = productoresNormalizados;
+
+    const porterosNormalizados = normalizarPorteros(datos['porteros'] ?? []);
+    if (!porterosNormalizados) {
+      return respuestaJson(400, { mensaje: 'porteros debe ser un arreglo de correos válidos' });
+    }
+    porteros = porterosNormalizados;
+
+    plazoComprobanteMinutos = esEnteroPositivo(datos['plazoComprobanteMinutos'])
+      ? datos['plazoComprobanteMinutos']
+      : 10;
+  } else {
+    // v2 (roadmap #25) — evento con boletería externa: Ágora no vende ni
+    // controla el aforo. sillasTotales/maxBoletasPorCompra/etapas/mediosPago/
+    // productores/porteros/plazoComprobanteMinutos quedan en su valor
+    // neutro sin importar lo que el cliente haya enviado para ellos
+    // (CLAUDE.md §5, A04/A08) — en su lugar, vinculoExterno es obligatorio.
+    const vinculo = normalizarVinculoExterno(datos['vinculoExterno']);
+    if (!vinculo) {
+      return respuestaJson(400, {
+        mensaje: 'vinculoExterno es obligatorio y debe ser válido cuando administradoPorLeTiende es false',
+      });
+    }
+    vinculoExterno = vinculo;
+  }
 
   const ahora = new Date().toISOString();
   const eventoId = randomUUID();
-  const item = {
+  const item: Record<string, unknown> = {
     eventoId,
     slug: datos['slug'],
     nombre: datos['nombre'],
     descripcion: datos['descripcion'],
     fechaHora: datos['fechaHora'],
-    sillasTotales: datos['sillasTotales'],
+    administradoPorLeTiende,
+    sillasTotales,
     // Regla obligatoria (TODO.md Tarea 1, CLAUDE.md §5 A08): el aforo se
     // inicializa en la misma escritura, nunca se acepta del payload.
-    sillasDisponibles: datos['sillasTotales'],
+    sillasDisponibles: sillasTotales,
     sillasReservadas: 0,
     etapas,
-    maxBoletasPorCompra: datos['maxBoletasPorCompra'],
+    maxBoletasPorCompra,
     mediosPago,
     plazoComprobanteMinutos,
     productores,
@@ -301,6 +435,9 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     creadoEn: ahora,
     actualizadoEn: ahora,
   };
+  if (vinculoExterno) {
+    item['vinculoExterno'] = vinculoExterno;
+  }
 
   try {
     // Sin lectura previa: la condición evita colisionar con un eventoId ya
@@ -424,6 +561,46 @@ async function actualizarEvento(
     valoresExpresion[`:${campo}`] = valor;
   };
 
+  // v2 (roadmap #25) — al desactivar la boletería administrada por Le Tiende
+  // en este mismo PUT, los campos de boletería (sillasTotales/etapas/
+  // mediosPago/productores/porteros/plazoComprobanteMinutos/
+  // maxBoletasPorCompra) se normalizan a valores neutros más abajo, sin
+  // importar lo que el cliente haya enviado para ellos en el mismo payload
+  // (CLAUDE.md §5, A04/A08) — por eso los bloques de esos campos, debajo,
+  // se saltan por completo cuando esto es `true`.
+  if (
+    datos['administradoPorLeTiende'] !== undefined &&
+    typeof datos['administradoPorLeTiende'] !== 'boolean'
+  ) {
+    return respuestaJson(400, { mensaje: 'administradoPorLeTiende debe ser booleano' });
+  }
+  const desactivaBoleteria = datos['administradoPorLeTiende'] === false;
+
+  // A diferencia de `crearEvento` (que solo persiste `vinculoExterno` dentro
+  // de la rama `administradoPorLeTiende === false`), aquí se procesa
+  // siempre que venga en el payload, sin importar el valor resultante de
+  // `administradoPorLeTiende` (hallazgo de code review: asimetría entre los
+  // dos code paths). Es intencional: permite editar `vinculoExterno` de
+  // forma aislada sin tener que reenviar el toggle completo en el mismo
+  // PUT, y es inerte mientras `administradoPorLeTiende` sea `true` — tanto
+  // el frontend como la vista pública lo ignoran en ese caso. No se agrega
+  // una lectura extra del evento actual solo para este chequeo.
+  if (datos['vinculoExterno'] !== undefined) {
+    const vinculo = normalizarVinculoExterno(datos['vinculoExterno']);
+    if (!vinculo) {
+      return respuestaJson(400, { mensaje: 'vinculoExterno inválido' });
+    }
+    agregar('vinculoExterno', '#vinculoExterno', vinculo);
+  } else if (desactivaBoleteria) {
+    return respuestaJson(400, {
+      mensaje: 'vinculoExterno es obligatorio en el mismo PUT que desactiva administradoPorLeTiende',
+    });
+  }
+
+  if (datos['administradoPorLeTiende'] !== undefined) {
+    agregar('administradoPorLeTiende', '#administradoPorLeTiende', datos['administradoPorLeTiende']);
+  }
+
   if (datos['nombre'] !== undefined) {
     if (!esTextoValido(datos['nombre'], 200)) {
       return respuestaJson(400, { mensaje: 'nombre inválido' });
@@ -442,19 +619,19 @@ async function actualizarEvento(
     }
     agregar('fechaHora', '#fechaHora', datos['fechaHora']);
   }
-  if (datos['maxBoletasPorCompra'] !== undefined) {
+  if (!desactivaBoleteria && datos['maxBoletasPorCompra'] !== undefined) {
     if (!esEnteroPositivo(datos['maxBoletasPorCompra'])) {
       return respuestaJson(400, { mensaje: 'maxBoletasPorCompra inválido' });
     }
     agregar('maxBoletasPorCompra', '#maxBoletasPorCompra', datos['maxBoletasPorCompra']);
   }
-  if (datos['plazoComprobanteMinutos'] !== undefined) {
+  if (!desactivaBoleteria && datos['plazoComprobanteMinutos'] !== undefined) {
     if (!esEnteroPositivo(datos['plazoComprobanteMinutos'])) {
       return respuestaJson(400, { mensaje: 'plazoComprobanteMinutos inválido' });
     }
     agregar('plazoComprobanteMinutos', '#plazoComprobanteMinutos', datos['plazoComprobanteMinutos']);
   }
-  if (datos['sillasTotales'] !== undefined) {
+  if (!desactivaBoleteria && datos['sillasTotales'] !== undefined) {
     // Hotfixes pre-producción: "el administrador debe poder editar el
     // número de sillas totales de un evento, en todo momento" — nunca un
     // productor (no está en CAMPOS_EDITABLES_PRODUCTOR, así que ya se
@@ -548,7 +725,7 @@ async function actualizarEvento(
       agregar('estado', '#estado', 'publicado');
     }
   }
-  if (datos['etapas'] !== undefined) {
+  if (!desactivaBoleteria && datos['etapas'] !== undefined) {
     // Lee el evento actual solo en este caso (no incondicional al inicio de
     // la función: sería una lectura extra innecesaria para un PUT que no
     // toca etapas) para poder validar a cuáles etapaId ya existentes puede
@@ -591,7 +768,7 @@ async function actualizarEvento(
       }
     }
   }
-  if (datos['mediosPago'] !== undefined) {
+  if (!desactivaBoleteria && datos['mediosPago'] !== undefined) {
     const mediosPago = normalizarMediosPago(datos['mediosPago']);
     if (!mediosPago) {
       return respuestaJson(400, { mensaje: 'mediosPago inválido' });
@@ -619,7 +796,7 @@ async function actualizarEvento(
     }
     agregar('mediosPago', '#mediosPago', mediosPago);
   }
-  if (datos['productores'] !== undefined) {
+  if (!desactivaBoleteria && datos['productores'] !== undefined) {
     const productores = normalizarProductores(datos['productores']);
     if (!productores) {
       return respuestaJson(400, {
@@ -628,13 +805,64 @@ async function actualizarEvento(
     }
     agregar('productores', '#productores', productores);
   }
-  if (datos['porteros'] !== undefined) {
+  if (!desactivaBoleteria && datos['porteros'] !== undefined) {
     const porteros = normalizarPorteros(datos['porteros']);
     if (!porteros) {
       return respuestaJson(400, { mensaje: 'porteros inválido' });
     }
     agregar('porteros', '#porteros', porteros);
   }
+
+  if (desactivaBoleteria) {
+    // v2 (roadmap #25, hallazgo de code review) — antes de neutralizar el
+    // aforo, verifica que no haya compras de este evento todavía reteniendo
+    // aforo (mismo criterio que `ESTADOS_QUE_RETIENEN_AFORO`). Sin esta
+    // guarda, esas compras quedarían huérfanas: `aprobarCompra()` en
+    // aprobaciones.ts traga `ErrorAforo` en un try/catch y de todas formas
+    // emite boletas, dejando el evento con su aforo permanentemente en 0/0
+    // sin reflejar la realidad. Solo se consulta en esta rama — no le
+    // agrega costo al camino feliz de un PUT que no toca
+    // `administradoPorLeTiende`.
+    const comprasEnCurso = await documentoDynamoDB.send(
+      new QueryCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        IndexName: 'eventoId-creadaEn-index',
+        KeyConditionExpression: 'eventoId = :eventoId',
+        FilterExpression: 'estado = :iniciada OR estado = :esperandoComprobante OR estado = :enRevision',
+        ExpressionAttributeValues: {
+          ':eventoId': eventoId,
+          ':iniciada': ESTADOS_QUE_RETIENEN_AFORO[0],
+          ':esperandoComprobante': ESTADOS_QUE_RETIENEN_AFORO[1],
+          ':enRevision': ESTADOS_QUE_RETIENEN_AFORO[2],
+        },
+      }),
+    );
+    const cantidadEnCurso = (comprasEnCurso.Items ?? []).length;
+    if (cantidadEnCurso > 0) {
+      return respuestaJson(409, {
+        mensaje:
+          `No se puede desactivar la boletería administrada: hay ${cantidadEnCurso} compra(s) en curso ` +
+          'para este evento (iniciada/esperando comprobante/en revisión). Resuélvelas o espera a que ' +
+          'expiren antes de desactivar.',
+      });
+    }
+
+    // Fuerza el valor neutro de cada campo de boletería en esta misma
+    // escritura (ver el comentario junto a `desactivaBoleteria` más arriba)
+    // — `sillasTotales`/`sillasDisponibles`/`sillasReservadas` se fuerzan en
+    // 0 directamente (no con la aritmética relativa del bloque de
+    // `sillasTotales` de arriba, que se salta por completo en este caso).
+    agregar('sillasTotales', '#sillasTotales', SILLAS_TOTALES_NEUTRO);
+    agregar('sillasDisponibles', '#sillasDisponibles', SILLAS_TOTALES_NEUTRO);
+    agregar('sillasReservadas', '#sillasReservadas', 0);
+    agregar('etapas', '#etapas', []);
+    agregar('mediosPago', '#mediosPago', []);
+    agregar('productores', '#productores', []);
+    agregar('porteros', '#porteros', []);
+    agregar('plazoComprobanteMinutos', '#plazoComprobanteMinutos', PLAZO_COMPROBANTE_MINUTOS_NEUTRO);
+    agregar('maxBoletasPorCompra', '#maxBoletasPorCompra', MAX_BOLETAS_POR_COMPRA_NEUTRO);
+  }
+
   if (datos['estado'] !== undefined) {
     if (
       typeof datos['estado'] !== 'string' ||
@@ -678,13 +906,15 @@ async function actualizarEvento(
     return respuestaJson(200, resultado.Attributes);
   } catch (error) {
     if (esErrorCondicionFallida(error)) {
-      // Con `sillasTotales` en el payload, una condición fallida no
-      // significa "el evento no existe" (ya se comprobó arriba con la
-      // lectura previa) sino que el aforo cambió entre la lectura y esta
-      // escritura (otra edición concurrente, o el delta dejaría
-      // `sillasDisponibles` en negativo) — 409, no 404, para que el
-      // administrador sepa que debe reintentar, no que el evento desapareció.
-      if (datos['sillasTotales'] !== undefined) {
+      // Con condiciones extra en juego (bloque de `sillasTotales` de arriba
+      // — nunca se llega aquí si `desactivaBoleteria` las saltó), una
+      // condición fallida no significa "el evento no existe" (ya se
+      // comprobó arriba con la lectura previa) sino que el aforo cambió
+      // entre la lectura y esta escritura (otra edición concurrente, o el
+      // delta dejaría `sillasDisponibles` en negativo) — 409, no 404, para
+      // que el administrador sepa que debe reintentar, no que el evento
+      // desapareció.
+      if (condicionesExtra.length > 0) {
         return respuestaJson(409, {
           mensaje: 'El aforo del evento cambió mientras editabas — intenta de nuevo',
         });

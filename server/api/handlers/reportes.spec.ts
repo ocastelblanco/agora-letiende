@@ -224,6 +224,33 @@ describe('GET /api/eventos/panel', () => {
     const cuerpo = JSON.parse(respuesta.body ?? '[]');
     expect(cuerpo).toEqual([]);
   });
+
+  // roadmap #25 — un evento con boletería externa no tiene aforo/etapas que
+  // gestionar, así que se excluye del selector compartido por panel, venta
+  // en efectivo y validación en puerta (mismo endpoint, `CLAUDE.md`).
+  it('excluye eventos con administradoPorLeTiende: false y conserva los demás', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosAdministrador });
+    sendMock.mockResolvedValueOnce({
+      Items: [
+        { ...eventoItem, eventoId: 'evt-externo', slug: 'evento-externo', administradoPorLeTiende: false },
+        { ...eventoItem, eventoId: 'evt-normal', slug: 'evento-normal' },
+      ],
+    });
+
+    const respuesta = await invocar('GET');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = JSON.parse(respuesta.body ?? '[]');
+    expect(cuerpo).toEqual([
+      {
+        eventoId: 'evt-normal',
+        slug: 'evento-normal',
+        nombre: 'Concierto de jazz',
+        fechaHora: '2026-09-01T00:00:00.000Z',
+        estado: 'publicado',
+      },
+    ]);
+  });
 });
 
 describe('GET /api/eventos/:eventoId/panel', () => {

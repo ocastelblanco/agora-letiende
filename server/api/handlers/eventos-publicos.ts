@@ -22,11 +22,32 @@ const ESTADOS_VISIBLES = new Set<string>(ESTADOS_QUE_PUEDEN_SER_VISIBLES);
 
 const BASE_URL_PUBLICA = 'https://agora.letiende.co';
 
+// v2 (roadmap #25) — prefijo fijo de cada tipo de vínculo externo; `valor`
+// (guardado en `agora-eventos`) solo tiene la parte variable, sin este
+// prefijo (tech-specs.md §4.3, mismo criterio de validación que
+// `normalizarVinculoExterno` en `eventos.ts`).
+const PREFIJOS_VINCULO_EXTERNO: Record<string, string> = {
+  whatsapp: 'https://wa.me/57',
+  instagram: 'https://www.instagram.com/',
+  web: 'https://',
+};
+
 /** Construye la URL pública de un objeto bajo `eventos/*` de `BucketActivos` (política pública, no prefirmada). */
 function urlPublicaActivo(key: string): string {
   const bucket = process.env['BUCKET_ACTIVOS'];
   const region = process.env['AWS_REGION'] ?? 'us-east-1';
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+}
+
+/** Antepone el prefijo fijo del tipo de vínculo externo a su `valor` variable (ver `PREFIJOS_VINCULO_EXTERNO`). */
+function urlVinculoExterno(vinculo: Record<string, unknown>): string | undefined {
+  const tipo = vinculo['tipo'];
+  const valor = vinculo['valor'];
+  if (typeof tipo !== 'string' || typeof valor !== 'string') {
+    return undefined;
+  }
+  const prefijo = PREFIJOS_VINCULO_EXTERNO[tipo];
+  return prefijo ? `${prefijo}${valor}` : undefined;
 }
 
 /**
@@ -35,6 +56,12 @@ function urlPublicaActivo(key: string): string {
  * agrega `imagenUrl`/`logotipoUrl` calculadas en el backend a partir de
  * `imagenKey`/`logotipoKey` cuando existen. Reutilizada por las 3 rutas de
  * este handler.
+ *
+ * v2 (roadmap #25) — `administradoPorLeTiende` se normaliza a `true` cuando
+ * el ítem no tiene el atributo (retrocompatibilidad con eventos creados
+ * antes de esta tarea), y si trae `vinculoExterno` se agrega
+ * `vinculoExternoUrl` con la URL completa ya construida, mismo criterio que
+ * `imagenUrl`/`logotipoUrl`.
  */
 function aVistaPublica(evento: Record<string, unknown>): Record<string, unknown> {
   const { productores: _productores, ...vista } = evento;
@@ -44,6 +71,11 @@ function aVistaPublica(evento: Record<string, unknown>): Record<string, unknown>
   }
   if (typeof vista['logotipoKey'] === 'string') {
     vista['logotipoUrl'] = urlPublicaActivo(vista['logotipoKey']);
+  }
+
+  vista['administradoPorLeTiende'] = vista['administradoPorLeTiende'] !== false;
+  if (typeof vista['vinculoExterno'] === 'object' && vista['vinculoExterno'] !== null) {
+    vista['vinculoExternoUrl'] = urlVinculoExterno(vista['vinculoExterno'] as Record<string, unknown>);
   }
 
   return vista;

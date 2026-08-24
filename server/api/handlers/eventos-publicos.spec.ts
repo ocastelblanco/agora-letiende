@@ -115,6 +115,39 @@ describe('handler de /api/eventos-publicos', () => {
       expect(cuerpo[0].logotipoUrl).toBeUndefined();
     });
 
+    // v2 (roadmap #25) — eventos con boletería externa.
+    it('normaliza administradoPorLeTiende a true cuando el evento no tiene el atributo (retrocompatibilidad)', async () => {
+      sendMock
+        .mockResolvedValueOnce({ Items: [eventoPublicado] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] });
+
+      const respuesta = await invocar('GET');
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo[0].administradoPorLeTiende).toBe(true);
+    });
+
+    it('agrega vinculoExternoUrl anteponiendo el prefijo fijo del tipo de vínculo', async () => {
+      const eventoExterno = {
+        ...eventoPublicado,
+        eventoId: 'e6',
+        slug: 'evento-externo',
+        administradoPorLeTiende: false,
+        vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+      };
+      sendMock
+        .mockResolvedValueOnce({ Items: [eventoExterno] })
+        .mockResolvedValueOnce({ Items: [] })
+        .mockResolvedValueOnce({ Items: [] });
+
+      const respuesta = await invocar('GET');
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo[0].administradoPorLeTiende).toBe(false);
+      expect(cuerpo[0].vinculoExternoUrl).toBe('https://wa.me/573001234567');
+    });
+
     it('usa Query sobre estado-fechaHora-index para cada estado que puede ser visible, nunca Scan', async () => {
       sendMock.mockResolvedValue({ Items: [] });
 

@@ -29,6 +29,7 @@ const eventoExistente: Evento = {
   nombre: 'Concierto de jazz',
   descripcion: 'Una noche de jazz',
   fechaHora: '2026-09-15T01:00:00.000Z',
+  administradoPorLeTiende: true,
   sillasTotales: 100,
   sillasDisponibles: 100,
   sillasReservadas: 0,
@@ -240,6 +241,165 @@ describe('EditarEventoComponent', () => {
 
       expect(componente['etapasExpandido']()).toBe(true);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).not.toBeNull();
+    });
+  });
+
+  // v2, roadmap #25 — eventos con boletería externa.
+  describe('boletería externa (roadmap #25)', () => {
+    it('un evento nuevo inicia con administradoPorLeTiende: true y vinculoExterno deshabilitado', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      expect(componente['formulario'].controls.administradoPorLeTiende.value).toBe(true);
+      expect(componente['formulario'].controls.vinculoExterno.disabled).toBe(true);
+      expect(componente['formulario'].controls.productores.disabled).toBe(false);
+    });
+
+    it('al desactivar el toggle, deshabilita productores (el formulario queda válido sin ninguno) y habilita vinculoExterno', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+      // El resto de campos obligatorios base (slug, nombre, descripcion,
+      // fechaHora) se completan aparte — esta prueba solo verifica el
+      // efecto del toggle sobre productores/vinculoExterno.
+      componente['formulario'].patchValue({
+        slug: 'evento-externo',
+        nombre: 'Evento externo',
+        descripcion: 'Se vende por WhatsApp',
+        fechaHora: '2026-09-14T20:00',
+      });
+
+      componente['formulario'].controls.administradoPorLeTiende.setValue(false);
+
+      expect(componente['formulario'].controls.productores.disabled).toBe(true);
+      expect(componente['formulario'].controls.vinculoExterno.disabled).toBe(false);
+      // vinculoExterno.valor sigue siendo obligatorio (Validators.required) —
+      // el formulario general queda inválido hasta que se complete.
+      expect(componente['formulario'].invalid).toBe(true);
+
+      componente['formulario'].controls.vinculoExterno.controls.valor.setValue('3001234567');
+      expect(componente['formulario'].valid).toBe(true);
+    });
+
+    it('el patrón exigido a vinculoExterno.valor cambia según el tipo seleccionado', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+      const valorControl = componente['formulario'].controls.vinculoExterno.controls.valor;
+
+      componente['formulario'].controls.administradoPorLeTiende.setValue(false);
+      valorControl.setValue('no-son-9-digitos');
+      expect(valorControl.invalid).toBe(true);
+
+      componente['formulario'].controls.vinculoExterno.controls.tipo.setValue('instagram');
+      valorControl.setValue('le_tiende.oficial');
+      expect(valorControl.valid).toBe(true);
+    });
+
+    it('guardar() en modo crear con administradoPorLeTiende: false envía vinculoExterno sin exigir productores', async () => {
+      const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
+      const { fixture } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['formulario'].patchValue({
+        slug: 'evento-externo',
+        nombre: 'Evento externo',
+        descripcion: 'Se vende por WhatsApp',
+        fechaHora: '2026-09-14T20:00',
+        administradoPorLeTiende: false,
+      });
+      componente['formulario'].controls.vinculoExterno.controls.valor.setValue('3001234567');
+
+      expect(componente['formulario'].valid).toBe(true);
+      await componente['guardar']();
+
+      expect(crearEventoMock).toHaveBeenCalledTimes(1);
+      const datosEnviados = crearEventoMock.mock.calls[0][0];
+      expect(datosEnviados.administradoPorLeTiende).toBe(false);
+      expect(datosEnviados.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '3001234567' });
+    });
+
+    it('guardar() con vinculoExterno tipo web le quita el prefijo https:// antes de enviarlo', async () => {
+      const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
+      const { fixture } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['formulario'].patchValue({
+        slug: 'evento-externo',
+        nombre: 'Evento externo',
+        descripcion: 'Se vende en línea',
+        fechaHora: '2026-09-14T20:00',
+        administradoPorLeTiende: false,
+        vinculoExterno: { tipo: 'web', valor: 'https://forms.gle/abc123' },
+      });
+
+      await componente['guardar']();
+
+      const datosEnviados = crearEventoMock.mock.calls[0][0];
+      expect(datosEnviados.vinculoExterno).toEqual({ tipo: 'web', valor: 'forms.gle/abc123' });
+    });
+
+    it('precarga un evento externo existente: deshabilita productores, habilita vinculoExterno y antepone https:// al tipo web', async () => {
+      const eventoExterno: Evento = {
+        ...eventoExistente,
+        administradoPorLeTiende: false,
+        vinculoExterno: { tipo: 'web', valor: 'forms.gle/abc123' },
+      };
+      const { fixture } = configurarPrueba({ eventos: [eventoExterno] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['formulario'].controls.administradoPorLeTiende.value).toBe(false);
+      expect(componente['formulario'].controls.productores.disabled).toBe(true);
+      expect(componente['formulario'].controls.vinculoExterno.disabled).toBe(false);
+      expect(componente['formulario'].controls.vinculoExterno.controls.tipo.value).toBe('web');
+      expect(componente['formulario'].controls.vinculoExterno.controls.valor.value).toBe(
+        'https://forms.gle/abc123',
+      );
+    });
+
+    it('precarga un evento sin administradoPorLeTiende (creado antes de esta tarea) como true, retrocompatible', async () => {
+      const { administradoPorLeTiende: _admin, ...eventoLegado } = eventoExistente;
+      const { fixture } = configurarPrueba({ eventos: [eventoLegado as Evento] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['formulario'].controls.administradoPorLeTiende.value).toBe(true);
+      expect(componente['formulario'].controls.vinculoExterno.disabled).toBe(true);
+    });
+
+    it('regresión: precarga un evento externo con sillasTotales: 0 (valor neutro del backend) sin dejar el formulario inválido en silencio', async () => {
+      // Bug real reportado (24/08/2026): al crear un evento con boletería
+      // externa, el backend siempre devuelve sillasTotales: 0
+      // (SILLAS_TOTALES_NEUTRO). sincronizarBoleteriaExterna() no
+      // deshabilitaba ese control, así que Validators.min(1) lo dejaba
+      // inválido en silencio (el campo está oculto tras el @if) y "Guardar
+      // cambios" no hacía nada visible.
+      const eventoExternoSinSillas: Evento = {
+        ...eventoExistente,
+        administradoPorLeTiende: false,
+        sillasTotales: 0,
+        vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+      };
+      const actualizarEventoMock = vi
+        .fn()
+        .mockResolvedValue({ exito: true, evento: eventoExternoSinSillas });
+      const { fixture } = configurarPrueba({
+        eventos: [eventoExternoSinSillas],
+        actualizarEventoMock,
+      });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['formulario'].controls.sillasTotales.disabled).toBe(true);
+      expect(componente['formulario'].valid).toBe(true);
+
+      await componente['guardar']();
+
+      expect(actualizarEventoMock).toHaveBeenCalledTimes(1);
     });
   });
 

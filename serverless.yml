@@ -148,6 +148,10 @@ functions:
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
+      # v2 (roadmap #25, hallazgo de code review) — actualizarEvento() la
+      # consulta al desactivar administradoPorLeTiende, para bloquear la
+      # desactivación si hay compras en curso reteniendo aforo.
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
       BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
     package:
@@ -619,6 +623,21 @@ resources:
                   Condition:
                     StringLike:
                       s3:prefix: 'eventos/*'
+          # v2 (roadmap #25, hallazgo de code review): Query acotado al GSI
+          # eventoId-creadaEn-index de agora-compras — actualizarEvento()
+          # verifica si hay compras en curso antes de permitir desactivar
+          # administradoPorLeTiende. Mínimo privilegio: solo Query, nunca
+          # otra acción sobre agora-compras desde esta función.
+          - PolicyName: agora-eventos-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                  Resource:
+                    - !GetAtt AgoraCompras.Arn
+                    - !Sub '${AgoraCompras.Arn}/index/*'
 
     EventosPublicosLambdaRole:
       Type: AWS::IAM::Role
