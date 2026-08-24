@@ -43,7 +43,7 @@ const TIPOS_VINCULO: readonly { valor: TipoVinculo; etiqueta: string }[] = [
   { valor: 'web', etiqueta: 'Página web' },
 ];
 const PATRONES_VALOR_VINCULO: Record<TipoVinculo, RegExp> = {
-  whatsapp: /^\d{9}$/,
+  whatsapp: /^\d{10}$/,
   instagram: /^[A-Za-z0-9._]{1,30}$/,
   web: /^https:\/\/.{1,256}$/,
 };

@@ -104,8 +104,8 @@ describe('DetalleEventoComponent', () => {
     const eventoExterno: EventoPublico = {
       ...eventoEjemplo,
       administradoPorLeTiende: false,
-      vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
-      vinculoExternoUrl: 'https://wa.me/57300123456',
+      vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+      vinculoExternoUrl: 'https://wa.me/573001234567',
     };
 
     it('muestra el bloque "MÁS INFORMACIÓN" en vez del botón de compra', async () => {
@@ -116,7 +116,7 @@ describe('DetalleEventoComponent', () => {
 
       expect(fixture.nativeElement.textContent).toContain('Más información');
       const enlace: HTMLAnchorElement | null = fixture.nativeElement.querySelector(
-        'a[href="https://wa.me/57300123456"]',
+        'a[href="https://wa.me/573001234567"]',
       );
       expect(enlace).not.toBeNull();
       expect(enlace?.getAttribute('target')).toBe('_blank');

@@ -237,7 +237,7 @@ interface VinculoExternoEntrada {
   valor: string;
 }
 
-const PATRON_VINCULO_WHATSAPP = /^\d{9}$/;
+const PATRON_VINCULO_WHATSAPP = /^\d{10}$/;
 const PATRON_VINCULO_INSTAGRAM = /^[A-Za-z0-9._]{1,30}$/;
 
 /**
@@ -245,7 +245,7 @@ const PATRON_VINCULO_INSTAGRAM = /^[A-Za-z0-9._]{1,30}$/;
  * externa (`administradoPorLeTiende === false`), nunca confiando en la
  * validación ya hecha del lado de Angular (CLAUDE.md §5, A04/A08). `valor`
  * guarda solo la parte variable, sin el prefijo fijo de cada tipo
- * (tech-specs.md §4.3): whatsapp exige exactamente 9 dígitos (prefijo fijo
+ * (tech-specs.md §4.3): whatsapp exige exactamente 10 dígitos (prefijo fijo
  * `https://wa.me/57`), instagram hasta 30 caracteres `[A-Za-z0-9._]`
  * (prefijo fijo `https://www.instagram.com/`), y web hasta 256 caracteres
  * que formen una URL https válida al anteponerle el prefijo fijo `https://`

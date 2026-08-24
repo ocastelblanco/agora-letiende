@@ -278,7 +278,7 @@ describe('EditarEventoComponent', () => {
       // el formulario general queda inválido hasta que se complete.
       expect(componente['formulario'].invalid).toBe(true);
 
-      componente['formulario'].controls.vinculoExterno.controls.valor.setValue('300123456');
+      componente['formulario'].controls.vinculoExterno.controls.valor.setValue('3001234567');
       expect(componente['formulario'].valid).toBe(true);
     });
 
@@ -310,7 +310,7 @@ describe('EditarEventoComponent', () => {
         fechaHora: '2026-09-14T20:00',
         administradoPorLeTiende: false,
       });
-      componente['formulario'].controls.vinculoExterno.controls.valor.setValue('300123456');
+      componente['formulario'].controls.vinculoExterno.controls.valor.setValue('3001234567');
 
       expect(componente['formulario'].valid).toBe(true);
       await componente['guardar']();
@@ -318,7 +318,7 @@ describe('EditarEventoComponent', () => {
       expect(crearEventoMock).toHaveBeenCalledTimes(1);
       const datosEnviados = crearEventoMock.mock.calls[0][0];
       expect(datosEnviados.administradoPorLeTiende).toBe(false);
-      expect(datosEnviados.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '300123456' });
+      expect(datosEnviados.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '3001234567' });
     });
 
     it('guardar() con vinculoExterno tipo web le quita el prefijo https:// antes de enviarlo', async () => {

@@ -341,7 +341,7 @@ describe('handler de /api/eventos', () => {
             descripcion: eventoValido.descripcion,
             fechaHora: eventoValido.fechaHora,
             administradoPorLeTiende: false,
-            vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
             // Ignorados: el backend nunca confía en estos campos cuando
             // administradoPorLeTiende es false (CLAUDE.md §5, A04/A08).
             sillasTotales: 5000,
@@ -357,7 +357,7 @@ describe('handler de /api/eventos', () => {
         expect(respuesta.statusCode).toBe(201);
         const cuerpo = JSON.parse(respuesta.body!);
         expect(cuerpo.administradoPorLeTiende).toBe(false);
-        expect(cuerpo.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '300123456' });
+        expect(cuerpo.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '3001234567' });
         expect(cuerpo.sillasTotales).toBe(0);
         expect(cuerpo.sillasDisponibles).toBe(0);
         expect(cuerpo.sillasReservadas).toBe(0);
@@ -369,7 +369,7 @@ describe('handler de /api/eventos', () => {
         expect(cuerpo.plazoComprobanteMinutos).toBe(10);
       });
 
-      it('rechaza vinculoExterno whatsapp con un valor que no son 9 dígitos', async () => {
+      it('rechaza vinculoExterno whatsapp con un valor que no son 10 dígitos', async () => {
         const respuesta = await invocar('POST', {
           cuerpo: {
             slug: eventoValido.slug,
@@ -988,7 +988,7 @@ describe('handler de /api/eventos', () => {
           eventoId: 'e1',
           cuerpo: {
             administradoPorLeTiende: false,
-            vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
             // Debe ignorarse por completo: ni se valida ni se escribe tal
             // cual (CLAUDE.md §5, A04/A08).
             sillasTotales: 5000,
@@ -1010,7 +1010,7 @@ describe('handler de /api/eventos', () => {
         const comandoUpdate = sendMock.mock.calls[1][0];
         const valores = comandoUpdate.input.ExpressionAttributeValues;
         expect(valores[':administradoPorLeTiende']).toBe(false);
-        expect(valores[':vinculoExterno']).toEqual({ tipo: 'whatsapp', valor: '300123456' });
+        expect(valores[':vinculoExterno']).toEqual({ tipo: 'whatsapp', valor: '3001234567' });
         expect(valores[':sillasTotales']).toBe(0);
         expect(valores[':sillasDisponibles']).toBe(0);
         expect(valores[':sillasReservadas']).toBe(0);
@@ -1031,7 +1031,7 @@ describe('handler de /api/eventos', () => {
           eventoId: 'e1',
           cuerpo: {
             administradoPorLeTiende: false,
-            vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
           },
         });
 
@@ -1055,7 +1055,7 @@ describe('handler de /api/eventos', () => {
           eventoId: 'e1',
           cuerpo: {
             administradoPorLeTiende: false,
-            vinculoExterno: { tipo: 'whatsapp', valor: '300123456' },
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
           },
         });
 
@@ -1081,7 +1081,7 @@ describe('handler de /api/eventos', () => {
 
         const respuesta = await invocar('PUT', {
           eventoId: 'e1',
-          cuerpo: { administradoPorLeTiende: false, vinculoExterno: { tipo: 'whatsapp', valor: '300123456' } },
+          cuerpo: { administradoPorLeTiende: false, vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' } },
         });
 
         expect(respuesta.statusCode).toBe(403);
