@@ -179,3 +179,4 @@ Specs definition,15/08/2026 05:20,15/08/2026 06:05,0:45:00,AI,Sonnet 5,Escribe r
 Specs definition,24/08/2026 12:15,24/08/2026 13:07,0:52:00,AI,Sonnet 5,Planea boleteria opcional y eventos con boleteria externa actualiza PRD tech-specs roadmap v2,Claude Code,cli,medium
 Specs definition,24/08/2026 13:07,24/08/2026 13:15,0:08:00,AI,Sonnet 5,Asigna boleteria opcional y eventos externos como Tarea 1 y 2 del motor JIT,Claude Code,cli,low
 Backend,24/08/2026 13:15,24/08/2026 13:42,0:27:00,AI,Sonnet 5,Implementa boleteria opcional backend y frontend agrega pruebas valida build y tests,Claude Code,cli,high
+Cloud infraestructura,24/08/2026 14:45,24/08/2026 15:13,0:28:00,AI,Sonnet 5,Corrige permisos IAM y variables de entorno faltantes en compras para emitir boletas sin etapas,Claude Code,cli,medium

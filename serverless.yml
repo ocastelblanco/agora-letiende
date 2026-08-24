@@ -242,6 +242,14 @@ functions:
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      # v2 (roadmap #24) — necesarias desde que crearAdquisicionSinEtapas()
+      # emite boletas directamente (evento sin etapas: sin comprobante ni
+      # aprobación). Mismo gotcha ya sufrido con SES_REMITENTE/
+      # SECRETO_ENLACES_MAGICOS en esta misma función (MEMORY.md §7) — la
+      # función necesitaba estas variables desde el primer commit del
+      # cambio de código, no como fix posterior.
+      TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
+      SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
       SES_REMITENTE: ${env:SES_REMITENTE, ''}
       URL_BASE_APP: ${env:URL_BASE_APP, ''}
       SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
@@ -757,9 +765,22 @@ resources:
                   Action:
                     - dynamodb:Query
                   Resource: !Sub '${AgoraCompras.Arn}/index/*'
+          # v2 (roadmap #24) — PutItem sobre agora-boletas: emitirBoletas()
+          # de boleteria.ts, invocado por crearAdquisicionSinEtapas() cuando
+          # el evento no tiene etapas (sin comprobante ni aprobación que
+          # esperar) — mismo criterio que agora-ventas-efectivo-boletas-dynamodb.
+          - PolicyName: agora-compras-boletas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                  Resource: !GetAtt AgoraBoletas.Arn
           # ses:SendEmail (no ses:*), acotado a la identidad verificada de
-          # letiende.co — el enlace de comprobante es el único correo que
-          # esta función envía (services/notificaciones.ts).
+          # letiende.co — el enlace de comprobante (evento con etapas) o las
+          # boletas emitidas (v2, roadmap #24 — evento sin etapas) son los
+          # únicos correos que esta función envía (services/notificaciones.ts).
           - PolicyName: agora-compras-ses-${sls:stage}
             PolicyDocument:
               Version: '2012-10-17'
