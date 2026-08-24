@@ -2,23 +2,27 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Estado al cierre de sesión (14/08/2026, continuación):** **Ágora está en producción.** El usuario fusionó el PR #43 (Dominio personalizado) y confirmó en vivo que `https://agora.letiende.co` funciona — verificado también por CLI antes de cerrar la sesión: certificado ACM `ISSUED`, `GET /api/salud` responde `200` a través del dominio con TLS válido, `GET /` también `200`. Con esto se cierra la ronda completa de hotfixes/alistamiento pre-lanzamiento (PR #41, #42, #43 — ver `MEMORY.md` §2 para el resumen de cada uno). **El usuario pidió explícitamente esperar retroalimentación real de esta fase (el lanzamiento) antes de definir la siguiente prioridad** — ningún ítem del roadmap se toma todavía. **Motor JIT recalculado:** los dos slots quedan deliberadamente sin asignar, en pausa, no por falta de candidatos sino por decisión explícita del usuario de esperar antes de seguir.
+**Estado al cierre de sesión (24/08/2026):** el usuario decidió no esperar más retroalimentación de producción para estas dos funcionalidades puntuales y las toma como las dos próximas tareas del motor JIT: **Boletería opcional** (roadmap #24) y **Eventos con boletería externa** (roadmap #25), ambas v2, Alta prioridad, diseñadas y documentadas en el PR #45 (`docs: planea boletería opcional y eventos con boletería externa (v2)`) — ver `PRD.md` §5.8-§5.9, `tech-specs.md` §4.3 (modelo de datos) y §11 (#24-#25 con archivos principales por tocar), y `roadmap-v2-v3.md` §2. Ninguna depende de un prerrequisito externo (a diferencia de Bold/WhatsApp) ni de una decisión pendiente (a diferencia de Google Calendar) — ambas son 100% desarrollo interno y quedan listas para iniciar en cuanto se fusione el PR #45.
 
 ---
 
-## Tarea 1 — sin asignar, en pausa esperando retroalimentación de producción
+## Tarea 1 — Boletería opcional (aforo sin cobro) — roadmap #24
 
-Ágora está en vivo en `https://agora.letiende.co` desde el 14/08/2026. El usuario pidió explícitamente esperar a la retroalimentación real del primer uso en producción antes de definir la siguiente prioridad — no hay ningún ítem del roadmap tomado todavía. Candidatos ya identificados y listos para retomar cuando haya dirección (ver `PRD.md`/roadmap): gap de límite de tasa en `POST /api/compras` (`CLAUDE.md` §5 A07, documentado como riesgo abierto desde `TODO.md` Tarea 2 de la sesión del 07/08/2026, nunca cerrado), o cualquier ítem de v2 que deje de estar bloqueado.
+Un evento puede iniciar sin ninguna etapa de boletería (`etapas: []`): no cobra nada, solo controla aforo. El cobro se activa al agregar la primera etapa. Mientras no haya etapas, `mediosPago` solo admite `efectivo`/`transferencia` (nunca `bold`), el botón en `/evento/:slug` dice "Adquirir boletas" en vez de "Comprar boletas", y la adquisición se resuelve sin comprobante ni aprobación del productor — boletas emitidas y enviadas por correo de inmediato. Generaliza el camino hoy rechazado explícitamente en `server/api/handlers/compras.ts:192-197` ("Las boletas gratuitas todavía no están soportadas").
 
-**Se reactiva en cuanto el usuario traiga retroalimentación real de producción o pida retomar algo puntual del roadmap.**
+**Archivos principales** (detalle completo en `tech-specs.md` §11 #24): `server/api/handlers/eventos.ts` (`normalizarEtapas`/`normalizarMediosPago` sin mínimo de etapas), `server/api/handlers/compras.ts` (camino sin comprobante/aprobación), `server/api/lib/vigencia-evento.ts` (finalización solo por `fechaHora` sin etapas), `features/evento/detalle-evento.component.ts`/`.html`, `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`FormArray` de etapas inicia vacío, checkbox `bold` deshabilitado sin etapas).
+
+**Se completa cuando:** build pasa, specs actualizadas (`editar-evento.component.spec.ts`, `detalle-evento.component.spec.ts`), y se prueba manualmente el flujo de compra sin etapas (en línea y en taquilla) en staging.
 
 ---
 
-## Tarea 2 — sin asignar, sin candidato sin bloqueo externo
+## Tarea 2 — Eventos con boletería externa — roadmap #25
 
-Bold (#19) y WhatsApp (#20) — v2, Alta prioridad — bloqueados por prerrequisitos externos no de código (ver "Pendientes que no son de código" abajo). Google Calendar (#22) — v2, Media prioridad — sin desglosar todavía y con una decisión externa pendiente (mecanismo de autenticación contra la API de Calendar). Ninguno es una tarea atómica lista para tomar hoy.
+Nuevo campo `Evento.administradoPorLeTiende: boolean` (default `true`). En `false`, el evento se anuncia en la Cartelera pero Ágora no vende ni controla su aforo: se ocultan Sillas totales, Máx. boletas, Plazo de comprobante, Medios de pago, Etapas, Productores y Porteros (Estado se mantiene visible y editable); en su lugar el administrador configura un vínculo externo tipado (WhatsApp `https://wa.me/57` + 9 dígitos, Instagram `https://www.instagram.com/` + hasta 30 caracteres `[A-Za-z0-9._]`, o Vínculo web `https://` + hasta 256 caracteres URL-encoded). En `/evento/:slug`, el botón de compra se reemplaza por "MÁS INFORMACIÓN:" + ícono según el tipo + el enlace completo.
 
-**Se reactiva cuando alguno de los prerrequisitos externos de Bold/WhatsApp se resuelva, o cuando Google Calendar se desglose con el nivel de detalle de una tarea atómica.**
+**Archivos principales** (detalle completo en `tech-specs.md` §11 #25): `core/models/evento.model.ts` (`administradoPorLeTiende`, `TipoVinculo`, `VinculoExterno`), `server/api/handlers/eventos.ts` (`normalizarVinculoExterno`, validación por tipo en frontend y backend), `server/api/handlers/eventos-publicos.ts` (`aVistaPublica` expone los campos nuevos), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`mat-slide-toggle`, sección "Más información"), `features/evento/detalle-evento.component.ts`/`.html` (bloque "MÁS INFORMACIÓN:" con ícono SVG inline + enlace `target="_blank" rel="noopener"`).
+
+**Se completa cuando:** build pasa, specs actualizadas, y se prueba manualmente un evento externo de punta a punta (toggle en el formulario, vínculo validado por tipo, visualización en `/evento/:slug`) en staging.
 
 ---
 

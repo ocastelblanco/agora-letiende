@@ -2,7 +2,7 @@
 
 Documento de requisitos de producto de **Ágora**, la aplicación de boletería del teatro de Le Tiende. Está escrito en lenguaje de negocio: describe **qué** hace el producto y **para quién**, no cómo se implementa. El detalle técnico vive en `tech-specs.md`.
 
-**Estado del documento:** actualizado el 14/08/2026. **La v1 completa (§6) ya está en producción** en `https://agora.letiende.co`. Para el detalle de qué sigue después de v1 dirigido a los socios de Le Tiende (v2/v3, en lenguaje no técnico), ver `docs/roadmap-v2-v3.md`.
+**Estado del documento:** actualizado el 24/08/2026. **La v1 completa (§6) ya está en producción** en `https://agora.letiende.co`. Para el detalle de qué sigue después de v1 dirigido a los socios de Le Tiende (v2/v3, en lenguaje no técnico), ver `docs/roadmap-v2-v3.md`.
 
 ---
 
@@ -202,19 +202,33 @@ Además pueden **descargar la lista completa de boletas** con: datos del cliente
 
 El administrador crea, edita y elimina las personas con acceso al sistema, registrando nombre, correo de Gmail y rol. El acceso del equipo se hace con la cuenta de Google; el cliente nunca necesita cuenta.
 
-### 5.8 Pago automático con Bold (v2)
+### 5.8 Boletería opcional (v2)
 
-Cuando el evento tenga habilitada la cuenta Bold de Le Tiende como medio de pago, el cliente paga en línea y el sistema recibe la confirmación directamente de la pasarela. En ese caso **no hay comprobante que cargar ni aprobación que esperar**: las boletas se emiten en el momento. Es el flujo que más trabajo le ahorra al productor.
+Hoy todo evento exige al menos una etapa de boletería con un precio, aunque sea $0. Con esta funcionalidad, un evento puede no tener ninguna etapa configurada — el arreglo de etapas inicia vacío tanto al crear como al editar el evento. Mientras no tenga ninguna, el evento **no cobra nada**: sirve únicamente para controlar el aforo (por ejemplo, un conversatorio o una charla de entrada libre con cupo limitado). El cobro se activa exclusivamente cuando el administrador agrega una o más etapas; mientras eso no ocurra, el medio de pago Bold no puede habilitarse para ese evento — solo `efectivo` (adquisición en taquilla) y `transferencia` (adquisición en línea).
 
-### 5.9 Otros medios de pago (v1, ya resuelto)
+En la página del evento, el botón de acción refleja esta diferencia: dice **ADQUIRIR BOLETAS** en vez de COMPRAR BOLETAS cuando no hay etapas configuradas. La adquisición, además, se resuelve **sin pasar por comprobante ni por la aprobación del productor**: se hace directamente en línea o en taquilla, y las boletas llegan de inmediato al correo del comprador. El aforo se sigue controlando con la misma escritura condicional que evita la sobreventa en cualquier otro evento (§9) — lo único que cambia es que no hay dinero de por medio ni revisión humana en el camino.
+
+### 5.9 Eventos con boletería externa (v2)
+
+Algunos eventos se realizan en el teatro de Le Tiende, pero su boletería la vende un tercero — Ágora no interviene en el cobro ni controla el aforo de esos eventos. Aun así, Le Tiende quiere anunciarlos en la Cartelera pública junto a los demás.
+
+Al crear o editar un evento, el administrador indica si su boletería la administra Le Tiende (por defecto) o un externo. Cuando la administra un externo, el evento deja de exigir sillas totales, máximo de boletas por compra, plazo de comprobante, medios de pago, etapas de boletería, productores y porteros — únicamente conserva su nombre, descripción, fecha y hora, imagen, código QR para afiches y su **estado** (para poder marcarlo borrador, publicado o cancelado igual que cualquier otro evento). En su lugar, el administrador configura un **vínculo externo**: un enlace de WhatsApp, de Instagram o una página web hacia donde el interesado debe ir para conseguir su boleta.
+
+En la página pública del evento, en vez del botón de compra aparece el texto **MÁS INFORMACIÓN:** seguido del ícono correspondiente al tipo de vínculo y el enlace, que lleva directamente al canal indicado por el administrador.
+
+### 5.10 Pago automático con Bold (v2)
+
+Cuando el evento tenga habilitada la cuenta Bold de Le Tiende como medio de pago, el cliente paga en línea y el sistema recibe la confirmación directamente de la pasarela. En ese caso **no hay comprobante que cargar ni aprobación que esperar**: las boletas se emiten en el momento. Es el flujo que más trabajo le ahorra al productor. Bold solo puede habilitarse en eventos administrados por Le Tiende que ya tengan al menos una etapa de boletería configurada (§5.8).
+
+### 5.11 Otros medios de pago (v1, ya resuelto)
 
 **Decisión revisada (06/08/2026):** originalmente se había considerado Bre-B como un medio de pago aparte, con su propio código QR. En la práctica, Bre-B es un tipo de transferencia bancaria común — el medio de pago `transferencia`, ya disponible desde v1, lo cubre sin necesidad de un mecanismo separado. Para el pago en efectivo, el administrador indica una referencia (por defecto, Le Tiende), una dirección física y unos horarios de atención (por defecto, los de Le Tiende).
 
-### 5.10 Notificaciones por WhatsApp (v2)
+### 5.12 Notificaciones por WhatsApp (v2)
 
 Todo lo que en v1 llega por correo —enlace para cargar el comprobante, aviso de aprobación al productor, entrega de las boletas— llegará también por WhatsApp, que es el canal donde efectivamente ocurre hoy la conversación. Se difiere a v2 por una razón externa al equipo: enviar mensajes de WhatsApp de forma automática exige una cuenta de empresa aprobada por Meta y plantillas de mensaje revisadas una por una, un trámite cuya duración no controlamos. Ver §9.
 
-### 5.11 Sincronización con Google Calendar (v2)
+### 5.13 Sincronización con Google Calendar (v2)
 
 Al crear un evento, este aparece automáticamente en el calendario de `letiende.co@gmail.com`. Solo los cambios de nombre, descripción, fecha y hora, o productores asignados actualizan la entrada del calendario; los demás cambios (precios, aforo, medios de pago) no la afectan.
 
@@ -249,11 +263,13 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 
 | Funcionalidad | Prioridad | Estado |
 |---|---|---|
+| Boletería opcional (aforo sin cobro) | **Alta** | 🟡 No iniciado |
+| Eventos con boletería externa | **Alta** | 🟡 No iniciado |
+| Sincronización con Google Calendar | Media | 🟡 No iniciado |
 | Pago automático con Bold | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (llaves de Bold) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
 | Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
-| Sincronización con Google Calendar | Media | 🟡 No iniciado |
 
 ### v3 — Ideas no comprometidas
 
@@ -353,7 +369,8 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 |---|---|
 | **Evento** | Una función específica de un espectáculo, con su fecha, hora, aforo y precios propios. |
 | **Aforo** | Cantidad total de sillas disponibles para un evento. Es un límite físico del teatro. |
-| **Etapa de boletería** | Período de venta con un precio propio y una fecha de cierre (por ejemplo, "preventa" y "taquilla"). Un evento tiene al menos una. |
+| **Etapa de boletería** | Período de venta con un precio propio y una fecha de cierre (por ejemplo, "preventa" y "taquilla"). Un evento puede no tener ninguna (v2) — en ese caso no cobra nada y solo controla el aforo. |
+| **Boletería externa** | Evento anunciado en la Cartelera de Ágora cuya boletería administra un tercero, no Le Tiende. No tiene sillas, etapas ni medios de pago en Ágora: en su lugar expone un vínculo (WhatsApp, Instagram o web) hacia el canal real de venta (v2). |
 | **Boleta** | El derecho de una persona a entrar a un evento. Es la unidad que se emite y se valida: una compra de 3 boletas genera 3 boletas independientes, cada una con su código único. |
 | **Compra** | La transacción por la cual un cliente adquiere una o varias boletas de un mismo evento. |
 | **Reserva** | Bloqueo temporal de sillas mientras el cliente completa su pago. Vence si no se completa dentro del plazo y devuelve las sillas al aforo. |

@@ -176,3 +176,5 @@ Specs definition,15/08/2026 04:05,15/08/2026 04:30,0:25:00,AI,Sonnet 5,Documenta
 Cloud infraestructura,15/08/2026 04:30,15/08/2026 05:00,0:30:00,AI,Sonnet 5,Confirma fusion del PR 43 verifica certificado ACM y dominio en vivo por CLI,Claude Code,cli,medium
 Specs definition,15/08/2026 05:00,15/08/2026 05:20,0:20:00,AI,Sonnet 5,Cierra sesion agora en produccion recalcula JIT en pausa esperando retroalimentacion,Claude Code,cli,low
 Specs definition,15/08/2026 05:20,15/08/2026 06:05,0:45:00,AI,Sonnet 5,Escribe roadmap v2 v3 para socios de Le Tiende actualiza README y PRD corrige Bre-B,Claude Code,cli,high
+Specs definition,24/08/2026 12:15,24/08/2026 13:07,0:52:00,AI,Sonnet 5,Planea boleteria opcional y eventos con boleteria externa actualiza PRD tech-specs roadmap v2,Claude Code,cli,medium
+Specs definition,24/08/2026 13:07,24/08/2026 13:15,0:08:00,AI,Sonnet 5,Asigna boleteria opcional y eventos externos como Tarea 1 y 2 del motor JIT,Claude Code,cli,low
