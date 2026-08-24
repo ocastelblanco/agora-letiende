@@ -162,9 +162,10 @@ export class EditarEventoComponent {
       transferencia: [false],
       bold: [false],
     }),
-    etapas: this.fb.nonNullable.array<
-      ReturnType<typeof this.crearGrupoEtapa>
-    >([this.crearGrupoEtapa()]),
+    // v2 (roadmap #24) — boletería opcional: inicia vacío. Sin etapas, el
+    // evento no cobra nada y solo controla aforo; el cobro se activa al
+    // agregar la primera etapa con agregarEtapa().
+    etapas: this.fb.nonNullable.array<ReturnType<typeof this.crearGrupoEtapa>>([]),
   });
 
   private crearGrupoEtapa() {
@@ -182,6 +183,21 @@ export class EditarEventoComponent {
 
   protected get etapas() {
     return this.formulario.controls.etapas;
+  }
+
+  /** v2 (roadmap #24) — ver el comentario en el constructor sobre cuándo se invoca. */
+  private sincronizarDisponibilidadBold(): void {
+    const boldControl = this.formulario.controls.mediosPago.controls.bold;
+    if (this.etapas.length === 0) {
+      if (boldControl.value) {
+        boldControl.setValue(false);
+      }
+      if (boldControl.enabled) {
+        boldControl.disable();
+      }
+    } else if (boldControl.disabled) {
+      boldControl.enable();
+    }
   }
 
   /** Colapsado por defecto — evita que el formulario de edición abra con una lista larga de etapas ya expandida. */
@@ -204,10 +220,13 @@ export class EditarEventoComponent {
     this.etapas.push(this.crearGrupoEtapa());
   }
 
+  /**
+   * v2 (roadmap #24) — sin mínimo de etapas: se puede bajar hasta 0 (el
+   * evento vuelve a no cobrar nada, solo controla aforo). Antes de esta
+   * tarea el mínimo era 1.
+   */
   protected quitarEtapa(indice: number): void {
-    if (this.etapas.length > 1) {
-      this.etapas.removeAt(indice);
-    }
+    this.etapas.removeAt(indice);
   }
 
   constructor() {
@@ -252,6 +271,23 @@ export class EditarEventoComponent {
       this.eventoNoEncontrado.set(false);
       void this.cargarEventoExistente(id);
     });
+
+    // v2 (roadmap #24) — Bold exige al menos una etapa configurada: se
+    // deshabilita (y se fuerza a `false`, para que un `getRawValue()`
+    // posterior no lo envíe en `true` pese a estar deshabilitado) en cuanto
+    // `etapas` queda vacío, y se rehabilita al agregar la primera etapa.
+    // `etapas.valueChanges` ya emite ante cualquier `push()`/`removeAt()`/
+    // `clear()` (estructural), así que una sola suscripción cubre
+    // `agregarEtapa()`, `quitarEtapa()`, `reiniciarFormularioVacio()` y el
+    // bucle de `precargarFormulario()`, sin llamarla a mano en cada uno.
+    // Nunca para un `productor`: ese rol ya tiene `mediosPago` deshabilitado
+    // por completo (ver `precargarFormulario()`), y no debe reactivar nada.
+    if (!this.esProductor()) {
+      this.etapas.valueChanges
+        .pipe(takeUntilDestroyed())
+        .subscribe(() => this.sincronizarDisponibilidadBold());
+      this.sincronizarDisponibilidadBold();
+    }
 
     // El slug se sugiere solo, a partir de nombre + fecha, mientras el
     // administrador no lo haya tocado a mano — ver docstring de
@@ -306,8 +342,9 @@ export class EditarEventoComponent {
     });
     this.formulario.controls.slug.enable();
     this.formulario.controls.sillasTotales.enable();
+    // v2 (roadmap #24) — un evento nuevo inicia sin etapas (boletería
+    // opcional): antes se precargaba una etapa vacía por defecto.
     this.etapas.clear();
-    this.etapas.push(this.crearGrupoEtapa());
     this.imagenKey.set(undefined);
     this.logotipoKey.set(undefined);
     // El propio reset() de arriba dispara slug.valueChanges (con slug en
@@ -351,12 +388,15 @@ export class EditarEventoComponent {
     // resto de campos fuera de su alcance (TODO.md Tarea 1, T6).
     this.formulario.controls.slug.disable();
 
-    for (const medio of MEDIOS_PAGO) {
-      this.formulario.controls.mediosPago.controls[medio.valor].setValue(
-        evento.mediosPago.includes(medio.valor),
-      );
-    }
-
+    // v2 (roadmap #24) — las etapas se cargan ANTES que mediosPago, a
+    // propósito: `sincronizarDisponibilidadBold()` reacciona a cada cambio
+    // de `etapas` (incluido este `clear()`/`push()`) y deshabilita+fuerza en
+    // `false` el checkbox de Bold mientras `etapas` está vacío. Si mediosPago
+    // se cargara primero con el valor real de `bold` (`true` en un evento
+    // que sí tiene etapas), el `clear()` de abajo lo pisaría a `false` antes
+    // de que el bucle alcance a repoblar `etapas` — invertir el orden evita
+    // ese pisado, apoyándose en que el backend nunca persiste `bold: true`
+    // sin al menos una etapa (`server/api/handlers/eventos.ts`).
     this.etapas.clear();
     for (const etapa of evento.etapas) {
       const grupo = this.crearGrupoEtapa();
@@ -371,6 +411,12 @@ export class EditarEventoComponent {
         cierraEn: paraInputBogota(etapa.cierraEn),
       });
       this.etapas.push(grupo);
+    }
+
+    for (const medio of MEDIOS_PAGO) {
+      this.formulario.controls.mediosPago.controls[medio.valor].setValue(
+        evento.mediosPago.includes(medio.valor),
+      );
     }
 
     // Un productor solo puede editar maxBoletasPorCompra y

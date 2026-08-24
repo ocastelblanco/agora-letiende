@@ -137,17 +137,28 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
     });
   }
 
-  const etapa = etapaVigente(eventoEncontrado.etapas, ahora);
-  if (!etapa) {
-    return respuestaJson(409, { mensaje: 'No hay una etapa de boletería vigente para este evento' });
-  }
+  // v2 (roadmap #24) — boletería opcional: un evento sin etapas no cobra
+  // nada, solo controla aforo — `etapaId` queda ausente y `montoTotal` en 0,
+  // sin pasar por `etapaVigente()` (que con `etapas: []` siempre devolvería
+  // `null`, produciendo el 409 equivocado "no hay etapa vigente" para este
+  // caso). Con etapas, el comportamiento no cambia: sigue exigiendo una
+  // etapa vigente y sigue rechazando con 501 una etapa a $0 (roadmap #12,
+  // caso distinto de "sin etapas en absoluto").
+  let etapaId: string | undefined;
+  let montoTotal = 0;
 
-  // Mismo alcance explícito que crearCompra: las boletas gratuitas todavía
-  // no están soportadas (roadmap #12).
-  if (etapa.precio === 0) {
-    return respuestaJson(501, {
-      mensaje: 'Las boletas gratuitas todavía no están soportadas',
-    });
+  if (eventoEncontrado.etapas.length > 0) {
+    const etapa = etapaVigente(eventoEncontrado.etapas, ahora);
+    if (!etapa) {
+      return respuestaJson(409, { mensaje: 'No hay una etapa de boletería vigente para este evento' });
+    }
+    if (etapa.precio === 0) {
+      return respuestaJson(501, {
+        mensaje: 'Las boletas gratuitas todavía no están soportadas',
+      });
+    }
+    etapaId = etapa.etapaId;
+    montoTotal = etapa.precio * datos['cantidad'];
   }
 
   try {
@@ -162,7 +173,6 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
     throw error;
   }
 
-  const montoTotal = etapa.precio * datos['cantidad'];
   const compraId = randomUUID();
 
   // Sin tokenComprobanteHash/tokenAprobacionHash/expiraEn: los GSIs de
@@ -170,11 +180,12 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
   // ítem que nunca los incluye simplemente no aparece en ellos, sin que
   // haga falta ningún cambio de esquema. Esta venta nace y muere `aprobada`
   // en la misma operación, nunca pasa por `esperando_comprobante`/
-  // `en_revision`, así que ninguno de esos tres campos aplica.
+  // `en_revision`, así que ninguno de esos tres campos aplica. `etapaId`
+  // ausente (`undefined`) cuando el evento no tiene etapas (roadmap #24).
   const compra = {
     compraId,
     eventoId: eventoEncontrado.eventoId,
-    etapaId: etapa.etapaId,
+    etapaId,
     cantidad: datos['cantidad'],
     cliente: {
       nombre: clienteDatos['nombre'],
@@ -229,7 +240,7 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
     const boletas = await emitirBoletas({
       compraId,
       eventoId: eventoEncontrado.eventoId,
-      etapaId: etapa.etapaId,
+      etapaId,
       montoTotal,
       cantidad: datos['cantidad'],
     });

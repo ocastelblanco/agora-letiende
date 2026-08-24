@@ -80,6 +80,24 @@ describe('DetalleEventoComponent', () => {
     expect(enlace?.textContent).toContain('Comprar boletas');
   });
 
+  // v2, roadmap #24 — boletería opcional: sin etapas, el botón dice
+  // "Adquirir boletas" en vez de "Comprar boletas".
+  it('muestra el botón "Adquirir boletas" cuando el evento no tiene etapas de boletería', async () => {
+    const cargarEventoPorSlugMock = vi
+      .fn()
+      .mockResolvedValue({ exito: true, evento: { ...eventoEjemplo, etapas: [] } });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const enlace: HTMLAnchorElement | null = fixture.nativeElement.querySelector(
+      'a[href="/evento/concierto-jazz/comprar"]',
+    );
+    expect(enlace).not.toBeNull();
+    expect(enlace?.textContent).toContain('Adquirir boletas');
+    expect(enlace?.textContent).not.toContain('Comprar boletas');
+  });
+
   it('no muestra el botón "Comprar boletas" si el evento está agotado', async () => {
     const cargarEventoPorSlugMock = vi
       .fn()

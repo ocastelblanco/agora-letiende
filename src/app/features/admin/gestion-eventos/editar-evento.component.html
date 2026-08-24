@@ -176,6 +176,11 @@
               {{ medio.etiqueta }}
             </label>
           }
+          @if (etapas.length === 0 && !esProductor()) {
+            <p class="text-xs text-primary/60">
+              Bold se habilita al agregar al menos una etapa de boletería.
+            </p>
+          }
         </fieldset>
 
         <div>
@@ -201,6 +206,11 @@
           @if (!etapasExpandido()) {
             <p class="text-xs text-primary/60">{{ etapas.length }} etapa(s) configurada(s).</p>
           }
+          @if (etapas.length === 0) {
+            <p class="text-xs text-primary/60">
+              Sin etapas, este evento no cobra nada — solo controla el aforo.
+            </p>
+          }
 
           @if (etapasExpandido()) {
             <div formArrayName="etapas" class="flex flex-col gap-4">
@@ -211,7 +221,7 @@
                 >
                   <div class="flex items-center justify-between">
                     <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
-                    @if (!esProductor() && etapas.length > 1) {
+                    @if (!esProductor()) {
                       <button
                         mat-stroked-button
                         color="warn"

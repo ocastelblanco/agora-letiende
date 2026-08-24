@@ -25,7 +25,8 @@ interface BoletaAlmacenada {
   eventoId: string;
   compraId: string;
   numeroEnCompra: number;
-  etapaId: string;
+  // v2 (roadmap #24) — ausente en la boleta de un evento sin etapas.
+  etapaId?: string;
   valorUnitario: number;
   estado: string;
   ingresoEn?: string;

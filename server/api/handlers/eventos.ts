@@ -113,12 +113,17 @@ interface EtapaBoleteriaEntrada {
  * payload manipulado a mano) duplicarían la identidad de dos etapas
  * distintas, rompiendo cualquier agregación que agrupe por `etapaId`
  * (`reportes.ts`, `porEtapa`).
+ *
+ * v2 (roadmap #24) — un arreglo vacío es válido: un evento sin etapas no
+ * cobra nada, solo controla aforo. `[]` ya es el valor por defecto de un
+ * evento nuevo (`EditarEventoComponent`); el cobro se activa solo cuando el
+ * administrador agrega la primera etapa.
  */
 function normalizarEtapas(
   valor: unknown,
   idsExistentes?: ReadonlySet<string>,
 ): EtapaBoleteriaEntrada[] | null {
-  if (!Array.isArray(valor) || valor.length === 0) {
+  if (!Array.isArray(valor)) {
     return null;
   }
 
@@ -167,6 +172,18 @@ function normalizarMediosPago(valor: unknown): MedioPago[] | null {
       typeof item === 'string' && (MEDIOS_PAGO_VALIDOS as readonly string[]).includes(item),
   );
   return medios.length === valor.length ? medios : null;
+}
+
+/**
+ * v2 (roadmap #24) — 'bold' exige que el evento ya tenga al menos una etapa
+ * de boletería: sin etapas no hay cobro, y Bold no tiene sentido sin un
+ * precio real que cobrar. Se valida por separado de `normalizarMediosPago`
+ * (que solo verifica que cada valor sea un `MedioPago` conocido) para poder
+ * responder un mensaje específico en vez de un "mediosPago inválido"
+ * genérico que no explicaría la causa real.
+ */
+function bloqueaBoldSinEtapas(mediosPago: MedioPago[], hayEtapas: boolean): boolean {
+  return !hayEtapas && mediosPago.includes('bold');
 }
 
 /**
@@ -232,12 +249,17 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
 
   const etapas = normalizarEtapas(datos['etapas']);
   if (!etapas) {
-    return respuestaJson(400, { mensaje: 'etapas debe ser un arreglo con al menos una etapa válida' });
+    return respuestaJson(400, { mensaje: 'etapas debe ser un arreglo de etapas válidas (puede estar vacío)' });
   }
 
   const mediosPago = normalizarMediosPago(datos['mediosPago']);
   if (!mediosPago) {
     return respuestaJson(400, { mensaje: 'mediosPago debe ser un arreglo con al menos un medio válido' });
+  }
+  if (bloqueaBoldSinEtapas(mediosPago, etapas.length > 0)) {
+    return respuestaJson(400, {
+      mensaje: 'Bold no se puede habilitar en un evento sin etapas de boletería',
+    });
   }
 
   const productores = normalizarProductores(datos['productores'] ?? []);
@@ -381,6 +403,12 @@ async function actualizarEvento(
     }
     return eventoActualCache;
   };
+
+  // v2 (roadmap #24) — capturado por el bloque de `etapas` de abajo cuando el
+  // payload la incluye, para que el bloque de `mediosPago` (que se procesa
+  // después) valide 'bold' contra el número de etapas EFECTIVO de este mismo
+  // PUT, no contra el valor ya obsoleto de `eventoActual`.
+  let etapasDeEstePut: EtapaBoleteriaEntrada[] | undefined;
 
   const asignaciones: string[] = [];
   const nombresAtributos: Record<string, string> = {};
@@ -547,11 +575,47 @@ async function actualizarEvento(
       return respuestaJson(400, { mensaje: 'etapas inválidas' });
     }
     agregar('etapas', '#etapas', etapas);
+    etapasDeEstePut = etapas;
+
+    // v2 (roadmap #24) — invariante "Bold exige al menos una etapa"
+    // reforzada también cuando este PUT vacía las etapas sin tocar
+    // `mediosPago` a la vez: retira 'bold' automáticamente en vez de dejar
+    // un evento sin etapas con Bold habilitado hasta la próxima edición de
+    // medios de pago.
+    if (etapas.length === 0 && datos['mediosPago'] === undefined) {
+      const mediosPagoActual = Array.isArray(eventoActual['mediosPago'])
+        ? (eventoActual['mediosPago'] as MedioPago[])
+        : [];
+      if (mediosPagoActual.includes('bold')) {
+        agregar('mediosPago', '#mediosPago', mediosPagoActual.filter((medio) => medio !== 'bold'));
+      }
+    }
   }
   if (datos['mediosPago'] !== undefined) {
     const mediosPago = normalizarMediosPago(datos['mediosPago']);
     if (!mediosPago) {
       return respuestaJson(400, { mensaje: 'mediosPago inválido' });
+    }
+
+    // v2 (roadmap #24) — la cantidad de etapas EFECTIVA tras este PUT: si el
+    // propio payload también trae `etapas`, usa ese resultado ya normalizado
+    // (`etapasDeEstePut`); si no, la del evento persistido — un PUT que solo
+    // cambia `mediosPago` no puede habilitar Bold en un evento que hoy no
+    // tiene ninguna etapa.
+    if (mediosPago.includes('bold')) {
+      let etapasEfectivas = etapasDeEstePut;
+      if (etapasEfectivas === undefined) {
+        const eventoActual = await leerEventoActual();
+        etapasEfectivas =
+          eventoActual && Array.isArray(eventoActual['etapas'])
+            ? (eventoActual['etapas'] as EtapaBoleteriaEntrada[])
+            : [];
+      }
+      if (bloqueaBoldSinEtapas(mediosPago, etapasEfectivas.length > 0)) {
+        return respuestaJson(400, {
+          mensaje: 'Bold no se puede habilitar en un evento sin etapas de boletería',
+        });
+      }
     }
     agregar('mediosPago', '#mediosPago', mediosPago);
   }

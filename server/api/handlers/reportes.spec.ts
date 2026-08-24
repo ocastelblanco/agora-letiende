@@ -366,6 +366,35 @@ describe('GET /api/eventos/:eventoId/panel', () => {
     expect(cuerpo.ingresados).toBe(0);
     expect(cuerpo.totalBoletas).toBe(0);
   });
+
+  // v2, roadmap #24 — una compra sin etapaId (evento sin etapas, boletería
+  // sin cobro) se agrupa aparte, con una etiqueta distinta de "Etapa
+  // eliminada" (que implica una etapa que sí existió).
+  it('agrupa las compras sin etapaId bajo una etiqueta "Sin etapa", distinta de una etapa eliminada', async () => {
+    const compraSinEtapa = {
+      ...comprasAprobadas[0],
+      compraId: 'c-sin-etapa',
+      etapaId: undefined,
+      montoTotal: 0,
+    };
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({ Items: boletasMixtas })
+      .mockResolvedValueOnce({ Items: [...comprasAprobadas, compraSinEtapa] });
+
+    const respuesta = await invocar('GET', { eventoId: 'evt-1' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.porEtapa).toContainEqual({
+      etapaId: undefined,
+      nombre: 'Sin etapa (boletería sin cobro)',
+      vendidas: 2,
+      recaudado: 0,
+    });
+    // Sigue sumando al total, igual que cualquier otra compra aprobada.
+    expect(cuerpo.totalVendidas).toBe(5);
+  });
 });
 
 describe('GET /api/eventos/:eventoId/reportes', () => {

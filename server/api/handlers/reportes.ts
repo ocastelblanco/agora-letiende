@@ -13,6 +13,11 @@ import { clienteS3 } from '../services/s3';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 
+// v2 (roadmap #24) — etiqueta de una compra/boleta de un evento sin etapas
+// de boletería, distinta de 'Etapa eliminada' (que sí implica una etapa que
+// existió y fue borrada).
+const NOMBRE_SIN_ETAPA = 'Sin etapa (boletería sin cobro)';
+
 interface EtapaEvento {
   etapaId: string;
   nombre: string;
@@ -30,7 +35,8 @@ interface ClienteCompra {
 interface CompraAprobada {
   compraId: string;
   eventoId: string;
-  etapaId: string;
+  // v2 (roadmap #24) — ausente en una compra de un evento sin etapas.
+  etapaId?: string;
   cantidad: number;
   montoTotal: number;
   cliente?: ClienteCompra;
@@ -42,7 +48,7 @@ interface CompraAprobada {
 interface BoletaDelEvento {
   boletaId: string;
   compraId: string;
-  etapaId: string;
+  etapaId?: string;
   valorUnitario: number;
   estado: string;
   ingresoEn?: string;
@@ -195,12 +201,21 @@ async function obtenerPanelEvento(
   // evento, luego los etapaId huérfanos (sin coincidencia en `etapas`) en el
   // orden en que aparecen en las compras.
   const idsConocidosConVentas = etapas.map((etapa) => etapa.etapaId).filter((id) => idsEtapaEnCompras.has(id));
-  const idsHuerfanos = Array.from(idsEtapaEnCompras).filter((id) => !nombresPorEtapaId.has(id));
+  // `id === undefined` (compra de un evento sin etapas, roadmap #24) cuenta
+  // igual como "no es una etapa conocida" — se evalúa antes de `.has(id)`
+  // para no llamarlo con `undefined`.
+  const idsHuerfanos = Array.from(idsEtapaEnCompras).filter(
+    (id) => id === undefined || !nombresPorEtapaId.has(id),
+  );
   const porEtapa = [...idsConocidosConVentas, ...idsHuerfanos].map((etapaId) => {
     const comprasDeEtapa = comprasAprobadas.filter((compra) => compra.etapaId === etapaId);
     return {
       etapaId,
-      nombre: nombresPorEtapaId.get(etapaId) ?? 'Etapa eliminada',
+      // v2 (roadmap #24) — `etapaId === undefined` es una compra genuina de
+      // un evento sin etapas (boletería sin cobro), no una etapa borrada:
+      // se distingue de 'Etapa eliminada' (etapaId presente pero huérfano)
+      // para no confundir al productor sobre qué pasó con esas ventas.
+      nombre: etapaId === undefined ? NOMBRE_SIN_ETAPA : (nombresPorEtapaId.get(etapaId) ?? 'Etapa eliminada'),
       vendidas: comprasDeEtapa.reduce((total, compra) => total + compra.cantidad, 0),
       recaudado: comprasDeEtapa.reduce((total, compra) => total + compra.montoTotal, 0),
     };
@@ -330,7 +345,10 @@ async function generarReporteEvento(
       'Fecha y hora de compra': compra ? fechaLegibleBogota(compra.creadaEn) : 'N/D',
       'Medio de pago': compra?.medioPago ?? 'N/D',
       Valor: boleta.valorUnitario,
-      'Etapa de boletería': nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada',
+      'Etapa de boletería':
+        boleta.etapaId === undefined
+          ? NOMBRE_SIN_ETAPA
+          : (nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada'),
       'Fecha y hora de ingreso': boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
     };
   });

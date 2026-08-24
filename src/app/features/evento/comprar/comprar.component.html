@@ -10,17 +10,28 @@
         <p class="text-sm text-primary/70">Este evento no existe o ya no está disponible.</p>
       </div>
     } @else if (evento(); as detalleEvento) {
-      <h1 class="mb-1 text-2xl font-bold text-primary">Comprar boletas</h1>
+      <h1 class="mb-1 text-2xl font-bold text-primary">
+        {{ detalleEvento.etapas.length === 0 ? 'Adquirir boletas' : 'Comprar boletas' }}
+      </h1>
       <p class="mb-6 text-sm text-primary/70">{{ detalleEvento.nombre }}</p>
 
       @if (compraCreada(); as compra) {
         <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
-          <h2 class="mb-2 text-lg font-semibold text-primary">¡Ya casi! Revisa tu correo</h2>
-          <p class="mb-4 text-sm text-primary">
-            Te enviamos un enlace para cargar tu comprobante de pago. Debes hacerlo antes de las
-            <strong>{{ fechaLimiteLegible(compra.expiraEn) }}</strong> (hora de Bogotá) o la reserva
-            se cancela.
-          </p>
+          @if (compra.estado === 'aprobada') {
+            <!-- v2 (roadmap #24) — evento sin etapas: adquisición inmediata, sin comprobante ni aprobación. -->
+            <h2 class="mb-2 text-lg font-semibold text-primary">¡Listo! Revisa tu correo</h2>
+            <p class="mb-4 text-sm text-primary">
+              Ya emitimos tus {{ compra.boletas ?? compra.cantidad }} boleta(s) para este evento —
+              te las enviamos a tu correo.
+            </p>
+          } @else {
+            <h2 class="mb-2 text-lg font-semibold text-primary">¡Ya casi! Revisa tu correo</h2>
+            <p class="mb-4 text-sm text-primary">
+              Te enviamos un enlace para cargar tu comprobante de pago. Debes hacerlo antes de las
+              <strong>{{ fechaLimiteLegible(compra.expiraEn!) }}</strong> (hora de Bogotá) o la reserva
+              se cancela.
+            </p>
+          }
           <dl class="flex flex-col gap-1 text-sm text-primary/80">
             <div class="flex justify-between">
               <dt>Cantidad de boletas</dt>
@@ -115,7 +126,7 @@
             [disabled]="enviando()"
             class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {{ enviando() ? 'Procesando…' : 'Comprar' }}
+            {{ enviando() ? 'Procesando…' : (detalleEvento.etapas.length === 0 ? 'Adquirir' : 'Comprar') }}
           </button>
         </form>
       }

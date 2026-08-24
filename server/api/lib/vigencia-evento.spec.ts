@@ -33,6 +33,20 @@ describe('haFinalizadoPorVigencia', () => {
     const e = evento('2026-08-01T00:00:00.000Z', ['2026-08-25T00:00:00.000Z', '2026-08-02T00:00:00.000Z']);
     expect(haFinalizadoPorVigencia(e, AHORA)).toBe(false);
   });
+
+  // v2, roadmap #24 — boletería opcional: un evento sin etapas depende
+  // únicamente de fechaHora, sin ningún cierre de etapa que considerar.
+  describe('evento sin etapas (roadmap #24)', () => {
+    it('no ha finalizado si fechaHora todavía no pasó', () => {
+      const e = evento('2026-08-21T00:00:00.000Z', []);
+      expect(haFinalizadoPorVigencia(e, AHORA)).toBe(false);
+    });
+
+    it('ha finalizado si fechaHora ya pasó', () => {
+      const e = evento('2026-08-10T00:00:00.000Z', []);
+      expect(haFinalizadoPorVigencia(e, AHORA)).toBe(true);
+    });
+  });
 });
 
 describe('estadoEfectivo', () => {

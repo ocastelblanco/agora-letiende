@@ -150,6 +150,9 @@ describe('EditarEventoComponent', () => {
         sillasTotales: 100,
         productores: ['productor@letiende.co'],
       });
+      // v2 (roadmap #24) — etapas ya no inicia con una fila por defecto,
+      // hay que agregarla explícitamente.
+      componente['agregarEtapa']();
       componente['etapas'].at(0).patchValue({
         nombre: 'Preventa',
         precio: 45000,
@@ -237,6 +240,88 @@ describe('EditarEventoComponent', () => {
 
       expect(componente['etapasExpandido']()).toBe(true);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).not.toBeNull();
+    });
+  });
+
+  // v2, roadmap #24 — boletería opcional.
+  describe('boletería opcional (roadmap #24)', () => {
+    it('un evento nuevo inicia sin ninguna etapa', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      expect(componente['etapas'].length).toBe(0);
+    });
+
+    it('quitarEtapa permite bajar hasta 0 etapas (antes el mínimo era 1)', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['etapas'].length).toBe(1);
+      componente['quitarEtapa'](0);
+
+      expect(componente['etapas'].length).toBe(0);
+    });
+
+    it('deshabilita y fuerza en false el checkbox de Bold cuando no hay etapas', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      const boldControl = componente['formulario'].controls.mediosPago.controls.bold;
+      expect(boldControl.disabled).toBe(true);
+      expect(boldControl.value).toBe(false);
+    });
+
+    it('habilita Bold en cuanto se agrega la primera etapa', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['agregarEtapa']();
+
+      const boldControl = componente['formulario'].controls.mediosPago.controls.bold;
+      expect(boldControl.disabled).toBe(false);
+    });
+
+    it('vuelve a deshabilitar y forzar en false Bold si se quita la última etapa después de haberlo marcado', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['agregarEtapa']();
+      const boldControl = componente['formulario'].controls.mediosPago.controls.bold;
+      boldControl.setValue(true);
+
+      componente['quitarEtapa'](0);
+
+      expect(boldControl.disabled).toBe(true);
+      expect(boldControl.value).toBe(false);
+    });
+
+    it('mediosPagoSeleccionados() nunca incluye bold cuando el control está deshabilitado sin etapas', async () => {
+      const { fixture } = configurarPrueba({ crearEventoMock: vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente }) });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      // Aunque alguien fuerce el valor interno a true, sincronizarDisponibilidadBold()
+      // ya lo dejó en false y deshabilitado al no haber etapas — getRawValue()
+      // (usado por mediosPagoSeleccionados()) debe reflejar ese false, nunca un
+      // true residual.
+      expect(componente['formulario'].controls.mediosPago.controls.bold.value).toBe(false);
+      expect(componente['mediosPagoSeleccionados']()).not.toContain('bold');
+    });
+
+    it('precarga un evento existente con bold habilitado sin perder el valor (regresión de orden etapas/mediosPago)', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      // eventoExistente ya tiene 1 etapa y mediosPago: ['efectivo', 'bold'].
+      const boldControl = componente['formulario'].controls.mediosPago.controls.bold;
+      expect(boldControl.disabled).toBe(false);
+      expect(boldControl.value).toBe(true);
     });
   });
 
@@ -557,11 +642,8 @@ describe('EditarEventoComponent', () => {
         productores: ['productor@letiende.co'],
         porteros: ['portero@letiende.co'],
       });
-      componente['etapas'].at(0).patchValue({
-        nombre: 'Preventa',
-        precio: 45000,
-        cierraEn: '2026-08-31T19:00',
-      });
+      // v2 (roadmap #24) — etapas ya no es obligatoria para guardar (un
+      // evento puede crearse sin ninguna, boletería opcional sin cobro).
 
       await componente['guardar']();
 

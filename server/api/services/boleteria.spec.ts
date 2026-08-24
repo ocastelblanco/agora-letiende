@@ -82,6 +82,20 @@ describe('emitirBoletas', () => {
     expect(typeof boletas[0]?.emitidaEn).toBe('string');
   });
 
+  // v2, roadmap #24 — un evento sin etapas no tiene etapaId que propagar.
+  it('acepta etapaId ausente (evento sin etapas) y lo deja ausente en cada boleta', async () => {
+    const boletas = await emitirBoletas({
+      compraId: 'compra-1',
+      eventoId: 'evt-1',
+      montoTotal: 0,
+      cantidad: 2,
+    });
+
+    expect(boletas).toHaveLength(2);
+    expect(boletas.every((b) => b.etapaId === undefined)).toBe(true);
+    expect(boletas.every((b) => b.valorUnitario === 0)).toBe(true);
+  });
+
   it('escribe cada boleta con ConditionExpression attribute_not_exists(boletaId)', async () => {
     await emitirBoletas({
       compraId: 'compra-1',
