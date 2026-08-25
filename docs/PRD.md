@@ -265,7 +265,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 |---|---|---|
 | Boletería opcional (aforo sin cobro) | **Alta** | ✅ Implementado y validado en vivo en staging (roadmap #24, PR #46) — pendiente de fusionar |
 | Eventos con boletería externa | **Alta** | ✅ Implementado y validado en vivo en staging (roadmap #25, PR #47) — pendiente de fusionar |
-| Sincronización con Google Calendar | Media | ✅ Implementado y validado en vivo en staging (roadmap #22, PR #48) — pendiente de fusionar |
+| Sincronización con Google Calendar | Media | ✅ Fusionado y verificado en producción (roadmap #22, PR #48) |
 | Pago automático con Bold | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (llaves de Bold) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
 | Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado |
