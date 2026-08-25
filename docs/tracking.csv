@@ -191,3 +191,4 @@ Workspace setting,24/08/2026 17:56,24/08/2026 18:00,0:04:00,AI,Sonnet 5,Fusion c
 Specs definition,24/08/2026 18:00,24/08/2026 18:35,0:35:00,AI,Sonnet 5,Plan de sincronizacion con Google Calendar investigacion de autenticacion y 4 decisiones aprobadas,Claude Code,cli,high
 Backend,24/08/2026 18:35,24/08/2026 19:19,0:44:00,AI,Sonnet 5,Implementa sincronizacion con Google Calendar al crear/editar eventos roadmap 22,Claude Code,cli,high
 Backend,24/08/2026 19:19,24/08/2026 19:27,0:08:00,AI,Sonnet 5,Revision de codigo y fix de carrera de eventos duplicados en Calendar,Claude Code,cli,medium
+Backend,25/08/2026 13:04,25/08/2026 13:24,0:20:00,AI,Sonnet 5,Mueve credencial de Calendar a SSM Parameter Store para no superar limite de Lambda,Claude Code,cli,medium
