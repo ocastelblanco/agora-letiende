@@ -187,3 +187,4 @@ Backend,24/08/2026 16:38,24/08/2026 16:49,0:11:00,AI,Sonnet 5,Corrige patron de 
 Frontend,24/08/2026 16:49,24/08/2026 17:09,0:20:00,AI,Sonnet 5,Corrige boton guardar sin respuesta al desactivar boleteria administrada por sillasTotales invalido,Claude Code,cli,medium
 Backend,24/08/2026 17:09,24/08/2026 17:34,0:25:00,AI,Sonnet 5,Excluye eventos con boleteria externa del selector compartido de panel venta efectivo y puerta,Claude Code,cli,medium
 Specs definition,24/08/2026 17:34,24/08/2026 17:56,0:22:00,AI,Sonnet 5,Cierra boleteria externa en TODO y deja motor JIT en pausa sin candidato,Claude Code,cli,medium
+Backend,24/08/2026 18:35,24/08/2026 19:19,0:44:00,AI,Sonnet 5,Implementa sincronizacion con Google Calendar al crear/editar eventos roadmap 22,Claude Code,cli,high
