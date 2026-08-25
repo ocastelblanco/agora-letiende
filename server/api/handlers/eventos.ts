@@ -376,14 +376,44 @@ async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Prom
       : await crearEventoCalendar(eventoParaCalendar, productoresResueltos);
 
     if (resultado.exito) {
-      await documentoDynamoDB.send(
-        new UpdateCommand({
-          TableName: process.env['TABLA_EVENTOS'],
-          Key: { eventoId },
-          UpdateExpression: 'SET googleCalendarEventId = :googleCalendarEventId',
-          ExpressionAttributeValues: { ':googleCalendarEventId': resultado.googleCalendarEventId },
-        }),
-      );
+      try {
+        await documentoDynamoDB.send(
+          new UpdateCommand({
+            TableName: process.env['TABLA_EVENTOS'],
+            Key: { eventoId },
+            UpdateExpression: 'SET googleCalendarEventId = :googleCalendarEventId',
+            ExpressionAttributeValues: { ':googleCalendarEventId': resultado.googleCalendarEventId },
+            // Hallazgo de code review (roadmap #22) — solo al CREAR
+            // (`googleCalendarEventIdExistente` es `undefined`): guarda condicional
+            // que serializa la decisión "crear vs editar en Calendar" entre dos
+            // ediciones concurrentes del mismo eventoId. Sin esto, dos PUT/POST
+            // casi simultáneos sobre un evento sin googleCalendarEventId (legado
+            // nunca sincronizado, o creado con Calendar caído) leen ambos
+            // `undefined`, ambos llaman `crearEventoCalendar()` y crean DOS
+            // eventos distintos en Calendar — el segundo `UpdateCommand`
+            // sobreescribiría en silencio el id del primero. Cuando SÍ había un
+            // id previo (reemplazo completo vía `actualizarEventoCalendar`), no
+            // hay condición: ese caso no decide entre crear o no crear, no tiene
+            // el race.
+            ...(googleCalendarEventIdExistente
+              ? {}
+              : { ConditionExpression: 'attribute_not_exists(googleCalendarEventId)' }),
+          }),
+        );
+      } catch (errorEscritura) {
+        if (!googleCalendarEventIdExistente && esErrorCondicionFallida(errorEscritura)) {
+          // Otra request concurrente ganó la carrera y ya persistió su propio
+          // googleCalendarEventId primero. El evento recién creado en Calendar
+          // por ESTA request queda huérfano allí (sin id guardado en Ágora) —
+          // efecto secundario cosmético aceptado, no se borra de Calendar.
+          // Best-effort, igual que el resto de esta integración: no propaga.
+          console.error('Carrera detectada al persistir googleCalendarEventId: se descarta el id duplicado de esta request', {
+            eventoId,
+          });
+          return;
+        }
+        throw errorEscritura;
+      }
     }
   } catch (error) {
     console.error('La sincronización con Google Calendar falló', {

@@ -386,6 +386,25 @@ describe('handler de /api/eventos', () => {
         expect(respuesta.statusCode).toBe(201);
         expect(JSON.parse(respuesta.body!).eventoId).toEqual(expect.any(String));
       });
+
+      // Hallazgo de code review — race entre dos ediciones/creaciones
+      // concurrentes del mismo evento: el UpdateCommand que persiste
+      // googleCalendarEventId lleva ConditionExpression:
+      // attribute_not_exists(googleCalendarEventId) al crear, y si otra
+      // request concurrente ya ganó la carrera (ConditionalCheckFailedException),
+      // se descarta en silencio sin propagar — sigue siendo best-effort.
+      it('responde 201 sin propagar el error cuando otra request concurrente ya persistió googleCalendarEventId primero', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-1' });
+        sendMock
+          .mockResolvedValueOnce({}) // PutCommand del evento
+          .mockRejectedValueOnce(new ConditionalCheckFailedException()); // UpdateCommand de googleCalendarEventId
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).eventoId).toEqual(expect.any(String));
+      });
     });
 
     // v2 (roadmap #25) — eventos con boletería externa.
@@ -628,6 +647,24 @@ describe('handler de /api/eventos', () => {
         sendMock.mockResolvedValue({
           Attributes: { ...atributosBase, googleCalendarEventId: 'gcal-existente' },
         });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(JSON.parse(respuesta.body!)).toMatchObject({ eventoId: 'e1' });
+      });
+
+      // Hallazgo de code review — mismo criterio que en crearEvento(): al
+      // editar un evento legado sin googleCalendarEventId todavía (decide
+      // crear en Calendar), el UpdateCommand que persiste el id lleva
+      // ConditionExpression: attribute_not_exists(googleCalendarEventId). Si
+      // otra edición concurrente ya ganó la carrera, se descarta en silencio.
+      it('responde 200 sin propagar el error cuando otra request concurrente ya persistió googleCalendarEventId primero', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-nuevo' });
+        sendMock
+          .mockResolvedValueOnce({ Attributes: atributosBase }) // UpdateCommand principal del PUT
+          .mockRejectedValueOnce(new ConditionalCheckFailedException()); // UpdateCommand de googleCalendarEventId
 
         const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
 
