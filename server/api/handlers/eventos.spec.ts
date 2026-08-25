@@ -1,10 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { exigirRolMock, sendMock, clienteS3SendMock, getSignedUrlMock } = vi.hoisted(() => ({
+const {
+  exigirRolMock,
+  sendMock,
+  clienteS3SendMock,
+  getSignedUrlMock,
+  credencialCalendarConfiguradaMock,
+  crearEventoCalendarMock,
+  actualizarEventoCalendarMock,
+  resolverProductoresMock,
+} = vi.hoisted(() => ({
   exigirRolMock: vi.fn(),
   sendMock: vi.fn(),
   clienteS3SendMock: vi.fn(),
   getSignedUrlMock: vi.fn(),
+  credencialCalendarConfiguradaMock: vi.fn(),
+  crearEventoCalendarMock: vi.fn(),
+  actualizarEventoCalendarMock: vi.fn(),
+  resolverProductoresMock: vi.fn(),
 }));
 
 // `tieneAccesoAlEvento` se reexporta desde la implementación real
@@ -18,6 +31,17 @@ vi.mock('../lib/autorizacion', async (importOriginal) => {
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 vi.mock('../services/s3', () => ({ clienteS3: { send: clienteS3SendMock } }));
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: getSignedUrlMock }));
+// roadmap #22 — la sincronización con Google Calendar se mockea por
+// completo: estos tests verifican el CRUD de agora-eventos, no el servicio
+// de Calendar (que ya tiene su propio spec, google-calendar.spec.ts). Por
+// defecto (`beforeEach` abajo) la credencial se reporta como no configurada,
+// para que el comportamiento de todos los tests existentes no cambie.
+vi.mock('../services/google-calendar', () => ({
+  credencialCalendarConfigurada: credencialCalendarConfiguradaMock,
+  crearEventoCalendar: crearEventoCalendarMock,
+  actualizarEventoCalendar: actualizarEventoCalendarMock,
+  resolverProductores: resolverProductoresMock,
+}));
 
 const { handler } = await import('./eventos');
 
@@ -103,6 +127,10 @@ describe('handler de /api/eventos', () => {
     vi.clearAllMocks();
     exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosAdmin });
     clienteS3SendMock.mockResolvedValue({ Contents: [] });
+    // Por defecto, sin credencial configurada — sincronizarConGoogleCalendar
+    // se salta por completo y ningún test existente cambia de comportamiento.
+    credencialCalendarConfiguradaMock.mockReturnValue(false);
+    resolverProductoresMock.mockResolvedValue([]);
   });
 
   it('devuelve la respuesta de exigirRol tal cual cuando no está autorizado', async () => {
@@ -300,6 +328,85 @@ describe('handler de /api/eventos', () => {
       expect(respuesta.statusCode).toBe(409);
     });
 
+    // roadmap #22 — sincronización con Google Calendar, best-effort.
+    describe('sincronización con Google Calendar (roadmap #22)', () => {
+      it('no resuelve productores ni llama a Calendar cuando la credencial no está configurada (comportamiento por defecto)', async () => {
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(resolverProductoresMock).not.toHaveBeenCalled();
+        expect(crearEventoCalendarMock).not.toHaveBeenCalled();
+      });
+
+      it('crea el evento espejo en Calendar y persiste googleCalendarEventId cuando la credencial está configurada', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        resolverProductoresMock.mockResolvedValue([{ correo: 'productor@letiende.co', nombre: 'Productor' }]);
+        crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-1' });
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(resolverProductoresMock).toHaveBeenCalledWith(['productor@letiende.co']);
+        expect(crearEventoCalendarMock).toHaveBeenCalledWith(
+          expect.objectContaining({ nombre: eventoValido.nombre, slug: eventoValido.slug }),
+          [{ correo: 'productor@letiende.co', nombre: 'Productor' }],
+        );
+        // PutCommand del evento + UpdateCommand que persiste googleCalendarEventId.
+        expect(sendMock).toHaveBeenCalledTimes(2);
+        const comandoUpdate = sendMock.mock.calls[1]?.[0];
+        expect(comandoUpdate.input).toMatchObject({
+          UpdateExpression: 'SET googleCalendarEventId = :googleCalendarEventId',
+          ExpressionAttributeValues: { ':googleCalendarEventId': 'gcal-1' },
+        });
+      });
+
+      it('responde 201 y el evento queda igual persistido aunque crearEventoCalendar devuelva { exito: false }', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: false });
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).eventoId).toEqual(expect.any(String));
+        // Solo el PutCommand del evento — sin UpdateCommand adicional, porque no hubo éxito.
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('responde 201 y el evento queda igual persistido aunque la sincronización con Calendar lance una excepción inesperada', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        resolverProductoresMock.mockRejectedValue(new Error('DynamoDB no disponible'));
+        sendMock.mockResolvedValue({});
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).eventoId).toEqual(expect.any(String));
+      });
+
+      // Hallazgo de code review — race entre dos ediciones/creaciones
+      // concurrentes del mismo evento: el UpdateCommand que persiste
+      // googleCalendarEventId lleva ConditionExpression:
+      // attribute_not_exists(googleCalendarEventId) al crear, y si otra
+      // request concurrente ya ganó la carrera (ConditionalCheckFailedException),
+      // se descarta en silencio sin propagar — sigue siendo best-effort.
+      it('responde 201 sin propagar el error cuando otra request concurrente ya persistió googleCalendarEventId primero', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-1' });
+        sendMock
+          .mockResolvedValueOnce({}) // PutCommand del evento
+          .mockRejectedValueOnce(new ConditionalCheckFailedException()); // UpdateCommand de googleCalendarEventId
+
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).eventoId).toEqual(expect.any(String));
+      });
+    });
+
     // v2 (roadmap #25) — eventos con boletería externa.
     describe('administradoPorLeTiende / vinculoExterno (roadmap #25)', () => {
       it('crea el evento con administradoPorLeTiende: true por defecto cuando no viene en el payload', async () => {
@@ -479,6 +586,91 @@ describe('handler de /api/eventos', () => {
       });
 
       expect(respuesta.statusCode).toBe(200);
+    });
+
+    // roadmap #22 — sincronización con Google Calendar, best-effort.
+    describe('sincronización con Google Calendar (roadmap #22)', () => {
+      const atributosBase = {
+        eventoId: 'e1',
+        nombre: 'Concierto de jazz',
+        slug: 'concierto-jazz',
+        fechaHora: '2026-09-15T01:00:00.000Z',
+        administradoPorLeTiende: true,
+        productores: ['productor@letiende.co'],
+        etapas: [],
+      };
+
+      it('no resuelve productores ni llama a Calendar cuando la credencial no está configurada (comportamiento por defecto)', async () => {
+        sendMock.mockResolvedValue({ Attributes: atributosBase });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(resolverProductoresMock).not.toHaveBeenCalled();
+        expect(crearEventoCalendarMock).not.toHaveBeenCalled();
+        expect(actualizarEventoCalendarMock).not.toHaveBeenCalled();
+      });
+
+      it('usa crearEventoCalendar cuando el evento editado no tiene googleCalendarEventId (evento legado nunca sincronizado)', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-nuevo' });
+        sendMock.mockResolvedValue({ Attributes: atributosBase });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(crearEventoCalendarMock).toHaveBeenCalledTimes(1);
+        expect(actualizarEventoCalendarMock).not.toHaveBeenCalled();
+      });
+
+      it('usa actualizarEventoCalendar (reemplazo completo) cuando el evento ya tiene googleCalendarEventId', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        actualizarEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-existente' });
+        sendMock.mockResolvedValue({
+          Attributes: { ...atributosBase, googleCalendarEventId: 'gcal-existente' },
+        });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(actualizarEventoCalendarMock).toHaveBeenCalledWith(
+          'gcal-existente',
+          expect.objectContaining({ nombre: atributosBase.nombre, slug: atributosBase.slug }),
+          [],
+        );
+        expect(crearEventoCalendarMock).not.toHaveBeenCalled();
+      });
+
+      it('responde 200 y el evento queda igual actualizado aunque el servicio de Calendar falle', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        actualizarEventoCalendarMock.mockRejectedValue(new Error('Calendar API no disponible'));
+        sendMock.mockResolvedValue({
+          Attributes: { ...atributosBase, googleCalendarEventId: 'gcal-existente' },
+        });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(JSON.parse(respuesta.body!)).toMatchObject({ eventoId: 'e1' });
+      });
+
+      // Hallazgo de code review — mismo criterio que en crearEvento(): al
+      // editar un evento legado sin googleCalendarEventId todavía (decide
+      // crear en Calendar), el UpdateCommand que persiste el id lleva
+      // ConditionExpression: attribute_not_exists(googleCalendarEventId). Si
+      // otra edición concurrente ya ganó la carrera, se descarta en silencio.
+      it('responde 200 sin propagar el error cuando otra request concurrente ya persistió googleCalendarEventId primero', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-nuevo' });
+        sendMock
+          .mockResolvedValueOnce({ Attributes: atributosBase }) // UpdateCommand principal del PUT
+          .mockRejectedValueOnce(new ConditionalCheckFailedException()); // UpdateCommand de googleCalendarEventId
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { nombre: 'X' } });
+
+        expect(respuesta.statusCode).toBe(200);
+        expect(JSON.parse(respuesta.body!)).toMatchObject({ eventoId: 'e1' });
+      });
     });
 
     it('ignora sillasDisponibles enviado directo en el payload (nunca se acepta un valor literal)', async () => {
