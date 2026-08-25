@@ -133,6 +133,12 @@ jobs:
           # falsificable sin acceso al sistema (CLAUDE.md §5, A02) — a
           # diferencia de SES_REMITENTE, este fallo no rompe nada visible.
           SECRETO_FIRMA_BOLETAS: ${{ secrets.SECRETO_FIRMA_BOLETAS }}
+          # Mismo gotcha, esta vez con la Lambda eventos (roadmap #22,
+          # Sincronización con Google Calendar): sin esto, la sincronización
+          # se salta en silencio (best-effort por diseño) — el evento se
+          # crea/edita bien en Ágora, pero nunca aparece en Calendar, sin
+          # ningún error visible (encontrado en vivo en staging, MEMORY.md §7).
+          GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_CALENDAR_SERVICE_ACCOUNT }}
 
       - name: Smoke test contra staging recién desplegado
         run: |
@@ -198,3 +204,4 @@ jobs:
           URL_BASE_APP: ${{ secrets.URL_BASE_APP }}
           SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}
           SECRETO_FIRMA_BOLETAS: ${{ secrets.SECRETO_FIRMA_BOLETAS }}
+          GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_CALENDAR_SERVICE_ACCOUNT }}
