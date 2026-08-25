@@ -331,14 +331,14 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
  * nunca antes: no afecta el código de respuesta HTTP ni revierte nada si
  * Calendar falla, mismo patrón que `emitirBoletas()` en
  * `compras.ts`/`aprobaciones.ts`. Se salta por completo (sin ningún
- * `GetItem` de productores) cuando `GOOGLE_CALENDAR_SERVICE_ACCOUNT` no está
- * configurado, para que el entorno local/tests siga funcionando sin la
- * credencial real. `item` es el ítem completo ya persistido (`ALL_NEW` en
- * edición): si ya trae `googleCalendarEventId`, se edita (reemplazo
+ * `GetItem` de productores) cuando la credencial de Calendar en SSM Parameter
+ * Store no está configurada, para que el entorno local/tests siga
+ * funcionando sin la credencial real. `item` es el ítem completo ya
+ * persistido (`ALL_NEW` en edición): si ya trae `googleCalendarEventId`, se edita (reemplazo
  * completo); si no (evento nuevo o legado nunca sincronizado), se crea.
  */
 async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Promise<void> {
-  if (!credencialCalendarConfigurada()) {
+  if (!(await credencialCalendarConfigurada())) {
     return;
   }
 

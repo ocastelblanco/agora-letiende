@@ -1,5 +1,6 @@
 import { JWT } from 'google-auth-library';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { documentoDynamoDB } from './dynamodb';
 
 /**
@@ -151,28 +152,69 @@ interface CredencialCuentaServicio {
   private_key: string;
 }
 
-/** `true` si `GOOGLE_CALENDAR_SERVICE_ACCOUNT` está presente — permite a `eventos.ts` saltarse por completo la resolución de productores (GetItem por cada uno) cuando la sincronización ni siquiera va a intentarse. */
-export function credencialCalendarConfigurada(): boolean {
-  return Boolean(process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT']);
-}
+const clienteSsm = new SSMClient({});
 
-function obtenerCredencial(): CredencialCuentaServicio | null {
-  const credencialJson = process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT'];
-  if (!credencialJson) {
+// Caché de módulo, reutilizada entre invocaciones de una misma Lambda
+// (contenedor "warm") — mismo criterio de reutilización de contexto de
+// ejecución que `obtenerAppFirebase()` en `lib/verificar-token.ts`. `undefined`
+// = todavía no se consultó SSM en este contenedor; `null` = se consultó y no
+// hay credencial válida (SSM no configurado, valor de relleno
+// 'sin-configurar' del serverless.yml cuando el secreto de GitHub todavía no
+// existe en ese stage, vacío, o JSON inválido) — en todos los casos se
+// resuelve una sola vez por contenedor, nunca una llamada a SSM por
+// invocación.
+let credencialCacheada: CredencialCuentaServicio | null | undefined;
+
+async function resolverCredencialDesdeSsm(): Promise<CredencialCuentaServicio | null> {
+  if (credencialCacheada !== undefined) {
+    return credencialCacheada;
+  }
+
+  const nombreParametro = process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT_SSM_PARAM'];
+  if (!nombreParametro) {
+    credencialCacheada = null;
     return null;
   }
+
   try {
-    const credencial = JSON.parse(credencialJson) as Record<string, unknown>;
+    const resultado = await clienteSsm.send(new GetParameterCommand({ Name: nombreParametro }));
+    const valorParametro = resultado.Parameter?.Value;
+    if (!valorParametro) {
+      credencialCacheada = null;
+      return null;
+    }
+    // El valor de relleno 'sin-configurar' (serverless.yml) no es JSON
+    // válido, así que cae de forma natural en el catch de abajo — mismo
+    // comportamiento best-effort que un JSON inválido real.
+    const credencial = JSON.parse(valorParametro) as Record<string, unknown>;
     if (
       typeof credencial['client_email'] !== 'string' ||
       typeof credencial['private_key'] !== 'string'
     ) {
+      credencialCacheada = null;
       return null;
     }
-    return { client_email: credencial['client_email'], private_key: credencial['private_key'] };
+    credencialCacheada = {
+      client_email: credencial['client_email'],
+      private_key: credencial['private_key'],
+    };
+    return credencialCacheada;
   } catch {
+    // Best-effort (CLAUDE.md §5, A09: nunca datos personales en logs, y aquí
+    // tampoco hace falta más detalle): SSM no disponible, parámetro
+    // inexistente, o JSON inválido se tratan igual que "no configurado".
+    credencialCacheada = null;
     return null;
   }
+}
+
+/** `true` si hay una credencial válida en SSM — permite a `eventos.ts` saltarse por completo la resolución de productores (GetItem por cada uno) cuando la sincronización ni siquiera va a intentarse. */
+export async function credencialCalendarConfigurada(): Promise<boolean> {
+  return (await resolverCredencialDesdeSsm()) !== null;
+}
+
+async function obtenerCredencial(): Promise<CredencialCuentaServicio | null> {
+  return resolverCredencialDesdeSsm();
 }
 
 /**
@@ -208,7 +250,7 @@ async function sincronizarEventoCalendar(
   evento: EventoParaCalendar,
   productoresResueltos: ProductorResuelto[],
 ): Promise<ResultadoSincronizacionCalendar> {
-  const credencial = obtenerCredencial();
+  const credencial = await obtenerCredencial();
   if (!credencial) {
     return { exito: false };
   }

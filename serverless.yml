@@ -159,11 +159,14 @@ functions:
       # compras.ts/boletas.ts/ventas-efectivo.ts/aprobaciones.ts); esta
       # función no la tenía todavía porque no construía enlaces públicos.
       URL_BASE_APP: ${env:URL_BASE_APP, ''}
-      # roadmap #22 — credencial de la cuenta de servicio de Google Calendar
-      # (JSON crudo, mismo patrón que FIREBASE_SERVICE_ACCOUNT_AGORA). Sin
-      # permiso IAM de AWS nuevo: la llamada es HTTP saliente a
-      # googleapis.com, ya en la lista blanca de CLAUDE.md §5 A10.
-      GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${env:GOOGLE_CALENDAR_SERVICE_ACCOUNT, ''}
+      # roadmap #22 — nombre del parámetro SSM que guarda la credencial de la
+      # cuenta de servicio de Google Calendar (JSON crudo), no la credencial
+      # en sí. Movida a SSM Parameter Store (fix pre-staging) porque, sumada
+      # a FIREBASE_SERVICE_ACCOUNT_AGORA, superaba el límite de 5.120 bytes
+      # de UpdateFunctionConfiguration de Lambda — ver el parámetro
+      # GoogleCalendarServiceAccountParam más abajo y la política
+      # agora-eventos-ssm-${sls:stage}.
+      GOOGLE_CALENDAR_SERVICE_ACCOUNT_SSM_PARAM: /agora/${sls:stage}/google-calendar-service-account
     package:
       # Mismo motivo que usuarios/usuariosMe: depende de firebase-admin
       # transitivamente (vía lib/autorizacion.ts), así que se empaqueta con
@@ -648,6 +651,20 @@ resources:
                   Resource:
                     - !GetAtt AgoraCompras.Arn
                     - !Sub '${AgoraCompras.Arn}/index/*'
+          # ssm:GetParameter (no ssm:GetParameters ni wildcard), acotado a
+          # ESE parámetro exacto — la credencial de Google Calendar movida a
+          # SSM Parameter Store (fix pre-staging, ver
+          # GoogleCalendarServiceAccountParam más abajo) porque, sumada a
+          # FIREBASE_SERVICE_ACCOUNT_AGORA, superaba el límite de 5.120 bytes
+          # de UpdateFunctionConfiguration de Lambda.
+          - PolicyName: agora-eventos-ssm-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ssm:GetParameter
+                  Resource: !Sub 'arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/agora/${sls:stage}/google-calendar-service-account'
 
     EventosPublicosLambdaRole:
       Type: AWS::IAM::Role
@@ -1223,6 +1240,41 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         # Sin política de DynamoDB: el SSR solo renderiza, no lee datos.
+
+    # --- SSM Parameter Store (roadmap #22, fix pre-staging) ---
+    # Type: String, nunca SecureString — CloudFormation no soporta crear un
+    # AWS::SSM::Parameter de tipo SecureString directamente (limitación
+    # documentada de CloudFormation). El control de acceso sigue siendo por
+    # IAM (política agora-eventos-ssm-${sls:stage} arriba), mismo nivel de
+    # protección práctico que tenía como variable de entorno de Lambda (que
+    # tampoco estaba cifrada con una llave propia). Nivel Standard con
+    # throughput estándar (sin "higher throughput"): sin cargo por
+    # almacenamiento ni por GetParameter, verificado 25/08/2026 — no activar
+    # "higher throughput" en este parámetro, dejaría de ser gratis.
+    #
+    # Value por defecto: se probaron '{}' (falla, ver abajo) y '' (vacío).
+    # '{}' rompe el resolvedor de variables de Serverless Framework 4 ANTES
+    # de llegar a CloudFormation — cualquier valor de fallback ${env:X, ...}
+    # que empiece con '{' se interpreta como un literal JSON/objeto y su
+    # parseo revienta con "SyntaxError: Unexpected token" (verificado en este
+    # mismo cambio con `npx serverless package --stage staging`, no es
+    # teórico). '' (cadena vacía) sí pasa `serverless package`, pero
+    # `AWS::SSM::Parameter` de tipo String exige un Value de al menos 1
+    # carácter en la API real de SSM (PutParameter) — un fallo que
+    # `serverless package` no sintetiza contra AWS real y por tanto no
+    # detecta. Se usa 'sin-configurar' como valor de relleno: no tiene
+    # llaves (no dispara el bug del resolvedor), no está vacío (cumple la
+    # longitud mínima de SSM) y falla el `JSON.parse` en
+    # `services/google-calendar.ts` igual que lo haría cualquier valor
+    # inválido — mismo comportamiento *best-effort* de "credencial no
+    # configurada" que tenía antes como variable de entorno vacía.
+    GoogleCalendarServiceAccountParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /agora/${sls:stage}/google-calendar-service-account
+        Type: String
+        Value: ${env:GOOGLE_CALENDAR_SERVICE_ACCOUNT, 'sin-configurar'}
+        Description: Credencial de la cuenta de servicio de Google para sincronizar eventos con Calendar (roadmap #22) — movida aquí porque, sumada a FIREBASE_SERVICE_ACCOUNT_AGORA, supera el límite de 5120 bytes de variables de entorno de Lambda.
 
     # --- Tablas DynamoDB (tech-specs.md §5.2) ---
     # Todas PAY_PER_REQUEST, sin excepción, sin ProvisionedThroughput en

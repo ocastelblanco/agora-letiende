@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { requestMock, sendMock } = vi.hoisted(() => ({
+const { requestMock, sendMock, ssmSendMock } = vi.hoisted(() => ({
   requestMock: vi.fn(),
   sendMock: vi.fn(),
+  ssmSendMock: vi.fn(),
 }));
 
 vi.mock('google-auth-library', () => ({
@@ -11,13 +12,14 @@ vi.mock('google-auth-library', () => ({
   }),
 }));
 vi.mock('./dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
-
-const {
-  crearEventoCalendar,
-  actualizarEventoCalendar,
-  resolverProductores,
-  credencialCalendarConfigurada,
-} = await import('./google-calendar');
+vi.mock('@aws-sdk/client-ssm', () => ({
+  SSMClient: vi.fn().mockImplementation(function (this: { send: typeof ssmSendMock }) {
+    this.send = ssmSendMock;
+  }),
+  GetParameterCommand: vi.fn().mockImplementation(function (this: { input: unknown }, input: unknown) {
+    this.input = input;
+  }),
+}));
 
 const CREDENCIAL_VALIDA = JSON.stringify({
   client_email: 'agora-calendario@proyecto.iam.gserviceaccount.com',
@@ -32,29 +34,81 @@ const eventoAdministrado = {
   etapas: [],
 };
 
-beforeEach(() => {
+// El módulo cachea la credencial resuelta de SSM en una variable de módulo
+// (reutilización de contexto de ejecución de Lambda, igual que
+// `obtenerAppFirebase()` en `lib/verificar-token.ts`) — así que hace falta
+// `vi.resetModules()` + reimportar en cada test para que ese caché no
+// arrastre estado entre pruebas (un test que resolvió la credencial no debe
+// "contaminar" al siguiente, que espera que SSM no esté configurado).
+let crearEventoCalendar: typeof import('./google-calendar').crearEventoCalendar;
+let actualizarEventoCalendar: typeof import('./google-calendar').actualizarEventoCalendar;
+let resolverProductores: typeof import('./google-calendar').resolverProductores;
+let credencialCalendarConfigurada: typeof import('./google-calendar').credencialCalendarConfigurada;
+
+beforeEach(async () => {
   vi.clearAllMocks();
   requestMock.mockReset();
   sendMock.mockReset();
-  process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT'] = CREDENCIAL_VALIDA;
+  ssmSendMock.mockReset();
+  process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT_SSM_PARAM'] = '/agora/test/google-calendar-service-account';
   process.env['URL_BASE_APP'] = 'https://agora.letiende.co';
   process.env['TABLA_USUARIOS'] = 'agora-usuarios-test';
+  // Por defecto, la credencial válida — los tests que necesitan "sin
+  // configurar" sobrescriben este mock explícitamente antes de importar.
+  ssmSendMock.mockResolvedValue({ Parameter: { Value: CREDENCIAL_VALIDA } });
+
+  vi.resetModules();
+  const modulo = await import('./google-calendar');
+  crearEventoCalendar = modulo.crearEventoCalendar;
+  actualizarEventoCalendar = modulo.actualizarEventoCalendar;
+  resolverProductores = modulo.resolverProductores;
+  credencialCalendarConfigurada = modulo.credencialCalendarConfigurada;
 });
 
 describe('credencialCalendarConfigurada', () => {
-  it('true cuando GOOGLE_CALENDAR_SERVICE_ACCOUNT está presente', () => {
-    expect(credencialCalendarConfigurada()).toBe(true);
+  it('true cuando SSM devuelve una credencial válida', async () => {
+    await expect(credencialCalendarConfigurada()).resolves.toBe(true);
   });
 
-  it('false cuando GOOGLE_CALENDAR_SERVICE_ACCOUNT está ausente/vacío', () => {
-    delete process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT'];
-    expect(credencialCalendarConfigurada()).toBe(false);
+  it('false cuando GOOGLE_CALENDAR_SERVICE_ACCOUNT_SSM_PARAM no está configurado', async () => {
+    delete process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT_SSM_PARAM'];
+    vi.resetModules();
+    ({ credencialCalendarConfigurada } = await import('./google-calendar'));
+
+    await expect(credencialCalendarConfigurada()).resolves.toBe(false);
+    expect(ssmSendMock).not.toHaveBeenCalled();
+  });
+
+  it("false cuando SSM devuelve el valor de relleno 'sin-configurar' del serverless.yml", async () => {
+    ssmSendMock.mockResolvedValue({ Parameter: { Value: 'sin-configurar' } });
+    vi.resetModules();
+    ({ credencialCalendarConfigurada } = await import('./google-calendar'));
+
+    await expect(credencialCalendarConfigurada()).resolves.toBe(false);
+  });
+
+  it('false cuando SSM falla (parámetro inexistente, sin permiso, etc.)', async () => {
+    ssmSendMock.mockRejectedValue(new Error('ParameterNotFound'));
+    vi.resetModules();
+    ({ credencialCalendarConfigurada } = await import('./google-calendar'));
+
+    await expect(credencialCalendarConfigurada()).resolves.toBe(false);
+  });
+
+  it('solo consulta SSM una vez por contenedor (caché de módulo)', async () => {
+    await credencialCalendarConfigurada();
+    await credencialCalendarConfigurada();
+    await credencialCalendarConfigurada();
+
+    expect(ssmSendMock).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('crearEventoCalendar', () => {
-  it('devuelve { exito: false } de inmediato si falta la credencial, sin llamar a Calendar', async () => {
-    delete process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT'];
+  it('devuelve { exito: false } de inmediato si SSM no tiene una credencial válida, sin llamar a Calendar', async () => {
+    ssmSendMock.mockResolvedValue({ Parameter: { Value: 'sin-configurar' } });
+    vi.resetModules();
+    ({ crearEventoCalendar } = await import('./google-calendar'));
 
     const resultado = await crearEventoCalendar(eventoAdministrado, []);
 
@@ -183,8 +237,10 @@ describe('actualizarEventoCalendar', () => {
     );
   });
 
-  it('devuelve { exito: false } de inmediato si falta la credencial, sin llamar a Calendar', async () => {
-    delete process.env['GOOGLE_CALENDAR_SERVICE_ACCOUNT'];
+  it('devuelve { exito: false } de inmediato si SSM no tiene una credencial válida, sin llamar a Calendar', async () => {
+    ssmSendMock.mockResolvedValue({ Parameter: { Value: 'sin-configurar' } });
+    vi.resetModules();
+    ({ actualizarEventoCalendar } = await import('./google-calendar'));
 
     const resultado = await actualizarEventoCalendar('gcal-existente', eventoAdministrado, []);
 
