@@ -116,7 +116,7 @@ describe('crearEventoCalendar', () => {
     expect(requestMock).not.toHaveBeenCalled();
   });
 
-  it('hace POST a calendars/primary/events con el payload correcto', async () => {
+  it('hace POST a calendars/letiende.co%40gmail.com/events con el payload correcto', async () => {
     requestMock.mockResolvedValueOnce({ data: { id: 'gcal-123' } });
 
     const resultado = await crearEventoCalendar(eventoAdministrado, []);
@@ -125,7 +125,9 @@ describe('crearEventoCalendar', () => {
     expect(requestMock).toHaveBeenCalledTimes(1);
     const llamada = requestMock.mock.calls[0]?.[0];
     expect(llamada.method).toBe('POST');
-    expect(llamada.url).toBe('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+    expect(llamada.url).toBe(
+      'https://www.googleapis.com/calendar/v3/calendars/letiende.co%40gmail.com/events',
+    );
     expect(llamada.data).toMatchObject({
       summary: 'Concierto de jazz',
       location: 'Cra. 24 #37-44, Teusaquillo, Bogotá, Cundinamarca, Colombia',
@@ -224,7 +226,7 @@ describe('crearEventoCalendar', () => {
 });
 
 describe('actualizarEventoCalendar', () => {
-  it('hace PUT a calendars/primary/events/{id} (reemplazo completo, nunca patch)', async () => {
+  it('hace PUT a calendars/letiende.co%40gmail.com/events/{id} (reemplazo completo, nunca patch)', async () => {
     requestMock.mockResolvedValueOnce({ data: { id: 'gcal-existente' } });
 
     const resultado = await actualizarEventoCalendar('gcal-existente', eventoAdministrado, []);
@@ -233,7 +235,7 @@ describe('actualizarEventoCalendar', () => {
     const llamada = requestMock.mock.calls[0]?.[0];
     expect(llamada.method).toBe('PUT');
     expect(llamada.url).toBe(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events/gcal-existente',
+      'https://www.googleapis.com/calendar/v3/calendars/letiende.co%40gmail.com/events/gcal-existente',
     );
   });
 

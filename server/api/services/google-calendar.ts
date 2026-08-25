@@ -51,6 +51,12 @@ export type ResultadoSincronizacionCalendar =
   | { exito: false };
 
 const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
+// Nunca 'primary': para una cuenta de servicio ese literal resuelve a su
+// propio calendario (vacío), no al calendario compartido de Le Tiende —
+// hay que usar el calendarId real, que es el correo del dueño del
+// calendario (verificado contra CloudWatch + documentación de Google,
+// 25/08/2026).
+const CALENDAR_ID = 'letiende.co@gmail.com';
 const UBICACION_FIJA = 'Cra. 24 #37-44, Teusaquillo, Bogotá, Cundinamarca, Colombia';
 const DURACION_EVENTO_MS = 3 * 60 * 60 * 1000;
 const ESCOPO_CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
@@ -281,21 +287,21 @@ async function sincronizarEventoCalendar(
   }
 }
 
-/** `POST /calendars/primary/events` — crea el evento espejo en Calendar. */
+/** `POST /calendars/{CALENDAR_ID}/events` — crea el evento espejo en Calendar. */
 export async function crearEventoCalendar(
   evento: EventoParaCalendar,
   productoresResueltos: ProductorResuelto[],
 ): Promise<ResultadoSincronizacionCalendar> {
   return sincronizarEventoCalendar(
     'POST',
-    `${CALENDAR_API_BASE}/calendars/primary/events`,
+    `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`,
     evento,
     productoresResueltos,
   );
 }
 
 /**
- * `PUT /calendars/primary/events/{googleCalendarEventId}` (`events.update`,
+ * `PUT /calendars/{CALENDAR_ID}/events/{googleCalendarEventId}` (`events.update`,
  * nunca `events.patch`) — reemplaza el evento de Calendar por completo con
  * el estado actual del evento en Ágora, tal como pidió el usuario (§1 del
  * plan: "se reemplaza por completo, no un patch incremental").
@@ -307,7 +313,7 @@ export async function actualizarEventoCalendar(
 ): Promise<ResultadoSincronizacionCalendar> {
   return sincronizarEventoCalendar(
     'PUT',
-    `${CALENDAR_API_BASE}/calendars/primary/events/${encodeURIComponent(googleCalendarEventId)}`,
+    `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(googleCalendarEventId)}`,
     evento,
     productoresResueltos,
   );
