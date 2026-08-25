@@ -277,11 +277,20 @@ async function sincronizarEventoCalendar(
     }
     return { exito: true, googleCalendarEventId: id };
   } catch (error) {
-    // Best-effort: nunca se propaga. Se registra el nombre del error para
-    // diagnóstico (CLAUDE.md §5, A09), nunca datos personales.
+    // Best-effort: nunca se propaga. Se registra el nombre del error, el
+    // código HTTP y el cuerpo de error que devuelve la propia API de Google
+    // (nunca la credencial ni datos personales, CLAUDE.md §5 A09) — son
+    // diagnósticos que vienen de la respuesta de Google, no de nuestro lado.
+    const errorConDatos = error as {
+      status?: unknown;
+      response?: { data?: unknown };
+    };
     console.error('La sincronización con Google Calendar falló', {
       metodo,
       nombreError: error instanceof Error ? error.name : 'error desconocido',
+      mensaje: error instanceof Error ? error.message : undefined,
+      estadoHttp: typeof errorConDatos.status === 'number' ? errorConDatos.status : undefined,
+      cuerpoError: errorConDatos.response?.data,
     });
     return { exito: false };
   }
