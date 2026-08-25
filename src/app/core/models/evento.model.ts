@@ -51,6 +51,11 @@ export interface Evento {
   estado: EstadoEvento;
   creadoEn: string;
   actualizadoEn: string;
+  // v2 (roadmap #22) — id del evento espejo en Google Calendar, asignado por
+  // el backend tras la primera sincronización exitosa. Ausente en un evento
+  // recién creado o en uno legado nunca sincronizado. Solo lectura: nunca se
+  // envía desde el formulario de edición.
+  googleCalendarEventId?: string;
 }
 
 /**

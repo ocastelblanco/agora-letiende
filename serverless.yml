@@ -154,6 +154,16 @@ functions:
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
       BUCKET_ACTIVOS: ${self:custom.nombresBuckets.activos}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+      # roadmap #22 — URL_BASE_APP para construir el enlace a /evento/:slug en
+      # la descripción del evento espejo de Google Calendar (mismo patrón que
+      # compras.ts/boletas.ts/ventas-efectivo.ts/aprobaciones.ts); esta
+      # función no la tenía todavía porque no construía enlaces públicos.
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
+      # roadmap #22 — credencial de la cuenta de servicio de Google Calendar
+      # (JSON crudo, mismo patrón que FIREBASE_SERVICE_ACCOUNT_AGORA). Sin
+      # permiso IAM de AWS nuevo: la llamada es HTTP saliente a
+      # googleapis.com, ya en la lista blanca de CLAUDE.md §5 A10.
+      GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${env:GOOGLE_CALENDAR_SERVICE_ACCOUNT, ''}
     package:
       # Mismo motivo que usuarios/usuariosMe: depende de firebase-admin
       # transitivamente (vía lib/autorizacion.ts), así que se empaqueta con

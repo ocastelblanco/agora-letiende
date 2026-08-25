@@ -21,6 +21,13 @@ import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import type { PermisosUsuario } from '../lib/resolver-permisos';
 import { respuestaJson } from '../lib/http';
+import {
+  actualizarEventoCalendar,
+  crearEventoCalendar,
+  credencialCalendarConfigurada,
+  resolverProductores,
+  type EventoParaCalendar,
+} from '../services/google-calendar';
 
 // URL de producción fija (no por stage): el QR es un activo de marketing
 // impreso, pensado para el dominio final del evento (tech-specs.md §11
@@ -317,6 +324,75 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
   return respuestaJson(200, visibles);
 }
 
+/**
+ * Sincronización *best-effort* con Google Calendar (roadmap #22,
+ * `.omc/plans/google-calendar-sync.md` §4) — se llama tras el
+ * `PutCommand`/`UpdateCommand` exitoso de `crearEvento()`/`actualizarEvento()`,
+ * nunca antes: no afecta el código de respuesta HTTP ni revierte nada si
+ * Calendar falla, mismo patrón que `emitirBoletas()` en
+ * `compras.ts`/`aprobaciones.ts`. Se salta por completo (sin ningún
+ * `GetItem` de productores) cuando `GOOGLE_CALENDAR_SERVICE_ACCOUNT` no está
+ * configurado, para que el entorno local/tests siga funcionando sin la
+ * credencial real. `item` es el ítem completo ya persistido (`ALL_NEW` en
+ * edición): si ya trae `googleCalendarEventId`, se edita (reemplazo
+ * completo); si no (evento nuevo o legado nunca sincronizado), se crea.
+ */
+async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Promise<void> {
+  if (!credencialCalendarConfigurada()) {
+    return;
+  }
+
+  const eventoId = item['eventoId'];
+  if (typeof eventoId !== 'string') {
+    return;
+  }
+
+  try {
+    const administradoPorLeTiende = item['administradoPorLeTiende'] !== false;
+    const correosProductores =
+      administradoPorLeTiende && Array.isArray(item['productores'])
+        ? (item['productores'] as unknown[]).filter((p): p is string => typeof p === 'string')
+        : [];
+    const productoresResueltos =
+      correosProductores.length > 0 ? await resolverProductores(correosProductores) : [];
+
+    const eventoParaCalendar: EventoParaCalendar = {
+      nombre: String(item['nombre']),
+      slug: String(item['slug']),
+      fechaHora: String(item['fechaHora']),
+      administradoPorLeTiende,
+      vinculoExterno:
+        typeof item['vinculoExterno'] === 'object' && item['vinculoExterno'] !== null
+          ? (item['vinculoExterno'] as EventoParaCalendar['vinculoExterno'])
+          : undefined,
+      etapas: Array.isArray(item['etapas']) ? (item['etapas'] as EventoParaCalendar['etapas']) : [],
+    };
+
+    const googleCalendarEventIdExistente =
+      typeof item['googleCalendarEventId'] === 'string' ? item['googleCalendarEventId'] : undefined;
+
+    const resultado = googleCalendarEventIdExistente
+      ? await actualizarEventoCalendar(googleCalendarEventIdExistente, eventoParaCalendar, productoresResueltos)
+      : await crearEventoCalendar(eventoParaCalendar, productoresResueltos);
+
+    if (resultado.exito) {
+      await documentoDynamoDB.send(
+        new UpdateCommand({
+          TableName: process.env['TABLA_EVENTOS'],
+          Key: { eventoId },
+          UpdateExpression: 'SET googleCalendarEventId = :googleCalendarEventId',
+          ExpressionAttributeValues: { ':googleCalendarEventId': resultado.googleCalendarEventId },
+        }),
+      );
+    }
+  } catch (error) {
+    console.error('La sincronización con Google Calendar falló', {
+      eventoId,
+      nombreError: error instanceof Error ? error.name : 'error desconocido',
+    });
+  }
+}
+
 async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const cuerpo = leerCuerpo(evento);
   if (cuerpo === undefined) {
@@ -455,6 +531,8 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     }
     throw error;
   }
+
+  await sincronizarConGoogleCalendar(item);
 
   return respuestaJson(201, item);
 }
@@ -903,6 +981,9 @@ async function actualizarEvento(
         ReturnValues: 'ALL_NEW',
       }),
     );
+    if (resultado.Attributes) {
+      await sincronizarConGoogleCalendar(resultado.Attributes);
+    }
     return respuestaJson(200, resultado.Attributes);
   } catch (error) {
     if (esErrorCondicionFallida(error)) {
