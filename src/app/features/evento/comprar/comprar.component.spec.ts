@@ -359,6 +359,147 @@ describe('ComprarComponent', () => {
     });
   });
 
+  // Roadmap #19 (Bold) — checkout personalizado vía `window.BoldCheckout`
+  // (API JS oficial), reemplaza el widget declarativo `<script data-bold-button>`
+  // que nunca aparecía en staging (la librería escaneaba el DOM antes de que
+  // el script del botón existiera).
+  describe('checkout personalizado de Bold (window.BoldCheckout)', () => {
+    afterEach(() => {
+      delete (window as unknown as { BoldCheckout?: unknown }).BoldCheckout;
+    });
+
+    it('con BoldCheckout disponible en window, muestra el botón "Pagar con Bold" y al hacer click llama a open()', async () => {
+      const instancias: { config: unknown; open: ReturnType<typeof vi.fn> }[] = [];
+      class BoldCheckoutFalso {
+        readonly open = vi.fn();
+        constructor(public config: unknown) {
+          instancias.push(this);
+        }
+      }
+      (window as unknown as { BoldCheckout?: unknown }).BoldCheckout = BoldCheckoutFalso;
+
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock: vi.fn().mockResolvedValue({
+          exito: true,
+          compra: {
+            compraId: 'compra-1',
+            estado: 'esperando_pago_bold',
+            cantidad: 2,
+            montoTotal: 90000,
+            expiraEn: '2026-08-08T00:10:00.000Z',
+            bold: { llaveIdentidad: 'llave-prueba', firma: 'firmahex', moneda: 'COP' },
+          },
+        }),
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const boton: HTMLButtonElement | null = fixture.nativeElement.querySelector('button');
+      expect(boton).not.toBeNull();
+      expect(boton!.textContent).toContain('Pagar con Bold');
+      expect(instancias).toHaveLength(1);
+      expect(instancias[0].config).toEqual(
+        expect.objectContaining({
+          orderId: 'compra-1',
+          currency: 'COP',
+          amount: '90000',
+          apiKey: 'llave-prueba',
+          integritySignature: 'firmahex',
+          renderMode: 'embedded',
+        }),
+      );
+
+      boton!.click();
+
+      expect(instancias[0].open).toHaveBeenCalled();
+    });
+
+    it('si el slug cambia mientras se espera la librería de Bold, no instala el checkout de la compra vieja (bug real: el cliente veía el botón de Bold de un evento anterior)', async () => {
+      delete (window as unknown as { BoldCheckout?: unknown }).BoldCheckout;
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: {
+          compraId: 'compra-vieja',
+          estado: 'esperando_pago_bold',
+          cantidad: 2,
+          montoTotal: 90000,
+          expiraEn: '2026-08-08T00:10:00.000Z',
+          bold: { llaveIdentidad: 'llave-vieja', firma: 'firma-vieja', moneda: 'COP' },
+        },
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+      // En este punto el efecto del constructor ya llamó a iniciarCheckoutBold(),
+      // que quedó esperando el evento 'boldCheckoutLoaded' (el script "no ha cargado" aún).
+
+      // El cliente navega a otro evento antes de que la librería termine de cargar.
+      fixture.componentRef.setInput('slug', 'otro-evento');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['compraCreada']()).toBeNull();
+
+      // La carga de la librería, iniciada para la compra vieja, "llega tarde".
+      class BoldCheckoutFalso {
+        readonly open = vi.fn();
+        constructor(public config: unknown) {}
+      }
+      (window as unknown as { BoldCheckout?: unknown }).BoldCheckout = BoldCheckoutFalso;
+      window.dispatchEvent(new Event('boldCheckoutLoaded'));
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['checkoutBold']()).toBeNull();
+      expect(fixture.componentInstance['compraCreada']()).toBeNull();
+    });
+
+    it('si BoldCheckout no está disponible (falla la carga del script), muestra un mensaje de error y no el botón', async () => {
+      delete (window as unknown as { BoldCheckout?: unknown }).BoldCheckout;
+
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock: vi.fn().mockResolvedValue({
+          exito: true,
+          compra: {
+            compraId: 'compra-1',
+            estado: 'esperando_pago_bold',
+            cantidad: 2,
+            montoTotal: 90000,
+            expiraEn: '2026-08-08T00:10:00.000Z',
+            bold: { llaveIdentidad: 'llave-prueba', firma: 'firmahex', moneda: 'COP' },
+          },
+        }),
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+      window.dispatchEvent(new Event('boldCheckoutLoadFailed'));
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('button')).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain(
+        'No se pudo cargar la pasarela de pago de Bold',
+      );
+    });
+  });
+
   // Roadmap #19 (Bold) — regreso del cliente desde el checkout de Bold.
   describe('regreso desde Bold (bold-order-id en la query string)', () => {
     it('consulta el estado real por compraId, nunca confía en bold-tx-status de la URL', async () => {

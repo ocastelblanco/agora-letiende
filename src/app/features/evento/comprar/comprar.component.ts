@@ -1,15 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  Injector,
-  afterNextRender,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -30,6 +19,34 @@ const MEDIOS_PAGO_PUBLICOS: readonly MedioPagoPublico[] = ['transferencia', 'bol
 const SRC_LIBRERIA_BOLD = 'https://checkout.bold.co/library/boldPaymentButton.js';
 
 /**
+ * Config del checkout personalizado de Bold (API JS `window.BoldCheckout`,
+ * docs oficiales "Integración personalizada" — verificado 26/08/2026). Todos
+ * los campos vienen tal cual de la respuesta del backend — nunca calculados
+ * ni aceptados desde el cliente (CLAUDE.md §5, A08).
+ */
+interface ConfigBoldCheckout {
+  orderId: string;
+  currency: string;
+  amount: string;
+  apiKey: string;
+  integritySignature: string;
+  description: string;
+  redirectionUrl: string;
+  renderMode: 'embedded';
+}
+
+interface InstanciaBoldCheckout {
+  open(): void;
+}
+
+type ConstructorBoldCheckout = new (config: ConfigBoldCheckout) => InstanciaBoldCheckout;
+
+/** Lee `window.BoldCheckout` sin `any` ni `declare const` global. */
+function obtenerBoldCheckout(): ConstructorBoldCheckout | undefined {
+  return (window as unknown as { BoldCheckout?: ConstructorBoldCheckout }).BoldCheckout;
+}
+
+/**
  * Ruta pública `/evento/:slug/comprar` (`TODO.md` Tarea 2, `PRD.md` §5.3) —
  * formulario de compra con reserva temporal de sillas. Sin autenticación:
  * usa `ComprasService`/`EventosPublicosService`, nunca `ServicioAuth`. El
@@ -48,7 +65,6 @@ export class ComprarComponent {
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly injector = inject(Injector);
 
   readonly slug = input.required<string>();
 
@@ -57,10 +73,11 @@ export class ComprarComponent {
   protected readonly noEncontrado = signal(false);
   protected readonly enviando = signal(false);
   protected readonly compraCreada = signal<CompraCreada | null>(null);
-  /** Evita reinyectar el widget de Bold si el efecto que lo dispara se vuelve a ejecutar. */
+  /** Evita reiniciar el checkout de Bold si el efecto que lo dispara se vuelve a ejecutar. */
   private readonly widgetBoldInyectado = signal(false);
-
-  protected readonly contenedorWidgetBold = viewChild<ElementRef<HTMLDivElement>>('contenedorWidgetBold');
+  protected readonly cargandoCheckoutBold = signal(false);
+  protected readonly errorCheckoutBold = signal(false);
+  protected readonly checkoutBold = signal<InstanciaBoldCheckout | null>(null);
 
   protected readonly formulario = this.fb.nonNullable.group({
     cantidad: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
@@ -119,6 +136,9 @@ export class ComprarComponent {
       this.evento.set(null);
       this.compraCreada.set(null);
       this.widgetBoldInyectado.set(false);
+      this.cargandoCheckoutBold.set(false);
+      this.errorCheckoutBold.set(false);
+      this.checkoutBold.set(null);
       void this.cargarEvento(slug);
     });
 
@@ -140,7 +160,7 @@ export class ComprarComponent {
       void this.recuperarEstadoTrasBold(boldOrderId);
     }
 
-    // Inyecta el widget de Bold una sola vez, cuando la compra queda en
+    // Inicia el checkout de Bold una sola vez, cuando la compra queda en
     // 'esperando_pago_bold' (recién creada o recuperada al volver de Bold).
     effect(() => {
       const compra = this.compraCreada();
@@ -153,7 +173,8 @@ export class ComprarComponent {
       ) {
         return;
       }
-      afterNextRender(() => this.inyectarWidgetBold(compra, evento), { injector: this.injector });
+      this.widgetBoldInyectado.set(true);
+      void this.iniciarCheckoutBold(compra, evento);
     });
   }
 
@@ -181,47 +202,77 @@ export class ComprarComponent {
   }
 
   /**
-   * Inyecta el `<script>` del botón de Bold (docs oficiales, "Botón de
-   * pagos") dentro del contenedor de la plantilla. Todos los `data-*` vienen
-   * tal cual de la respuesta del backend — nunca calculados ni aceptados
-   * desde el cliente (CLAUDE.md §5, A08).
+   * Carga la librería de Bold (`window.BoldCheckout`) siguiendo el patrón
+   * oficial de eventos globales (docs "Integración personalizada",
+   * verificado 26/08/2026) — cubre también el caso de que el script ya esté
+   * en proceso de carga por un intento anterior en la misma sesión de SPA.
+   * Una vez cargada queda disponible para siempre en la página: no hace
+   * falta recargar ni reescanear el DOM para una segunda compra.
    */
-  private inyectarWidgetBold(compra: CompraCreada, evento: EventoPublico): void {
-    if (this.widgetBoldInyectado() || !compra.bold) {
-      return;
+  private cargarLibreriaBold(): Promise<boolean> {
+    if (obtenerBoldCheckout()) {
+      return Promise.resolve(true);
     }
-    const contenedor = this.contenedorWidgetBold()?.nativeElement;
-    if (!contenedor) {
-      return;
+    if (!document.querySelector(`script[src="${SRC_LIBRERIA_BOLD}"]`)) {
+      const script = document.createElement('script');
+      script.src = SRC_LIBRERIA_BOLD;
+      script.onload = () => window.dispatchEvent(new Event('boldCheckoutLoaded'));
+      script.onerror = () => window.dispatchEvent(new Event('boldCheckoutLoadFailed'));
+      document.head.appendChild(script);
     }
-    this.widgetBoldInyectado.set(true);
-    const bold = compra.bold;
+    return new Promise<boolean>((resolve) => {
+      const limpiar = () => {
+        window.removeEventListener('boldCheckoutLoaded', alCargar);
+        window.removeEventListener('boldCheckoutLoadFailed', alFallar);
+      };
+      const alCargar = () => {
+        limpiar();
+        resolve(true);
+      };
+      const alFallar = () => {
+        limpiar();
+        resolve(false);
+      };
+      window.addEventListener('boldCheckoutLoaded', alCargar);
+      window.addEventListener('boldCheckoutLoadFailed', alFallar);
+    });
+  }
 
-    const insertarBotonBold = (): void => {
-      const scriptBoton = document.createElement('script');
-      scriptBoton.setAttribute('data-bold-button', 'dark-L');
-      scriptBoton.setAttribute('data-api-key', bold.llaveIdentidad);
-      scriptBoton.setAttribute('data-order-id', compra.compraId);
-      scriptBoton.setAttribute('data-amount', String(compra.montoTotal));
-      scriptBoton.setAttribute('data-currency', bold.moneda);
-      scriptBoton.setAttribute('data-integrity-signature', bold.firma);
-      scriptBoton.setAttribute('data-description', `Boletas — ${evento.nombre}`.slice(0, 100));
-      scriptBoton.setAttribute(
-        'data-redirection-url',
-        `${window.location.origin}${window.location.pathname}`,
-      );
-      scriptBoton.setAttribute('data-render-mode', 'embedded');
-      contenedor.appendChild(scriptBoton);
-    };
-
-    if (document.querySelector(`script[src="${SRC_LIBRERIA_BOLD}"]`)) {
-      insertarBotonBold();
+  /**
+   * Instancia un `BoldCheckout` propio (API JS, no el widget declarativo con
+   * el logo/gradiente de Bold) para que la plantilla lo abra desde un botón
+   * 100% de Le Tiende. Todos los campos vienen tal cual de la respuesta del
+   * backend — nunca calculados ni aceptados desde el cliente (CLAUDE.md §5,
+   * A08).
+   */
+  private async iniciarCheckoutBold(compra: CompraCreada, evento: EventoPublico): Promise<void> {
+    if (!compra.bold) {
       return;
     }
-    const scriptLibreria = document.createElement('script');
-    scriptLibreria.src = SRC_LIBRERIA_BOLD;
-    scriptLibreria.onload = insertarBotonBold;
-    document.body.appendChild(scriptLibreria);
+    this.cargandoCheckoutBold.set(true);
+    this.errorCheckoutBold.set(false);
+    const cargada = await this.cargarLibreriaBold();
+    if (this.compraCreada() !== compra) {
+      return; // el usuario navegó a otro evento/compra mientras esperábamos la librería de Bold.
+    }
+    this.cargandoCheckoutBold.set(false);
+    const Constructor = cargada ? obtenerBoldCheckout() : undefined;
+    if (!Constructor) {
+      this.errorCheckoutBold.set(true);
+      return;
+    }
+    this.checkoutBold.set(
+      new Constructor({
+        orderId: compra.compraId,
+        currency: compra.bold.moneda,
+        amount: String(compra.montoTotal),
+        apiKey: compra.bold.llaveIdentidad,
+        integritySignature: compra.bold.firma,
+        description: `Boletas — ${evento.nombre}`.slice(0, 100),
+        redirectionUrl: `${window.location.origin}${window.location.pathname}`,
+        renderMode: 'embedded',
+      }),
+    );
   }
 
   /** Total mostrado en pantalla — solo referencia, nunca se envía al backend. */
@@ -287,6 +338,9 @@ export class ComprarComponent {
   /** 'rechazada'/'expirada': no hay boletas ni forma de reintentar el pago automáticamente. */
   protected reintentar(): void {
     this.widgetBoldInyectado.set(false);
+    this.cargandoCheckoutBold.set(false);
+    this.errorCheckoutBold.set(false);
+    this.checkoutBold.set(null);
     this.compraCreada.set(null);
     void this.cargarEvento(this.slug());
   }

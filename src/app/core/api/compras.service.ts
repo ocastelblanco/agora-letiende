@@ -41,8 +41,9 @@ export interface CompraCreada {
   // se emitieron en la misma respuesta.
   boletas?: number;
   // Roadmap #19 (Bold) — presente solo cuando `estado === 'esperando_pago_bold'`.
-  // Los `data-*` del widget de Bold se arman con esto tal cual llega del
-  // backend, nunca calculados en el cliente.
+  // Estos campos alimentan la instanciación de `window.BoldCheckout` en el
+  // frontend (objeto de config en camelCase, no atributos `data-*`) tal cual
+  // llegan del backend, nunca calculados en el cliente.
   bold?: { llaveIdentidad: string; firma: string; moneda: string };
 }
 

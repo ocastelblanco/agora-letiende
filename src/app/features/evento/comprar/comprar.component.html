@@ -54,7 +54,21 @@
                 <dd class="font-semibold">{{ compra.montoTotal | precio }}</dd>
               </div>
             </dl>
-            <div #contenedorWidgetBold class="flex justify-center"></div>
+            @if (checkoutBold(); as checkout) {
+              <button
+                type="button"
+                (click)="checkout.open()"
+                class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90"
+              >
+                Pagar con Bold
+              </button>
+            } @else if (cargandoCheckoutBold()) {
+              <p class="text-sm text-primary/70">Cargando pasarela de pago…</p>
+            } @else if (errorCheckoutBold()) {
+              <p class="text-sm text-danger">
+                No se pudo cargar la pasarela de pago de Bold. Intenta de nuevo.
+              </p>
+            }
           </div>
         } @else {
           <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
