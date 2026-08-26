@@ -211,3 +211,5 @@ Workspace setting,26/08/2026 11:03,26/08/2026 11:10,0:07:00,AI,Sonnet 5,Commit e
 Frontend,26/08/2026 11:10,26/08/2026 11:25,0:15:00,AI,Sonnet 5,Diagnostica bug real de staging en boton Bold leyendo codigo fuente de la libreria,Claude Code,cli,high
 Frontend,26/08/2026 11:25,26/08/2026 11:53,0:28:00,AI,Sonnet 5,Reescribe boton Bold con API oficial BoldCheckout y corrige condicion de carrera hallada en revision,Claude Code,cli,high
 Workspace setting,26/08/2026 11:53,26/08/2026 12:06,0:13:00,AI,Sonnet 5,Corrige documentacion de Bold con la narrativa real del bug y la reescritura,Claude Code,cli,low
+Frontend,26/08/2026 12:06,26/08/2026 12:36,0:30:00,AI,Sonnet 5,Diagnostica que checkout embebido de Bold no notifica el fin del pago y agrega boton manual de respaldo,Claude Code,cli,high
+Frontend,26/08/2026 12:36,26/08/2026 12:50,0:14:00,AI,Sonnet 5,Corrige segunda condicion de carrera en boton manual comparando por slug de ruta y ajusta tests,Claude Code,cli,medium
