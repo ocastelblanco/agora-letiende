@@ -1,0 +1,16 @@
+version: 2
+
+# Hallazgos de secret-scanning revisados y confirmados como falsos positivos
+# — nunca se usa este archivo para ignorar una credencial real. Cada entrada
+# debe tener un comentario que explique por qué el valor no es sensible.
+secret:
+  ignored_matches:
+    # server/api/services/bold.spec.ts — no es una credencial de Ágora: es el
+    # valor de ejemplo publicado en la propia documentación oficial de Bold
+    # (https://developers.bold.co/pagos-en-linea/boton-de-pagos/integracion-manual/integracion-manual),
+    # usado como fixture para verificar que la firma SHA256 que calcula
+    # `firmarBoton()` coincide byte a byte con el ejemplo documentado por
+    # Bold. Nunca fue ni será una llave real de ninguna cuenta de Bold.
+    # GitGuardian PR check id 36604913 (25/08/2026).
+    - name: bold-spec-ejemplo-documentacion-oficial
+      match: kgfq2nN0o52XqnuXZWIN2F
