@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ComprasService } from '../../../core/api/compras.service';
 import { EventosPublicosService } from '../../../core/api/eventos-publicos.service';
@@ -26,10 +26,21 @@ const eventoEjemplo: EventoPublico = {
   actualizadoEn: '2026-08-06T00:00:00.000Z',
 };
 
+/** `ActivatedRoute` real solo existe cuando el router navega a la ruta — aquí el componente se crea directo. */
+function activatedRouteFake(boldOrderId: string | null) {
+  return {
+    snapshot: {
+      queryParamMap: { get: (clave: string) => (clave === 'bold-order-id' ? boldOrderId : null) },
+    },
+  };
+}
+
 function configurarPrueba(opciones: {
   evento?: EventoPublico;
   errorCarga?: boolean;
   crearCompraMock?: ReturnType<typeof vi.fn>;
+  consultarEstadoCompraMock?: ReturnType<typeof vi.fn>;
+  boldOrderId?: string | null;
 }) {
   const cargarEventoPorSlugMock = opciones.errorCarga
     ? vi.fn().mockResolvedValue({ exito: false, error: 'no_encontrado' })
@@ -39,8 +50,15 @@ function configurarPrueba(opciones: {
     imports: [NoopAnimationsModule],
     providers: [
       provideRouter([]),
+      { provide: ActivatedRoute, useValue: activatedRouteFake(opciones.boldOrderId ?? null) },
       { provide: EventosPublicosService, useValue: { cargarEventoPorSlug: cargarEventoPorSlugMock } },
-      { provide: ComprasService, useValue: { crearCompra: opciones.crearCompraMock ?? vi.fn() } },
+      {
+        provide: ComprasService,
+        useValue: {
+          crearCompra: opciones.crearCompraMock ?? vi.fn(),
+          consultarEstadoCompra: opciones.consultarEstadoCompraMock ?? vi.fn(),
+        },
+      },
     ],
   });
 
@@ -59,13 +77,18 @@ async function activarConSlug(fixture: ComponentFixture<ComprarComponent>, slug:
   fixture.detectChanges();
 }
 
-function llenarFormularioValido(componente: ComprarComponent, cantidad = 2) {
+function llenarFormularioValido(
+  componente: ComprarComponent,
+  cantidad = 2,
+  medioPago: 'transferencia' | 'bold' | null = null,
+) {
   componente['formulario'].setValue({
     cantidad,
     nombre: 'Ana Pérez',
     telefono: '3001234567',
     correo: 'ana@correo.com',
     autorizacionDatos: true,
+    medioPago,
   });
 }
 
@@ -241,5 +264,139 @@ describe('ComprarComponent', () => {
       expect.objectContaining({ duration: expect.any(Number) }),
     );
     expect(fixture.componentInstance['compraCreada']()).toBeNull();
+  });
+
+  // Roadmap #19 (Bold) — el cliente elige medio de pago solo cuando el evento
+  // ofrece más de uno de los públicos ('efectivo' nunca es público).
+  describe('medios de pago públicos (Bold)', () => {
+    it('con transferencia y bold muestra el selector y envía el medio elegido', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 90000 },
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['transferencia', 'bold'] },
+        crearCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(
+        fixture.nativeElement.querySelectorAll('input[formcontrolname="medioPago"]').length,
+      ).toBe(2);
+
+      llenarFormularioValido(fixture.componentInstance, 2, 'bold');
+      await fixture.componentInstance['comprar']();
+
+      expect(crearCompraMock).toHaveBeenCalledWith(
+        expect.objectContaining({ medioPago: 'bold' }),
+      );
+    });
+
+    it('con solo bold no muestra selector pero envía medioPago: bold igual', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 90000 },
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(
+        fixture.nativeElement.querySelectorAll('input[formcontrolname="medioPago"]').length,
+      ).toBe(0);
+
+      llenarFormularioValido(fixture.componentInstance, 2);
+      await fixture.componentInstance['comprar']();
+
+      expect(crearCompraMock).toHaveBeenCalledWith(expect.objectContaining({ medioPago: 'bold' }));
+    });
+
+    it('sin bold ni transferencia (solo efectivo) no muestra selector ni envía medioPago', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 90000 },
+      });
+      const { fixture } = configurarPrueba({ crearCompraMock }); // eventoEjemplo: mediosPago ['efectivo']
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+
+      expect(crearCompraMock).toHaveBeenCalledWith({
+        slug: 'concierto-jazz',
+        cantidad: 2,
+        cliente: { nombre: 'Ana Pérez', telefono: '3001234567', correo: 'ana@correo.com' },
+        autorizacionDatos: true,
+      });
+    });
+
+    it('una respuesta esperando_pago_bold muestra la tarjeta de confirmación de pago, no el formulario', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: {
+          compraId: 'compra-1',
+          estado: 'esperando_pago_bold',
+          cantidad: 2,
+          montoTotal: 90000,
+          expiraEn: '2026-08-08T00:10:00.000Z',
+          bold: { llaveIdentidad: 'llave-prueba', firma: 'firmahex', moneda: 'COP' },
+        },
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('form')).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('Confirma tu pago');
+    });
+  });
+
+  // Roadmap #19 (Bold) — regreso del cliente desde el checkout de Bold.
+  describe('regreso desde Bold (bold-order-id en la query string)', () => {
+    it('consulta el estado real por compraId, nunca confía en bold-tx-status de la URL', async () => {
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        consultarEstadoCompraMock,
+        boldOrderId: 'compra-1',
+      });
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
+      expect(fixture.componentInstance['compraCreada']()?.estado).toBe('aprobada');
+    });
+
+    it('muestra un snackbar si la consulta de estado falla (ej. red o compra ya expirada por TTL)', async () => {
+      const consultarEstadoCompraMock = vi
+        .fn()
+        .mockResolvedValue({ exito: false, error: 'No se pudo consultar el estado de la compra.' });
+      const { fixture, snackBarOpenMock } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        consultarEstadoCompraMock,
+        boldOrderId: 'compra-1',
+      });
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
+      expect(snackBarOpenMock).toHaveBeenCalledWith(
+        'No se pudo consultar el estado de la compra.',
+        'Cerrar',
+        expect.objectContaining({ duration: expect.any(Number) }),
+      );
+      expect(fixture.componentInstance['compraCreada']()).toBeNull();
+    });
   });
 });

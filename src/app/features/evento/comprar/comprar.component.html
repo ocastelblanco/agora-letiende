@@ -16,33 +16,75 @@
       <p class="mb-6 text-sm text-primary/70">{{ detalleEvento.nombre }}</p>
 
       @if (compraCreada(); as compra) {
-        <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
-          @if (compra.estado === 'aprobada') {
-            <!-- v2 (roadmap #24) — evento sin etapas: adquisición inmediata, sin comprobante ni aprobación. -->
-            <h2 class="mb-2 text-lg font-semibold text-primary">¡Listo! Revisa tu correo</h2>
-            <p class="mb-4 text-sm text-primary">
-              Ya emitimos tus {{ compra.boletas ?? compra.cantidad }} boleta(s) para este evento —
-              te las enviamos a tu correo.
+        @if (compra.estado === 'rechazada' || compra.estado === 'expirada') {
+          <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+            <h2 class="mb-2 text-lg font-semibold text-primary">
+              {{ compra.estado === 'rechazada' ? 'Tu pago no fue aprobado' : 'Tu reserva expiró' }}
+            </h2>
+            <p class="mb-4 text-sm text-primary/70">
+              @if (compra.estado === 'rechazada') {
+                Bold rechazó el pago y no se emitieron boletas. Puedes intentar de nuevo.
+              } @else {
+                El tiempo para completar el pago se agotó y las sillas reservadas ya se liberaron.
+                Puedes intentar de nuevo si todavía hay disponibilidad.
+              }
             </p>
-          } @else {
-            <h2 class="mb-2 text-lg font-semibold text-primary">¡Ya casi! Revisa tu correo</h2>
+            <button
+              type="button"
+              (click)="reintentar()"
+              class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
+        } @else if (compra.estado === 'esperando_pago_bold') {
+          <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+            <h2 class="mb-2 text-lg font-semibold text-primary">Confirma tu pago</h2>
             <p class="mb-4 text-sm text-primary">
-              Te enviamos un enlace para cargar tu comprobante de pago. Debes hacerlo antes de las
-              <strong>{{ fechaLimiteLegible(compra.expiraEn!) }}</strong> (hora de Bogotá) o la reserva
-              se cancela.
+              A continuación se abre el checkout seguro de Bold. Cuando termines, vuelve a esta
+              página — te enviaremos las boletas a tu correo apenas se confirme el pago.
             </p>
-          }
-          <dl class="flex flex-col gap-1 text-sm text-primary/80">
-            <div class="flex justify-between">
-              <dt>Cantidad de boletas</dt>
-              <dd>{{ compra.cantidad }}</dd>
-            </div>
-            <div class="flex justify-between">
-              <dt>Total</dt>
-              <dd class="font-semibold">{{ compra.montoTotal | precio }}</dd>
-            </div>
-          </dl>
-        </div>
+            <dl class="mb-4 flex flex-col gap-1 text-sm text-primary/80">
+              <div class="flex justify-between">
+                <dt>Cantidad de boletas</dt>
+                <dd>{{ compra.cantidad }}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt>Total</dt>
+                <dd class="font-semibold">{{ compra.montoTotal | precio }}</dd>
+              </div>
+            </dl>
+            <div #contenedorWidgetBold class="flex justify-center"></div>
+          </div>
+        } @else {
+          <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+            @if (compra.estado === 'aprobada') {
+              <!-- v2 (roadmap #24) — evento sin etapas: adquisición inmediata, sin comprobante ni aprobación. -->
+              <h2 class="mb-2 text-lg font-semibold text-primary">¡Listo! Revisa tu correo</h2>
+              <p class="mb-4 text-sm text-primary">
+                Ya emitimos tus {{ compra.boletas ?? compra.cantidad }} boleta(s) para este evento —
+                te las enviamos a tu correo.
+              </p>
+            } @else {
+              <h2 class="mb-2 text-lg font-semibold text-primary">¡Ya casi! Revisa tu correo</h2>
+              <p class="mb-4 text-sm text-primary">
+                Te enviamos un enlace para cargar tu comprobante de pago. Debes hacerlo antes de las
+                <strong>{{ fechaLimiteLegible(compra.expiraEn!) }}</strong> (hora de Bogotá) o la reserva
+                se cancela.
+              </p>
+            }
+            <dl class="flex flex-col gap-1 text-sm text-primary/80">
+              <div class="flex justify-between">
+                <dt>Cantidad de boletas</dt>
+                <dd>{{ compra.cantidad }}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt>Total</dt>
+                <dd class="font-semibold">{{ compra.montoTotal | precio }}</dd>
+              </div>
+            </dl>
+          </div>
+        }
       } @else if (!puedeComprar()) {
         <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
           <p class="text-sm text-primary/70">
@@ -106,6 +148,22 @@
               <p class="mt-1 text-xs text-danger">Ingresa un correo válido — ahí te enviaremos el enlace.</p>
             }
           </div>
+
+          @if (mediosPagoPublicos().length === 2) {
+            <div>
+              <span class="mb-1 block text-sm font-semibold text-primary">Medio de pago</span>
+              <div class="flex flex-col gap-2 rounded-xl border border-primary/20 px-3 py-2">
+                <label class="flex items-center gap-2 text-sm text-primary">
+                  <input type="radio" formControlName="medioPago" value="transferencia" />
+                  Transferencia
+                </label>
+                <label class="flex items-center gap-2 text-sm text-primary">
+                  <input type="radio" formControlName="medioPago" value="bold" />
+                  Pago con tarjeta (Bold)
+                </label>
+              </div>
+            </div>
+          }
 
           <div class="flex items-center justify-between rounded-xl border border-primary/10 px-3 py-2">
             <span class="text-sm font-semibold text-primary">Total estimado</span>
