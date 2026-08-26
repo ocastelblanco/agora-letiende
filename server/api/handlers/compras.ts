@@ -583,7 +583,9 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
  * `GET /api/compras/:compraId/estado` — público, nunca expone `cliente` ni
  * ningún dato personal. El TTL de DynamoDB "típicamente" borra en 48 horas,
  * no al segundo (`tech-specs.md` §5.4 punto 4): si `expiraEn` ya pasó pero
- * el ítem todavía existe, igual se reporta `expirada`.
+ * el ítem todavía existe, igual se reporta `expirada` — tanto para
+ * `esperando_comprobante` como para `esperando_pago_bold` (roadmap #19,
+ * Sub-tarea 1).
  */
 async function consultarEstadoCompra(
   compraId: string | undefined,
@@ -602,7 +604,9 @@ async function consultarEstadoCompra(
 
   const expiraEnEpoch = typeof item['expiraEn'] === 'number' ? item['expiraEn'] : undefined;
   const yaVencio = expiraEnEpoch !== undefined && expiraEnEpoch <= Math.floor(Date.now() / 1000);
-  const estado = item['estado'] === 'esperando_comprobante' && yaVencio ? 'expirada' : item['estado'];
+  const seEsperaConfirmacion =
+    item['estado'] === 'esperando_comprobante' || item['estado'] === 'esperando_pago_bold';
+  const estado = seEsperaConfirmacion && yaVencio ? 'expirada' : item['estado'];
 
   return respuestaJson(200, {
     compraId: item['compraId'],
