@@ -1234,12 +1234,35 @@ describe('handler de /api/eventos', () => {
         expect(sendMock).toHaveBeenCalledTimes(1);
       });
 
+      it('responde 409 y no escribe nada si hay una compra "esperando_pago_bold" para el evento (roadmap #19, Sub-tarea 1)', async () => {
+        sendMock.mockResolvedValueOnce({
+          Items: [{ compraId: 'c1', eventoId: 'e1', estado: 'esperando_pago_bold' }],
+        });
+
+        const respuesta = await invocar('PUT', {
+          eventoId: 'e1',
+          cuerpo: {
+            administradoPorLeTiende: false,
+            vinculoExterno: { tipo: 'whatsapp', valor: '3001234567' },
+          },
+        });
+
+        expect(respuesta.statusCode).toBe(409);
+        expect(JSON.parse(respuesta.body!).mensaje).toContain('compra(s) en curso');
+        // Solo el QueryCommand de verificación — nunca llega a escribir el
+        // UpdateCommand que neutralizaría el aforo.
+        expect(sendMock).toHaveBeenCalledTimes(1);
+        const comandoQuery = sendMock.mock.calls[0][0];
+        expect(comandoQuery.input.ExpressionAttributeValues[':esperandoPagoBold']).toBe('esperando_pago_bold');
+      });
+
       it('permite desactivar administradoPorLeTiende cuando las únicas compras del evento ya están resueltas (aprobada/rechazada/expirada)', async () => {
-        // El FilterExpression real de DynamoDB (estado = iniciada/esperando_
-        // comprobante/en_revision) ya excluye del lado del servidor las
-        // compras aprobada/rechazada/expirada — el mock simula ese
-        // resultado ya filtrado devolviendo Items vacío, mismo criterio que
-        // el resto de la suite para QueryCommand con FilterExpression.
+        // El FilterExpression real de DynamoDB (estado =
+        // iniciada/esperando_comprobante/esperando_pago_bold/en_revision) ya
+        // excluye del lado del servidor las compras aprobada/rechazada/
+        // expirada — el mock simula ese resultado ya filtrado devolviendo
+        // Items vacío, mismo criterio que el resto de la suite para
+        // QueryCommand con FilterExpression.
         sendMock.mockResolvedValueOnce({ Items: [] });
         sendMock.mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
 
