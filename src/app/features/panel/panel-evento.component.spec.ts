@@ -14,6 +14,7 @@ const detalleEjemplo: DetallePanel = {
   nombreEvento: 'Concierto de jazz',
   sillasTotales: 100,
   sillasDisponibles: 40,
+  sillasReservadas: 7,
   sillasVendidas: 55,
   porEtapa: [
     { etapaId: 'et-1', nombre: 'Preventa', vendidas: 2, recaudado: 90000 },
@@ -129,6 +130,10 @@ describe('PanelEventoComponent', () => {
     expect(texto).toContain('General');
     expect(texto).toContain('Ana Pérez');
     expect(texto).toContain('$90.000');
+    // Tercera cifra de aforo — sillas en compras esperando_comprobante/
+    // esperando_pago_bold sin resolver todavía (handlers/reportes.ts).
+    expect(texto).toContain('Sillas pendientes de confirmar');
+    expect(texto).toContain('7');
     // Totales que nunca desaparecen aunque `porEtapa` tenga huérfanos
     // (handlers/reportes.ts).
     expect(texto).toContain('Total boletas vendidas');

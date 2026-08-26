@@ -668,6 +668,40 @@ describe('GET /api/compras/:compraId/estado', () => {
     expect(cuerpo.estado).toBe('expirada');
   });
 
+  it('reporta expirada si expiraEn ya pasó para una compra esperando_pago_bold (roadmap #19, Sub-tarea 1)', async () => {
+    sendMock.mockResolvedValueOnce({
+      Item: {
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold',
+        cantidad: 1,
+        montoTotal: 45000,
+        expiraEn: Math.floor(AHORA.getTime() / 1000) - 60,
+      },
+    });
+
+    const respuesta = await invocar('GET', { rawPath: '/api/compras/compra-1/estado', compraId: 'compra-1' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.estado).toBe('expirada');
+  });
+
+  it('no marca expirada una compra esperando_pago_bold que todavía no vence', async () => {
+    sendMock.mockResolvedValueOnce({
+      Item: {
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold',
+        cantidad: 1,
+        montoTotal: 45000,
+        expiraEn: Math.floor(AHORA.getTime() / 1000) + 600,
+      },
+    });
+
+    const respuesta = await invocar('GET', { rawPath: '/api/compras/compra-1/estado', compraId: 'compra-1' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.estado).toBe('esperando_pago_bold');
+  });
+
   it('responde 404 si la compra no existe', async () => {
     sendMock.mockResolvedValueOnce({});
 

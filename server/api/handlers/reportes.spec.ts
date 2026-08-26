@@ -303,6 +303,7 @@ describe('GET /api/eventos/:eventoId/panel', () => {
       nombreEvento: 'Concierto de jazz',
       sillasTotales: 100,
       sillasDisponibles: 40,
+      sillasReservadas: 5,
       sillasVendidas: 55,
       porEtapa: [
         { etapaId: 'et-1', nombre: 'Preventa', vendidas: 2, recaudado: 90000 },

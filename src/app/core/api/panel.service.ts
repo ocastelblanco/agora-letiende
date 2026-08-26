@@ -47,6 +47,7 @@ export interface DetallePanel {
   nombreEvento: string;
   sillasTotales: number;
   sillasDisponibles: number;
+  sillasReservadas: number;
   sillasVendidas: number;
   porEtapa: MetricaEtapaPanel[];
   /**
