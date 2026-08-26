@@ -213,3 +213,7 @@ Frontend,26/08/2026 11:25,26/08/2026 11:53,0:28:00,AI,Sonnet 5,Reescribe boton B
 Workspace setting,26/08/2026 11:53,26/08/2026 12:06,0:13:00,AI,Sonnet 5,Corrige documentacion de Bold con la narrativa real del bug y la reescritura,Claude Code,cli,low
 Frontend,26/08/2026 12:06,26/08/2026 12:36,0:30:00,AI,Sonnet 5,Diagnostica que checkout embebido de Bold no notifica el fin del pago y agrega boton manual de respaldo,Claude Code,cli,high
 Frontend,26/08/2026 12:36,26/08/2026 12:50,0:14:00,AI,Sonnet 5,Corrige segunda condicion de carrera en boton manual comparando por slug de ruta y ajusta tests,Claude Code,cli,medium
+Frontend,26/08/2026 12:50,26/08/2026 13:10,0:20:00,AI,Sonnet 5,Investiga webhook de Bold confirma automatico en produccion y define maquina de estados con el usuario,Claude Code,cli,medium
+Frontend,26/08/2026 13:10,26/08/2026 13:45,0:35:00,AI,Sonnet 5,Implementa maquina de estados final del boton Bold con postMessage y revision de arquitecto,Claude Code,cli,high
+Frontend,26/08/2026 13:45,26/08/2026 14:00,0:15:00,AI,Sonnet 5,Agrega limpieza DestroyRef y pruebas de cobertura tras hallazgos menores de revision,Claude Code,cli,low
+Workspace setting,26/08/2026 14:00,26/08/2026 14:12,0:12:00,AI,Sonnet 5,Actualiza documentacion de Bold con la maquina de estados final antes de subir al PR 51,Claude Code,cli,low
