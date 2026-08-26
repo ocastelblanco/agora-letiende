@@ -421,6 +421,15 @@ functions:
       URL_BASE_APP: ${env:URL_BASE_APP, ''}
       SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+      # roadmap #19 (Bold): reservarSillas() puede disparar
+      # liberarReservasVencidas() -> esSeguroExpirarReservaBold(), que
+      # consulta el endpoint de reconciliación de Bold con esta llave. Sin
+      # ella, esa consulta falla (401) y la función conservadoramente NO
+      # expira la reserva de Bold en pugna — modo de fallo seguro (nunca
+      # pierde una venta), pero retrasa la liberación real de aforo hasta
+      # que el TTL de DynamoDB la reclame. Solo necesita la llave pública de
+      # identidad, nunca la secreta — esta función no verifica firmas.
+      BOLD_LLAVE_IDENTIDAD: ${env:BOLD_LLAVE_IDENTIDAD, ''}
     package:
       # Depende de firebase-admin (vía exigirRol), documentoDynamoDB y
       # @aws-sdk/client-ses — mismo motivo de bundle que aprobaciones.ts
