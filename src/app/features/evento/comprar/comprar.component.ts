@@ -78,6 +78,8 @@ export class ComprarComponent {
   protected readonly cargandoCheckoutBold = signal(false);
   protected readonly errorCheckoutBold = signal(false);
   protected readonly checkoutBold = signal<InstanciaBoldCheckout | null>(null);
+  /** Guarda del botón manual "¿Ya pagaste?" — ver CLAUDE.md §7 (doble click/toque real). */
+  protected readonly verificandoEstadoBold = signal(false);
 
   protected readonly formulario = this.fb.nonNullable.group({
     cantidad: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
@@ -139,6 +141,7 @@ export class ComprarComponent {
       this.cargandoCheckoutBold.set(false);
       this.errorCheckoutBold.set(false);
       this.checkoutBold.set(null);
+      this.verificandoEstadoBold.set(false);
       void this.cargarEvento(slug);
     });
 
@@ -193,7 +196,51 @@ export class ComprarComponent {
     // Limpia la query string de inmediato para que un refresh no reprocese
     // esta consulta contra un estado ya viejo.
     void this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+    await this.actualizarEstadoCompra(compraId);
+  }
+
+  /**
+   * Botón manual de respaldo "¿Ya pagaste?": Bold no documenta ningún
+   * mecanismo de evento/callback para que esta página sepa cuándo terminó el
+   * checkout embebido (verificado 26/08/2026 contra la documentación oficial
+   * — ver docs/MEMORY.md), así que el propio cliente dispara la consulta real
+   * al backend al volver del modal.
+   */
+  protected async verificarEstadoBold(compraId: string): Promise<void> {
+    if (this.verificandoEstadoBold()) {
+      return;
+    }
+    this.verificandoEstadoBold.set(true);
+    try {
+      await this.actualizarEstadoCompra(compraId);
+    } finally {
+      this.verificandoEstadoBold.set(false);
+    }
+  }
+
+  /**
+   * Consulta el estado real de la compra y actualiza la pantalla —
+   * compartido por el regreso automático de Bold y el botón manual. Se
+   * compara contra el `slug` vigente para descartar una respuesta tardía si
+   * el cliente ya navegó a otro evento mientras esperábamos — el componente
+   * reutiliza su instancia entre navegaciones. El slug se lee de
+   * `route.snapshot.paramMap`, no del Signal input `slug()`: este método se
+   * llama también desde `recuperarEstadoTrasBold()` en el constructor, antes
+   * de que el router asigne ese input (requerido) — leerlo ahí lanza
+   * `NG0950`. El snapshot de la ruta activa, en cambio, ya está resuelto por
+   * Angular para cuando el componente se construye, así que la guarda
+   * funciona igual de bien en los dos casos que comparten este método. Si
+   * `slugAlIniciar` es `null` (el parámetro de ruta todavía no está
+   * disponible en ese instante — no ocurre en producción, sí en la prueba
+   * unitaria que crea el componente antes de fijar el `slug`), no hay nada
+   * confiable con qué comparar y se procede igual que antes de esta guarda.
+   */
+  private async actualizarEstadoCompra(compraId: string): Promise<void> {
+    const slugAlIniciar = this.route.snapshot.paramMap.get('slug');
     const resultado = await this.comprasService.consultarEstadoCompra(compraId);
+    if (slugAlIniciar !== null && this.route.snapshot.paramMap.get('slug') !== slugAlIniciar) {
+      return; // el cliente navegó a otro evento mientras esperábamos la respuesta.
+    }
     if (resultado.exito) {
       this.compraCreada.set(resultado.compra);
     } else {
@@ -341,6 +388,7 @@ export class ComprarComponent {
     this.cargandoCheckoutBold.set(false);
     this.errorCheckoutBold.set(false);
     this.checkoutBold.set(null);
+    this.verificandoEstadoBold.set(false);
     this.compraCreada.set(null);
     void this.cargarEvento(this.slug());
   }

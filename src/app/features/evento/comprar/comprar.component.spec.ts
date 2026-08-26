@@ -26,13 +26,24 @@ const eventoEjemplo: EventoPublico = {
   actualizadoEn: '2026-08-06T00:00:00.000Z',
 };
 
-/** `ActivatedRoute` real solo existe cuando el router navega a la ruta — aquí el componente se crea directo. */
+/**
+ * `ActivatedRoute` real solo existe cuando el router navega a la ruta — aquí
+ * el componente se crea directo. `slugActual` es mutable porque
+ * `actualizarEstadoCompra()` lee `route.snapshot.paramMap` (no el Signal
+ * input `slug()`, ver su docstring) para su guarda contra respuestas
+ * tardías — `activarConSlug()` la mantiene sincronizada con cada `setInput`.
+ */
 function activatedRouteFake(boldOrderId: string | null) {
-  return {
+  const fake = {
+    slugActual: null as string | null,
     snapshot: {
       queryParamMap: { get: (clave: string) => (clave === 'bold-order-id' ? boldOrderId : null) },
+      get paramMap() {
+        return { get: (clave: string) => (clave === 'slug' ? fake.slugActual : null) };
+      },
     },
   };
+  return fake;
 }
 
 function configurarPrueba(opciones: {
@@ -71,6 +82,10 @@ function configurarPrueba(opciones: {
 }
 
 async function activarConSlug(fixture: ComponentFixture<ComprarComponent>, slug: string) {
+  const route = fixture.debugElement.injector.get(ActivatedRoute) as unknown as {
+    slugActual: string | null;
+  };
+  route.slugActual = slug;
   fixture.componentRef.setInput('slug', slug);
   fixture.detectChanges();
   await fixture.whenStable();
@@ -493,10 +508,136 @@ describe('ComprarComponent', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.querySelector('button')).toBeNull();
+      const botones: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      expect(botones.some((b) => b.textContent?.includes('Pagar con Bold'))).toBe(false);
       expect(fixture.nativeElement.textContent).toContain(
         'No se pudo cargar la pasarela de pago de Bold',
       );
+    });
+  });
+
+  // Bold no documenta ningún evento/callback para saber cuándo termina el
+  // checkout embebido (verificado 26/08/2026) — botón manual de respaldo.
+  describe('botón manual "¿Ya pagaste?" (respaldo sin mecanismo documentado de Bold)', () => {
+    function compraEsperandoPagoBold() {
+      return {
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold' as const,
+        cantidad: 2,
+        montoTotal: 90000,
+        expiraEn: '2026-08-08T00:10:00.000Z',
+        bold: { llaveIdentidad: 'llave-prueba', firma: 'firmahex', moneda: 'COP' },
+      };
+    }
+
+    it('al hacer click consulta el estado real y, si está aprobada, muestra la confirmación', async () => {
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+      });
+      const crearCompraMock = vi.fn().mockResolvedValue({ exito: true, compra: compraEsperandoPagoBold() });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+        consultarEstadoCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+
+      const botones: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      const botonVerificar = botones.find((b) => b.textContent?.includes('¿Ya pagaste?'));
+      expect(botonVerificar).toBeDefined();
+
+      botonVerificar!.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
+      expect(fixture.componentInstance['compraCreada']()?.estado).toBe('aprobada');
+      expect(fixture.nativeElement.textContent).toContain('¡Listo!');
+    });
+
+    it('si la consulta falla, muestra el error en un snackbar y no cambia la pantalla', async () => {
+      const consultarEstadoCompraMock = vi
+        .fn()
+        .mockResolvedValue({ exito: false, error: 'No se pudo consultar el estado de la compra.' });
+      const crearCompraMock = vi.fn().mockResolvedValue({ exito: true, compra: compraEsperandoPagoBold() });
+      const { fixture, snackBarOpenMock } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+        consultarEstadoCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+
+      await fixture.componentInstance['verificarEstadoBold']('compra-1');
+      fixture.detectChanges();
+
+      expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
+      expect(snackBarOpenMock).toHaveBeenCalledWith(
+        'No se pudo consultar el estado de la compra.',
+        'Cerrar',
+        expect.objectContaining({ duration: expect.any(Number) }),
+      );
+      expect(fixture.componentInstance['compraCreada']()?.estado).toBe('esperando_pago_bold');
+    });
+
+    it('si el slug cambia mientras se espera la respuesta de "¿Ya pagaste?", no sobrescribe el estado del evento nuevo con la compra vieja (bug real: carrera de navegación)', async () => {
+      let resolverConsulta!: (valor: unknown) => void;
+      const consultarEstadoCompraMock = vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          resolverConsulta = resolve;
+        }),
+      );
+      const crearCompraMock = vi.fn().mockResolvedValue({ exito: true, compra: compraEsperandoPagoBold() });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+        consultarEstadoCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+
+      const botones: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      const botonVerificar = botones.find((b) => b.textContent?.includes('¿Ya pagaste?'));
+      expect(botonVerificar).toBeDefined();
+
+      botonVerificar!.click();
+      fixture.detectChanges();
+      // En este punto verificarEstadoBold() ya llamó a consultarEstadoCompra() y
+      // quedó esperando la respuesta (el mock no resuelve todavía).
+
+      // El cliente navega a otro evento antes de que la consulta responda.
+      const route = fixture.debugElement.injector.get(ActivatedRoute) as unknown as {
+        slugActual: string | null;
+      };
+      route.slugActual = 'otro-evento';
+      fixture.componentRef.setInput('slug', 'otro-evento');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['compraCreada']()).toBeNull();
+
+      // La respuesta tardía de la compra vieja llega después de la navegación.
+      resolverConsulta({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['compraCreada']()).toBeNull();
     });
   });
 

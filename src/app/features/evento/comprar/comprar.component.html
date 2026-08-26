@@ -69,6 +69,14 @@
                 No se pudo cargar la pasarela de pago de Bold. Intenta de nuevo.
               </p>
             }
+            <button
+              type="button"
+              [disabled]="verificandoEstadoBold()"
+              (click)="verificarEstadoBold(compra.compraId)"
+              class="mt-3 flex h-10 items-center justify-center rounded-xl border border-primary/20 px-4 text-sm text-primary underline transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {{ verificandoEstadoBold() ? 'Verificando…' : '¿Ya pagaste? Verifica el estado aquí' }}
+            </button>
           </div>
         } @else {
           <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
