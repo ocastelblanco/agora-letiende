@@ -107,6 +107,24 @@ function llenarFormularioValido(
   });
 }
 
+/** Instala un `window.BoldCheckout` falso y devuelve las instancias creadas. */
+function instalarBoldCheckoutFalso() {
+  const instancias: { config: unknown; open: ReturnType<typeof vi.fn> }[] = [];
+  class BoldCheckoutFalso {
+    readonly open = vi.fn();
+    constructor(public config: unknown) {
+      instancias.push(this);
+    }
+  }
+  (window as unknown as { BoldCheckout?: unknown }).BoldCheckout = BoldCheckoutFalso;
+  return instancias;
+}
+
+/** Simula el `postMessage` interno que la librería de Bold usa para avisar el cierre de su modal. */
+function dispararMensajeBold(origin: string, data: unknown): void {
+  window.dispatchEvent(new MessageEvent('message', { origin, data }));
+}
+
 describe('ComprarComponent', () => {
   it('carga el evento por slug y muestra el formulario cuando está publicado con sillas disponibles', async () => {
     const { fixture, cargarEventoPorSlugMock } = configurarPrueba({});
@@ -380,18 +398,15 @@ describe('ComprarComponent', () => {
   // el script del botón existiera).
   describe('checkout personalizado de Bold (window.BoldCheckout)', () => {
     afterEach(() => {
+      // Consume cualquier listener de `message` que un test haya dejado
+      // colgado (abrió el checkout pero nunca simuló su cierre) para que no
+      // reaccione por accidente a un postMessage de un test posterior.
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
       delete (window as unknown as { BoldCheckout?: unknown }).BoldCheckout;
     });
 
-    it('con BoldCheckout disponible en window, muestra el botón "Pagar con Bold" y al hacer click llama a open()', async () => {
-      const instancias: { config: unknown; open: ReturnType<typeof vi.fn> }[] = [];
-      class BoldCheckoutFalso {
-        readonly open = vi.fn();
-        constructor(public config: unknown) {
-          instancias.push(this);
-        }
-      }
-      (window as unknown as { BoldCheckout?: unknown }).BoldCheckout = BoldCheckoutFalso;
+    it('con BoldCheckout disponible en window, muestra "Pagar con Bold" y al hacer click abre el checkout, oculta los botones y muestra el mensaje de espera', async () => {
+      const instancias = instalarBoldCheckoutFalso();
 
       const { fixture } = configurarPrueba({
         evento: { ...eventoEjemplo, mediosPago: ['bold'] },
@@ -405,6 +420,14 @@ describe('ComprarComponent', () => {
             expiraEn: '2026-08-08T00:10:00.000Z',
             bold: { llaveIdentidad: 'llave-prueba', firma: 'firmahex', moneda: 'COP' },
           },
+        }),
+        // La limpieza del listener en el afterEach de este describe dispara un
+        // 'BOLD_CHECKOUT_EVENT' de cierre si el test no lo consumió — este
+        // mock evita que esa reconsulta de limpieza falle sobre un resultado
+        // no configurado.
+        consultarEstadoCompraMock: vi.fn().mockResolvedValue({
+          exito: true,
+          compra: { compraId: 'compra-1', estado: 'esperando_pago_bold', cantidad: 2, montoTotal: 90000 },
         }),
       });
       await activarConSlug(fixture, 'concierto-jazz');
@@ -431,8 +454,16 @@ describe('ComprarComponent', () => {
       );
 
       boton!.click();
+      fixture.detectChanges();
 
       expect(instancias[0].open).toHaveBeenCalled();
+      const botonesTrasAbrir: HTMLButtonElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      );
+      expect(botonesTrasAbrir.length).toBe(0);
+      expect(fixture.nativeElement.textContent).toContain(
+        'Completa tu pago en la ventana de Bold',
+      );
     });
 
     it('si el slug cambia mientras se espera la librería de Bold, no instala el checkout de la compra vieja (bug real: el cliente veía el botón de Bold de un evento anterior)', async () => {
@@ -516,9 +547,11 @@ describe('ComprarComponent', () => {
     });
   });
 
-  // Bold no documenta ningún evento/callback para saber cuándo termina el
-  // checkout embebido (verificado 26/08/2026) — botón manual de respaldo.
-  describe('botón manual "¿Ya pagaste?" (respaldo sin mecanismo documentado de Bold)', () => {
+  // Bold no reporta ningún evento para "el cliente cerró el checkout sin
+  // pagar" (verificado 26/08/2026 contra developers.bold.co/webhook) — el
+  // propio frontend detecta el cierre vía el `postMessage` interno que la
+  // librería de Bold usa para saber cuándo cerrar su modal, y reconsulta.
+  describe('cierre del checkout de Bold detectado por postMessage', () => {
     function compraEsperandoPagoBold() {
       return {
         compraId: 'compra-1',
@@ -530,7 +563,195 @@ describe('ComprarComponent', () => {
       };
     }
 
-    it('al hacer click consulta el estado real y, si está aprobada, muestra la confirmación', async () => {
+    /** Crea la compra, abre el checkout de Bold (click en "Pagar con Bold") y deja los mocks listos. */
+    async function prepararCheckoutAbierto(consultarEstadoCompraMock: ReturnType<typeof vi.fn>) {
+      const instancias = instalarBoldCheckoutFalso();
+      const crearCompraMock = vi.fn().mockResolvedValue({ exito: true, compra: compraEsperandoPagoBold() });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+        consultarEstadoCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const botonPagar: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+      botonPagar.click();
+      fixture.detectChanges();
+
+      return { fixture, instancias };
+    }
+
+    afterEach(() => {
+      // Consume cualquier listener que un test haya dejado colgado.
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
+      delete (window as unknown as { BoldCheckout?: unknown }).BoldCheckout;
+    });
+
+    it('un mensaje con origen no permitido o con type distinto no dispara ninguna reconsulta', async () => {
+      // Resuelto (no un vi.fn() vacío) porque el afterEach de este describe
+      // dispara un 'BOLD_CHECKOUT_EVENT' de limpieza al terminar, que sí
+      // consumirá el listener que este test deja intacto.
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: compraEsperandoPagoBold(),
+      });
+      const { fixture } = await prepararCheckoutAbierto(consultarEstadoCompraMock);
+
+      dispararMensajeBold('https://sitio-no-permitido.example.com', { type: 'BOLD_CHECKOUT_EVENT' });
+      dispararMensajeBold(window.location.origin, { type: 'OTRO_TIPO_DE_EVENTO' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(consultarEstadoCompraMock).not.toHaveBeenCalled();
+      expect(fixture.nativeElement.textContent).toContain('Completa tu pago en la ventana de Bold');
+    });
+
+    it('al detectar el cierre reconsulta el estado y, si quedó aprobada, muestra la confirmación', async () => {
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+      });
+      const { fixture } = await prepararCheckoutAbierto(consultarEstadoCompraMock);
+
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
+      expect(fixture.componentInstance['compraCreada']()?.estado).toBe('aprobada');
+      expect(fixture.nativeElement.textContent).toContain('¡Listo!');
+    });
+
+    it('si tras el cierre la reconsulta sigue esperando_pago_bold, muestra "Verificar estado" y "Reabrir el pago con Bold"', async () => {
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: compraEsperandoPagoBold(),
+      });
+      const { fixture } = await prepararCheckoutAbierto(consultarEstadoCompraMock);
+
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const botones: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      expect(botones.some((b) => b.textContent?.includes('Verificar estado'))).toBe(true);
+      expect(botones.some((b) => b.textContent?.includes('Reabrir el pago con Bold'))).toBe(true);
+    });
+
+    it('un click real en "Verificar estado" (no solo invocar el método) consulta el estado y actualiza la pantalla', async () => {
+      const consultarEstadoCompraMock = vi
+        .fn()
+        .mockResolvedValueOnce({ exito: true, compra: compraEsperandoPagoBold() })
+        .mockResolvedValueOnce({
+          exito: true,
+          compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+        });
+      const { fixture } = await prepararCheckoutAbierto(consultarEstadoCompraMock);
+
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const botonVerificar = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+      ).find((b) => b.textContent?.includes('Verificar estado'));
+      expect(botonVerificar).toBeDefined();
+
+      botonVerificar!.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(consultarEstadoCompraMock).toHaveBeenCalledTimes(2);
+      expect(fixture.nativeElement.textContent).toContain('¡Listo!');
+    });
+
+    it('dos clicks reales en "Pagar con Bold" antes del siguiente ciclo de detección de cambios solo abren el checkout una vez (CLAUDE.md §7, doble click/toque real)', async () => {
+      const instancias = instalarBoldCheckoutFalso();
+      const crearCompraMock = vi
+        .fn()
+        .mockResolvedValue({ exito: true, compra: compraEsperandoPagoBold() });
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: compraEsperandoPagoBold(),
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        crearCompraMock,
+        consultarEstadoCompraMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const botonPagar: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+      botonPagar.click();
+      botonPagar.click(); // segundo toque real antes de que Angular repinte y oculte el botón.
+      fixture.detectChanges();
+
+      expect(instancias).toHaveLength(1);
+      expect(instancias[0].open).toHaveBeenCalledTimes(1);
+
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+    });
+
+    it('"Reabrir el pago con Bold" vuelve a invocar open() sobre la misma instancia y vuelve a ocultar los botones', async () => {
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: compraEsperandoPagoBold(),
+      });
+      const { fixture, instancias } = await prepararCheckoutAbierto(consultarEstadoCompraMock);
+
+      dispararMensajeBold(window.location.origin, { type: 'BOLD_CHECKOUT_EVENT' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const botonesAbiertos: HTMLButtonElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      );
+      const botonReabrir = botonesAbiertos.find((b) => b.textContent?.includes('Reabrir el pago con Bold'));
+      expect(botonReabrir).toBeDefined();
+
+      botonReabrir!.click();
+      fixture.detectChanges();
+
+      expect(instancias).toHaveLength(1); // misma instancia, ninguna reserva nueva.
+      expect(instancias[0].open).toHaveBeenCalledTimes(2);
+      const botonesTrasReabrir: HTMLButtonElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      );
+      expect(botonesTrasReabrir.length).toBe(0);
+      expect(fixture.nativeElement.textContent).toContain('Completa tu pago en la ventana de Bold');
+    });
+  });
+
+  // Botón manual "Verificar estado", último recurso si el webhook llega con
+  // retraso — reutilizado por la reconsulta automática tras el cierre.
+  describe('verificarEstadoBold() (verificación manual del estado)', () => {
+    function compraEsperandoPagoBold() {
+      return {
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold' as const,
+        cantidad: 2,
+        montoTotal: 90000,
+        expiraEn: '2026-08-08T00:10:00.000Z',
+        bold: { llaveIdentidad: 'llave-prueba', firma: 'firmahex', moneda: 'COP' },
+      };
+    }
+
+    it('al invocarse consulta el estado real y, si está aprobada, muestra la confirmación', async () => {
       const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
         exito: true,
         compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
@@ -547,13 +768,7 @@ describe('ComprarComponent', () => {
       await fixture.componentInstance['comprar']();
       fixture.detectChanges();
 
-      const botones: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
-      const botonVerificar = botones.find((b) => b.textContent?.includes('¿Ya pagaste?'));
-      expect(botonVerificar).toBeDefined();
-
-      botonVerificar!.click();
-      fixture.detectChanges();
-      await fixture.whenStable();
+      await fixture.componentInstance['verificarEstadoBold']('compra-1');
       fixture.detectChanges();
 
       expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
@@ -589,7 +804,7 @@ describe('ComprarComponent', () => {
       expect(fixture.componentInstance['compraCreada']()?.estado).toBe('esperando_pago_bold');
     });
 
-    it('si el slug cambia mientras se espera la respuesta de "¿Ya pagaste?", no sobrescribe el estado del evento nuevo con la compra vieja (bug real: carrera de navegación)', async () => {
+    it('si el slug cambia mientras se espera la respuesta de verificarEstadoBold(), no sobrescribe el estado del evento nuevo con la compra vieja (bug real: carrera de navegación)', async () => {
       let resolverConsulta!: (valor: unknown) => void;
       const consultarEstadoCompraMock = vi.fn().mockReturnValue(
         new Promise((resolve) => {
@@ -608,14 +823,9 @@ describe('ComprarComponent', () => {
       await fixture.componentInstance['comprar']();
       fixture.detectChanges();
 
-      const botones: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
-      const botonVerificar = botones.find((b) => b.textContent?.includes('¿Ya pagaste?'));
-      expect(botonVerificar).toBeDefined();
-
-      botonVerificar!.click();
-      fixture.detectChanges();
-      // En este punto verificarEstadoBold() ya llamó a consultarEstadoCompra() y
-      // quedó esperando la respuesta (el mock no resuelve todavía).
+      void fixture.componentInstance['verificarEstadoBold']('compra-1');
+      // verificarEstadoBold() ya llamó a consultarEstadoCompra() y quedó
+      // esperando la respuesta (el mock no resuelve todavía).
 
       // El cliente navega a otro evento antes de que la consulta responda.
       const route = fixture.debugElement.injector.get(ActivatedRoute) as unknown as {

@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -17,6 +17,22 @@ type MedioPagoPublico = 'transferencia' | 'bold';
 const MEDIOS_PAGO_PUBLICOS: readonly MedioPagoPublico[] = ['transferencia', 'bold'];
 
 const SRC_LIBRERIA_BOLD = 'https://checkout.bold.co/library/boldPaymentButton.js';
+
+/**
+ * Orígenes desde los que el checkout embebido de Bold puede enviar el
+ * `postMessage` interno que usa para saber cuándo cerrar su propio modal
+ * (mismo criterio que usa internamente la librería de Bold — variable `g`,
+ * verificado leyendo su código fuente real en una sesión anterior). Se
+ * completa con `window.location.origin` al registrar el listener. Se usa
+ * únicamente como disparador de una RECONSULTA de lectura al backend — nunca
+ * como fuente de verdad de si se pagó (CLAUDE.md §5, A08).
+ */
+const ORIGENES_PERMITIDOS_BOLD = [
+  'https://stg.checkout.bold.co',
+  'https://qa.checkout.bold.co',
+  'https://checkout.bold.co',
+  'http://localhost:3000',
+];
 
 /**
  * Config del checkout personalizado de Bold (API JS `window.BoldCheckout`,
@@ -80,6 +96,16 @@ export class ComprarComponent {
   protected readonly checkoutBold = signal<InstanciaBoldCheckout | null>(null);
   /** Guarda del botón manual "¿Ya pagaste?" — ver CLAUDE.md §7 (doble click/toque real). */
   protected readonly verificandoEstadoBold = signal(false);
+  /** `true` mientras el checkout de Bold está abierto — oculta todos los botones. */
+  protected readonly checkoutBoldAbierto = signal(false);
+  /**
+   * `true` solo cuando ya se hizo la reconsulta automática tras cerrar el
+   * checkout y el resultado siguió siendo 'esperando_pago_bold' — controla
+   * si se muestran "Verificar estado"/"Reabrir el pago con Bold".
+   */
+  protected readonly esperaInconclusa = signal(false);
+  /** Remueve el listener de `postMessage` del checkout de Bold actualmente abierto, si hay uno. */
+  private removerListenerBold: (() => void) | null = null;
 
   protected readonly formulario = this.fb.nonNullable.group({
     cantidad: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
@@ -131,6 +157,13 @@ export class ComprarComponent {
   });
 
   constructor() {
+    // Cierre incondicional del listener de `postMessage` de Bold si el
+    // componente se destruye por completo (navegación fuera de `/comprar`,
+    // no solo un cambio de `:slug` — ese caso ya lo cubre el `effect()` de
+    // abajo). Sin esto, abandonar la pestaña a mitad de un checkout abierto
+    // dejaba el listener colgado en `window` hasta cerrar la pestaña.
+    inject(DestroyRef).onDestroy(() => this.limpiarListenerBold());
+
     effect(() => {
       const slug = this.slug();
       this.cargando.set(true);
@@ -142,6 +175,9 @@ export class ComprarComponent {
       this.errorCheckoutBold.set(false);
       this.checkoutBold.set(null);
       this.verificandoEstadoBold.set(false);
+      this.checkoutBoldAbierto.set(false);
+      this.esperaInconclusa.set(false);
+      this.limpiarListenerBold();
       void this.cargarEvento(slug);
     });
 
@@ -215,6 +251,74 @@ export class ComprarComponent {
       await this.actualizarEstadoCompra(compraId);
     } finally {
       this.verificandoEstadoBold.set(false);
+    }
+  }
+
+  /**
+   * Abre el checkout de Bold (primera vez desde "Pagar con Bold" o de nuevo
+   * desde "Reabrir el pago con Bold", misma instancia — nunca crea una
+   * reserva nueva). Oculta todos los botones mientras el checkout está
+   * abierto y registra el listener de `postMessage` que detecta su cierre
+   * (ver `registrarListenerCierreBold`) para disparar la reconsulta
+   * automática del estado real — Bold no reporta ningún evento para "el
+   * cliente cerró sin pagar" (verificado 26/08/2026 contra
+   * developers.bold.co/webhook).
+   */
+  protected abrirCheckoutBold(checkout: InstanciaBoldCheckout): void {
+    if (this.checkoutBoldAbierto()) {
+      return;
+    }
+    this.checkoutBoldAbierto.set(true);
+    this.esperaInconclusa.set(false);
+    checkout.open();
+    this.registrarListenerCierreBold();
+  }
+
+  /**
+   * Registra (una sola vez por apertura) el listener de `message` que la
+   * propia librería de Bold usa internamente para saber cuándo cerrar su
+   * modal — se usa aquí solo como disparador de una reconsulta de LECTURA al
+   * backend, nunca como fuente de verdad de si se pagó. Se remueve a sí
+   * mismo al primer mensaje que coincide, y también puede removerse desde
+   * afuera (`limpiarListenerBold`) si el cliente navega a otro evento antes
+   * de que el checkout se cierre.
+   */
+  private registrarListenerCierreBold(): void {
+    const origenesPermitidos = [...ORIGENES_PERMITIDOS_BOLD, window.location.origin];
+    const alRecibirMensaje = (event: MessageEvent): void => {
+      if (!origenesPermitidos.includes(event.origin)) {
+        return;
+      }
+      if ((event.data as { type?: string } | null)?.type !== 'BOLD_CHECKOUT_EVENT') {
+        return;
+      }
+      this.limpiarListenerBold();
+      this.checkoutBoldAbierto.set(false);
+      void this.reconsultarTrasCierreBold();
+    };
+    window.addEventListener('message', alRecibirMensaje);
+    this.removerListenerBold = () => window.removeEventListener('message', alRecibirMensaje);
+  }
+
+  private limpiarListenerBold(): void {
+    this.removerListenerBold?.();
+    this.removerListenerBold = null;
+  }
+
+  /**
+   * Reconsulta automática al detectar el cierre del checkout (una sola vez).
+   * Si el resultado sigue siendo 'esperando_pago_bold' —webhook con retraso,
+   * o el cliente cerró el modal sin pagar—, habilita "Verificar
+   * estado"/"Reabrir el pago con Bold".
+   */
+  private async reconsultarTrasCierreBold(): Promise<void> {
+    const compraId = this.compraCreada()?.compraId;
+    if (!compraId) {
+      return;
+    }
+    await this.actualizarEstadoCompra(compraId);
+    if (this.compraCreada()?.estado === 'esperando_pago_bold') {
+      this.esperaInconclusa.set(true);
     }
   }
 
@@ -389,6 +493,9 @@ export class ComprarComponent {
     this.errorCheckoutBold.set(false);
     this.checkoutBold.set(null);
     this.verificandoEstadoBold.set(false);
+    this.checkoutBoldAbierto.set(false);
+    this.esperaInconclusa.set(false);
+    this.limpiarListenerBold();
     this.compraCreada.set(null);
     void this.cargarEvento(this.slug());
   }
