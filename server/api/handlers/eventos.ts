@@ -69,7 +69,12 @@ const TAMANO_MAXIMO_IMAGEN_BYTES = 10 * 1024 * 1024;
 // para bloquear la desactivación de `administradoPorLeTiende` mientras haya
 // compras en curso — de lo contrario quedarían huérfanas (`aprobarCompra`
 // en `aprobaciones.ts` traga `ErrorAforo` y de todas formas emite boletas).
-const ESTADOS_QUE_RETIENEN_AFORO = ['iniciada', 'esperando_comprobante', 'en_revision'] as const;
+const ESTADOS_QUE_RETIENEN_AFORO = [
+  'iniciada',
+  'esperando_comprobante',
+  'esperando_pago_bold',
+  'en_revision',
+] as const;
 
 function esErrorCondicionFallida(error: unknown): boolean {
   return error instanceof Error && error.name === 'ConditionalCheckFailedException';
@@ -936,12 +941,14 @@ async function actualizarEvento(
         TableName: process.env['TABLA_COMPRAS'],
         IndexName: 'eventoId-creadaEn-index',
         KeyConditionExpression: 'eventoId = :eventoId',
-        FilterExpression: 'estado = :iniciada OR estado = :esperandoComprobante OR estado = :enRevision',
+        FilterExpression:
+          'estado = :iniciada OR estado = :esperandoComprobante OR estado = :esperandoPagoBold OR estado = :enRevision',
         ExpressionAttributeValues: {
           ':eventoId': eventoId,
           ':iniciada': ESTADOS_QUE_RETIENEN_AFORO[0],
           ':esperandoComprobante': ESTADOS_QUE_RETIENEN_AFORO[1],
-          ':enRevision': ESTADOS_QUE_RETIENEN_AFORO[2],
+          ':esperandoPagoBold': ESTADOS_QUE_RETIENEN_AFORO[2],
+          ':enRevision': ESTADOS_QUE_RETIENEN_AFORO[3],
         },
       }),
     );
@@ -950,7 +957,7 @@ async function actualizarEvento(
       return respuestaJson(409, {
         mensaje:
           `No se puede desactivar la boletería administrada: hay ${cantidadEnCurso} compra(s) en curso ` +
-          'para este evento (iniciada/esperando comprobante/en revisión). Resuélvelas o espera a que ' +
+          'para este evento (iniciada/esperando comprobante/esperando pago Bold/en revisión). Resuélvelas o espera a que ' +
           'expiren antes de desactivar.',
       });
     }

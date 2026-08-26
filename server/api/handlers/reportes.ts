@@ -265,6 +265,7 @@ async function obtenerPanelEvento(
     nombreEvento: eventoItem['nombre'],
     sillasTotales,
     sillasDisponibles,
+    sillasReservadas,
     sillasVendidas: sillasTotales - sillasDisponibles - sillasReservadas,
     porEtapa,
     totalVendidas,
