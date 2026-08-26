@@ -13,11 +13,25 @@ export interface DatosNuevaCompra {
   cantidad: number;
   cliente: DatosCliente;
   autorizacionDatos: boolean;
+  // Roadmap #19 (Bold) — se envía explícito cuando el evento ofrece 1 o 2
+  // medios de pago públicos (con 1 solo, sin selector, ya resuelto; con 2,
+  // el elegido por el cliente); ausente solo cuando ofrece 0 (ver el mismo
+  // criterio documentado en comprar.component.ts).
+  medioPago?: 'transferencia' | 'bold';
 }
+
+/** Mismo set que `EstadoCompra` del backend (`server/api/handlers/compras.ts`). */
+export type EstadoCompra =
+  | 'esperando_comprobante'
+  | 'esperando_pago_bold'
+  | 'en_revision'
+  | 'aprobada'
+  | 'rechazada'
+  | 'expirada';
 
 export interface CompraCreada {
   compraId: string;
-  estado: string;
+  estado: EstadoCompra;
   cantidad: number;
   montoTotal: number;
   // v2 (roadmap #24) — ausente cuando el evento no tiene etapas: la
@@ -26,9 +40,19 @@ export interface CompraCreada {
   // v2 (roadmap #24) — presente solo en ese mismo caso: cuántas boletas ya
   // se emitieron en la misma respuesta.
   boletas?: number;
+  // Roadmap #19 (Bold) — presente solo cuando `estado === 'esperando_pago_bold'`.
+  // Estos campos alimentan la instanciación de `window.BoldCheckout` en el
+  // frontend (objeto de config en camelCase, no atributos `data-*`) tal cual
+  // llegan del backend, nunca calculados en el cliente.
+  bold?: { llaveIdentidad: string; firma: string; moneda: string };
 }
 
 export type ResultadoCrearCompra =
+  | { exito: true; compra: CompraCreada }
+  | { exito: false; error: string };
+
+/** `GET /api/compras/:compraId/estado` devuelve el mismo shape sin datos personales. */
+export type ResultadoConsultarEstadoCompra =
   | { exito: true; compra: CompraCreada }
   | { exito: false; error: string };
 
@@ -59,6 +83,21 @@ export class ComprasService {
       return {
         exito: false,
         error: this.mensajeError(error, 'No se pudo iniciar la compra. Intenta de nuevo.'),
+      };
+    }
+  }
+
+  /** Llama `GET /api/compras/:compraId/estado` — público, sin datos personales. */
+  async consultarEstadoCompra(compraId: string): Promise<ResultadoConsultarEstadoCompra> {
+    try {
+      const compra = await firstValueFrom(
+        this.http.get<CompraCreada>(`/api/compras/${compraId}/estado`),
+      );
+      return { exito: true, compra };
+    } catch (error) {
+      return {
+        exito: false,
+        error: this.mensajeError(error, 'No se pudo consultar el estado de la compra.'),
       };
     }
   }

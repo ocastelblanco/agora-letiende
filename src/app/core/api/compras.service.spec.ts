@@ -84,4 +84,55 @@ describe('ComprasService', () => {
       });
     });
   });
+
+  describe('consultarEstadoCompra', () => {
+    it('llama GET /api/compras/:compraId/estado', async () => {
+      const promesa = servicio.consultarEstadoCompra('compra-1');
+
+      const peticion = httpMock.expectOne('/api/compras/compra-1/estado');
+      expect(peticion.request.method).toBe('GET');
+      peticion.flush({
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold',
+        cantidad: 2,
+        montoTotal: 90000,
+        expiraEn: '2026-08-08T00:10:00.000Z',
+      });
+
+      const resultado = await promesa;
+      expect(resultado).toEqual({
+        exito: true,
+        compra: {
+          compraId: 'compra-1',
+          estado: 'esperando_pago_bold',
+          cantidad: 2,
+          montoTotal: 90000,
+          expiraEn: '2026-08-08T00:10:00.000Z',
+        },
+      });
+    });
+
+    it('devuelve el mensaje de error del backend ante un fallo (mismo manejo que crearCompra)', async () => {
+      const promesa = servicio.consultarEstadoCompra('compra-1');
+
+      const peticion = httpMock.expectOne('/api/compras/compra-1/estado');
+      peticion.flush({ mensaje: 'Compra no encontrada' }, { status: 404, statusText: 'Not Found' });
+
+      const resultado = await promesa;
+      expect(resultado).toEqual({ exito: false, error: 'Compra no encontrada' });
+    });
+
+    it('devuelve un mensaje genérico si la respuesta de error no trae mensaje', async () => {
+      const promesa = servicio.consultarEstadoCompra('compra-1');
+
+      const peticion = httpMock.expectOne('/api/compras/compra-1/estado');
+      peticion.flush(null, { status: 500, statusText: 'Internal Server Error' });
+
+      const resultado = await promesa;
+      expect(resultado).toEqual({
+        exito: false,
+        error: 'No se pudo consultar el estado de la compra.',
+      });
+    });
+  });
 });
