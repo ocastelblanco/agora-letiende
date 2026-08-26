@@ -204,7 +204,18 @@ async function esSeguroExpirarReservaBold(compraId: string): Promise<boolean> {
   try {
     const llaveIdentidad = process.env['BOLD_LLAVE_IDENTIDAD'] ?? '';
     const url = `${BASE_URL_RECONCILIACION_BOLD}/payments/webhook/notifications/${encodeURIComponent(compraId)}?is_external_reference=true`;
-    const respuesta = await fetch(url, { headers: { Authorization: `x-api-key ${llaveIdentidad}` } });
+    // Timeout corto y explícito (hallazgo de revisión de seguridad,
+    // 25/08/2026): esta consulta ocurre en el camino síncrono de
+    // reservarSillas() — sin límite propio, una API de Bold lenta o caída
+    // podría colgar la petición hasta el timeout del Lambda completo (10s,
+    // provider.timeout), bloqueando la compra de OTRO cliente que solo
+    // estaba compitiendo por la misma silla. Es un chequeo best-effort (el
+    // catch de abajo ya trata cualquier fallo como "no seguro expirar"), así
+    // que 3s deja margen de sobra sin arriesgar el resto de la función.
+    const respuesta = await fetch(url, {
+      headers: { Authorization: `x-api-key ${llaveIdentidad}` },
+      signal: AbortSignal.timeout(3000),
+    });
     if (!respuesta.ok) {
       return false;
     }
@@ -234,17 +245,25 @@ async function liberarReservasVencidas(eventoId: string): Promise<void> {
     await expirarYLiberar(eventoId, compra, 'esperando_comprobante');
   }
 
+  // Verificaciones en paralelo, no secuenciales (hallazgo de revisión de
+  // seguridad, 25/08/2026): con el `for...await` original, N reservas de
+  // Bold vencidas del mismo evento encadenaban N llamadas de red a Bold una
+  // tras otra — el timeout de cada una (arriba) ya no bastaba para acotar
+  // el tiempo total si había varias a la vez, en el mismo camino síncrono
+  // que bloquea la compra de otro cliente.
   const vencidasBold = await buscarComprasVencidas(eventoId, 'esperando_pago_bold', ahoraEpoch);
-  for (const compra of vencidasBold) {
-    const compraId = compra['compraId'];
-    if (typeof compraId !== 'string') {
-      continue;
-    }
-    if (!(await esSeguroExpirarReservaBold(compraId))) {
-      continue;
-    }
-    await expirarYLiberar(eventoId, compra, 'esperando_pago_bold');
-  }
+  await Promise.allSettled(
+    vencidasBold.map(async (compra) => {
+      const compraId = compra['compraId'];
+      if (typeof compraId !== 'string') {
+        return;
+      }
+      if (!(await esSeguroExpirarReservaBold(compraId))) {
+        return;
+      }
+      await expirarYLiberar(eventoId, compra, 'esperando_pago_bold');
+    }),
+  );
 }
 
 /**
