@@ -15,6 +15,7 @@ import {
 } from '../services/aforo';
 import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
+import { firmarBoton } from '../services/bold';
 import { generarTokenEnlace } from '../lib/enlaces-magicos';
 import { finalizarSiVencido, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import { CanalCorreoSes } from '../services/notificaciones';
@@ -45,7 +46,20 @@ export const VERSION_TERMINOS_ACTUAL = '2026-08-07';
 // honesta sobre el mecanismo, no una identidad inventada.
 const RESUELTO_POR_SISTEMA = 'sistema (boletería sin cobro)';
 
-export type EstadoCompra = 'esperando_comprobante' | 'en_revision' | 'aprobada' | 'rechazada' | 'expirada';
+// 'esperando_pago_bold' (roadmap #19, Sub-tarea 1) — compra iniciada con
+// Bold: sillas reservadas, esperando la confirmación del webhook
+// (handlers/bold-webhook.ts). Hay DOS copias locales de este tipo en el
+// backend que hay que mantener consistentes (handlers/liberar-reservas.ts,
+// grep -rn "type EstadoCompra" server/api verificado) — esta es la única
+// exportada, la otra es una copia deliberadamente aislada (ver su propio
+// comentario).
+export type EstadoCompra =
+  | 'esperando_comprobante'
+  | 'esperando_pago_bold'
+  | 'en_revision'
+  | 'aprobada'
+  | 'rechazada'
+  | 'expirada';
 
 // tech-specs.md §4.3 — única copia del lado del backend, mismo criterio que
 // el `MedioPago` del modelo de frontend (`src/app/core/models/evento.model.ts`).
@@ -245,6 +259,101 @@ async function crearAdquisicionSinEtapas(
 }
 
 /**
+ * Bold (roadmap #19, Sub-tarea 1 — `.omc/plans/bold-pagos.md`) — rama de
+ * `crearCompra()` cuando el cliente elige pagar con Bold en vez de
+ * transferencia manual. Reserva sillas con la misma primitiva que el resto
+ * de flujos (`aforo.ts`, nunca reimplementada), pero la compra queda en
+ * `esperando_pago_bold` en vez de `esperando_comprobante` — sin
+ * `tokenComprobanteHash` (ese medio no aplica aquí) — hasta que
+ * `handlers/bold-webhook.ts` confirme el pago. Misma TTL de expiración que
+ * el flujo de comprobante manual, reutilizando `plazoComprobanteMinutos` del
+ * evento: el modelo de `Evento` (`tech-specs.md` §4.3) no tiene un campo de
+ * plazo separado para Bold y agregar uno está fuera del alcance mínimo de
+ * esta tarea.
+ *
+ * La respuesta incluye lo que el frontend necesita para renderizar el botón
+ * embebido de Bold en la Sub-tarea 2 (`llaveIdentidad`/`firma`/`moneda`) —
+ * la llave de identidad es pública por diseño (Bold la expone en el
+ * `<script>` del cliente), nunca la llave secreta.
+ */
+async function crearCompraBold(
+  eventoEncontrado: EventoParaCompra,
+  etapa: EtapaBoleteria,
+  cantidad: number,
+  clienteDatos: Record<string, unknown>,
+  ahora: Date,
+): Promise<APIGatewayProxyResultV2> {
+  try {
+    await reservarSillas(eventoEncontrado.eventoId, cantidad);
+  } catch (error) {
+    if (error instanceof AforoInsuficienteError) {
+      return respuestaJson(409, { mensaje: error.message, sillasDisponibles: error.sillasDisponibles });
+    }
+    if (error instanceof ErrorAforo) {
+      return respuestaJson(409, { mensaje: error.message });
+    }
+    throw error;
+  }
+
+  const montoTotal = etapa.precio * cantidad;
+  const compraId = randomUUID();
+  const expiraEnFecha = new Date(ahora.getTime() + eventoEncontrado.plazoComprobanteMinutos * 60_000);
+  // TTL de DynamoDB exige epoch-segundos (Number) — mismo criterio que el
+  // flujo de transferencia, más abajo.
+  const expiraEnEpoch = Math.floor(expiraEnFecha.getTime() / 1000);
+
+  const compra = {
+    compraId,
+    eventoId: eventoEncontrado.eventoId,
+    etapaId: etapa.etapaId,
+    cantidad,
+    cliente: {
+      nombre: clienteDatos['nombre'],
+      telefono: clienteDatos['telefono'],
+      correo: clienteDatos['correo'],
+    },
+    montoTotal,
+    medioPago: 'bold' as MedioPago,
+    estado: 'esperando_pago_bold' as EstadoCompra,
+    autorizacionDatosAceptadaEn: ahora.toISOString(),
+    versionTerminos: VERSION_TERMINOS_ACTUAL,
+    expiraEn: expiraEnEpoch,
+    creadaEn: ahora.toISOString(),
+  };
+
+  try {
+    // Sin lectura previa, mismo criterio que el resto de PutCommand de este
+    // archivo: astronómicamente improbable que colisione un UUID v4, pero
+    // la condición es gratis.
+    await documentoDynamoDB.send(
+      new PutCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        Item: compra,
+        ConditionExpression: 'attribute_not_exists(compraId)',
+      }),
+    );
+  } catch (error) {
+    if (esErrorCondicionFallida(error)) {
+      return respuestaJson(409, { mensaje: 'No se pudo crear la compra, intenta de nuevo' });
+    }
+    throw error;
+  }
+
+  return respuestaJson(201, {
+    compraId,
+    estado: compra.estado,
+    cantidad,
+    montoTotal,
+    expiraEn: expiraEnFecha.toISOString(),
+    bold: {
+      llaveIdentidad: process.env['BOLD_LLAVE_IDENTIDAD'] ?? '',
+      firma: firmarBoton(compraId, montoTotal, 'COP'),
+      moneda: 'COP',
+    },
+  });
+}
+
+/**
  * `POST /api/compras` — inicia una compra, reserva el aforo con `aforo.ts`
  * y envía por correo el enlace para cargar el comprobante. Público, con el
  * mismo criterio de `tech-specs.md` §8.3: el precio y la etapa vigente se
@@ -284,6 +393,17 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     });
   }
 
+  // Bold (roadmap #19, Sub-tarea 1) — 'efectivo' nunca se acepta aquí: es
+  // exclusivo de la venta presencial (`ventas-efectivo.ts`, iniciada por un
+  // portero autenticado, no por el cliente anónimo de este endpoint
+  // público). Ausente en el payload → retrocompatible con transferencia
+  // (comportamiento sin cambios).
+  const medioPagoBruto = datos['medioPago'];
+  if (medioPagoBruto !== undefined && medioPagoBruto !== 'transferencia' && medioPagoBruto !== 'bold') {
+    return respuestaJson(400, { mensaje: 'medioPago debe ser transferencia o bold' });
+  }
+  const medioPago: 'transferencia' | 'bold' = medioPagoBruto === 'bold' ? 'bold' : 'transferencia';
+
   const eventoEncontrado = await buscarEventoPublicadoPorSlug(datos['slug']);
   if (!eventoEncontrado || eventoEncontrado.estado !== 'publicado') {
     return respuestaJson(404, { mensaje: 'No existe un evento publicado con ese slug' });
@@ -310,6 +430,17 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     });
   }
 
+  // Bold (roadmap #19, Sub-tarea 1) — nunca confiar en que el cliente solo
+  // pida lo que ve en pantalla: rechaza explícitamente si el administrador
+  // no habilitó Bold para este evento, sin importar lo que el payload
+  // afirme (`CLAUDE.md` §5, A01). `eventos.ts` ya garantiza que un evento
+  // sin etapas nunca tiene 'bold' en `mediosPago` (`bloqueaBoldSinEtapas`),
+  // así que esta rama nunca colisiona con `crearAdquisicionSinEtapas` de
+  // abajo.
+  if (medioPago === 'bold' && !eventoEncontrado.mediosPago.includes('bold')) {
+    return respuestaJson(409, { mensaje: 'Este evento no acepta pago con Bold' });
+  }
+
   // v2 (roadmap #24) — boletería opcional: un evento sin etapas no cobra
   // nada, solo controla aforo. Reserva, confirma y emite en la misma
   // operación — mismo patrón que `crearVentaEfectivo()` en
@@ -334,6 +465,13 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return respuestaJson(501, {
       mensaje: 'Las boletas gratuitas todavía no están soportadas',
     });
+  }
+
+  // Bold (roadmap #19, Sub-tarea 1) — a partir de aquí el camino se separa
+  // por completo del de transferencia: `crearCompraBold` maneja su propia
+  // reserva, persistencia y respuesta.
+  if (medioPago === 'bold') {
+    return await crearCompraBold(eventoEncontrado, etapa, datos['cantidad'], clienteDatos, ahora);
   }
 
   try {
@@ -368,15 +506,16 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
       correo: clienteDatos['correo'],
     },
     montoTotal,
-    // Único medio realmente alcanzable por este flujo hoy: Bold (fase 2,
-    // ADR-003 en MEMORY.md) todavía no existe, y 'efectivo' es exclusivo de
-    // ventas-efectivo.ts (venta presencial, sin comprobante). Fijo en vez de
-    // aceptado del payload — mismo criterio de A08 que el precio: nunca se
-    // confía en lo que el cliente afirme haber pagado. Gap de modelo
-    // cerrado en esta tarea (TODO.md Tarea 2): antes de este cambio,
-    // ninguna compra persistía medioPago pese a que tech-specs.md §4.3 ya
-    // lo define en la interfaz Compra.
-    medioPago: 'transferencia' as MedioPago,
+    // Llegado a este punto, `medioPago` solo puede ser 'transferencia': la
+    // rama 'bold' ya retornó arriba (`crearCompraBold`), y 'efectivo' nunca
+    // pasa la validación de la cabecera de esta función (exclusivo de
+    // ventas-efectivo.ts, venta presencial). Se persiste la variable ya
+    // validada en vez de un literal — antes de Bold (roadmap #19) este
+    // campo estaba fijo a `'transferencia' as MedioPago` porque el único
+    // medio alcanzable por este flujo era ese; ahora el payload sí puede
+    // afectar QUÉ CAMINO se sigue (nunca el precio, CLAUDE.md §5 A08), y el
+    // valor persistido debe reflejarlo.
+    medioPago: medioPago as MedioPago,
     estado: 'esperando_comprobante' as EstadoCompra,
     tokenComprobanteHash: hash,
     autorizacionDatosAceptadaEn: ahora.toISOString(),

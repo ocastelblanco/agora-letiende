@@ -199,3 +199,9 @@ Backend,25/08/2026 15:54,25/08/2026 16:12,0:18:00,AI,Sonnet 5,Agrega logging per
 Cloud infraestructura,25/08/2026 16:12,25/08/2026 16:30,0:18:00,AI,Sonnet 5,Identifica causa raiz Calendar API deshabilitada via log real usuario la habilita y confirma,Claude Code,cli,medium
 Specs definition,25/08/2026 16:30,25/08/2026 17:15,0:45:00,AI,Sonnet 5,Cierra documentacion de Google Calendar en TODO MEMORY PRD y roadmap activa Bold como Tarea 1,Claude Code,cli,medium
 Workspace setting,25/08/2026 17:15,25/08/2026 17:22,0:07:00,AI,Sonnet 5,Fusion del PR 48 confirmada limpieza de rama verificacion de produccion por CLI y correccion de tabla rota en MEMORY,Claude Code,cli,medium
+Specs definition,25/08/2026 17:22,25/08/2026 18:50,1:28:00,AI,Sonnet 5,Plan de pago Bold investigacion de firma y webhook 4 decisiones aprobadas via AskUserQuestion,Claude Code,cli,high
+Backend,25/08/2026 18:50,25/08/2026 18:56,0:06:00,AI,Sonnet 5,Rama nueva y documentacion de cierre del plan Bold antes de delegar implementacion del backend,Claude Code,cli,low
+Backend,25/08/2026 18:56,25/08/2026 19:16,0:20:00,AI,Sonnet 5,Implementa backend de pago Bold firma boton webhook y reconciliacion sin bloqueo de payment_id,Claude Code,cli,high
+Backend,25/08/2026 19:16,25/08/2026 19:25,0:09:00,AI,Sonnet 5,Fix llave de ventasEfectivo revision de seguridad y fix de timeout en reconciliacion Bold,Claude Code,cli,medium
+Workspace setting,25/08/2026 20:20,25/08/2026 20:41,0:21:00,AI,Sonnet 5,Investiga alerta de GitGuardian confirma falso positivo y agrega regla de ignorado auditable,Claude Code,cli,low
+Cloud infraestructure,25/08/2026 20:45,25/08/2026 21:35,0:50:00,AI,Sonnet 5,Verifica backend de Bold en staging real con 5 escenarios por curl y limpia datos,Claude Code,cli,high

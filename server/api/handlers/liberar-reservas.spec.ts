@@ -46,7 +46,9 @@ it('libera el aforo de una reserva vencida en estado iniciada', async () => {
   expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
 });
 
-it.each(['esperando_comprobante', 'en_revision'])(
+// 'esperando_pago_bold' (roadmap #19, Sub-tarea 1) — una reserva de Bold
+// también retiene aforo hasta que el webhook (o el TTL) la resuelva.
+it.each(['esperando_comprobante', 'esperando_pago_bold', 'en_revision'])(
   'libera el aforo de una reserva vencida en estado %s',
   async (estado) => {
     liberarSillasMock.mockResolvedValueOnce(undefined);

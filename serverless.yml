@@ -270,6 +270,17 @@ functions:
       SES_REMITENTE: ${env:SES_REMITENTE, ''}
       URL_BASE_APP: ${env:URL_BASE_APP, ''}
       SECRETO_ENLACES_MAGICOS: ${env:SECRETO_ENLACES_MAGICOS, ''}
+      # Bold (roadmap #19, Sub-tarea 1) — necesarias desde que crearCompraBold()
+      # firma el botón (BOLD_LLAVE_SECRETA, vía firmarBoton()) y devuelve la
+      # llave de identidad pública al frontend (BOLD_LLAVE_IDENTIDAD, nunca la
+      # secreta). Agregadas de una vez en este mismo cambio, no como fix
+      # posterior — mismo gotcha ya sufrido con SES_REMITENTE/
+      # SECRETO_ENLACES_MAGICOS en esta misma función (MEMORY.md §7).
+      # BOLD_LLAVE_IDENTIDAD también la usa liberarReservasVencidas() de
+      # aforo.ts (esSeguroExpirarReservaBold, reconciliación de respaldo) —
+      # reservarSillas() la invoca desde este mismo handler.
+      BOLD_LLAVE_SECRETA: ${env:BOLD_LLAVE_SECRETA, ''}
+      BOLD_LLAVE_IDENTIDAD: ${env:BOLD_LLAVE_IDENTIDAD, ''}
     package:
       # Depende de documentoDynamoDB y de @aws-sdk/client-ses — mismo
       # motivo de bundle que eventos-publicos.ts/liberar-reservas.ts
@@ -284,6 +295,40 @@ functions:
       - httpApi:
           path: /api/compras/{compraId}/estado
           method: get
+
+  boldWebhook:
+    handler: dist-server-bundle/bold-webhook.handler
+    role: !GetAtt BoldWebhookLambdaRole.Arn
+    description: >-
+      POST /api/pagos/bold/webhook — confirma/rechaza el pago de una compra
+      esperando_pago_bold (roadmap #19, Sub-tarea 1). Sin exigirRol: la
+      única credencial es la firma HMAC de Bold (x-bold-signature).
+    environment:
+      TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
+      URL_BASE_APP: ${env:URL_BASE_APP, ''}
+      SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
+      SES_REMITENTE: ${env:SES_REMITENTE, ''}
+      BOLD_LLAVE_SECRETA: ${env:BOLD_LLAVE_SECRETA, ''}
+      # 'true' en staging (llaves de prueba reales de Bold, que firman el
+      # webhook con una llave vacía en vez de BOLD_LLAVE_SECRETA — hallazgo
+      # verificado, services/bold.ts), 'false' en production.
+      BOLD_MODO_PRUEBAS:
+        Fn::If:
+          - EsProduccion
+          - 'false'
+          - 'true'
+    package:
+      # Depende de documentoDynamoDB y de @aws-sdk/client-ses — mismo motivo
+      # de bundle que compras.ts/aprobaciones.ts (server/bundle-lambdas.mjs).
+      patterns:
+        - '!**'
+        - 'dist-server-bundle/bold-webhook.js'
+    events:
+      - httpApi:
+          path: /api/pagos/bold/webhook
+          method: post
 
   comprobantes:
     handler: dist-server-bundle/comprobantes.handler
@@ -376,6 +421,15 @@ functions:
       URL_BASE_APP: ${env:URL_BASE_APP, ''}
       SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
       FIREBASE_SERVICE_ACCOUNT_AGORA: ${env:FIREBASE_SERVICE_ACCOUNT_AGORA, ''}
+      # roadmap #19 (Bold): reservarSillas() puede disparar
+      # liberarReservasVencidas() -> esSeguroExpirarReservaBold(), que
+      # consulta el endpoint de reconciliación de Bold con esta llave. Sin
+      # ella, esa consulta falla (401) y la función conservadoramente NO
+      # expira la reserva de Bold en pugna — modo de fallo seguro (nunca
+      # pierde una venta), pero retrasa la liberación real de aforo hasta
+      # que el TTL de DynamoDB la reclame. Solo necesita la llave pública de
+      # identidad, nunca la secreta — esta función no verifica firmas.
+      BOLD_LLAVE_IDENTIDAD: ${env:BOLD_LLAVE_IDENTIDAD, ''}
     package:
       # Depende de firebase-admin (vía exigirRol), documentoDynamoDB y
       # @aws-sdk/client-ses — mismo motivo de bundle que aprobaciones.ts
@@ -836,6 +890,81 @@ resources:
                     - ses:SendEmail
                     - ses:SendRawEmail
                   Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+
+    BoldWebhookLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: agora-bold-webhook-role-${sls:stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          # Mínimo privilegio (CLAUDE.md §5, A05): bold-webhook.ts nunca usa
+          # exigirRol (la única credencial es la firma HMAC de Bold), sin
+          # acceso a agora-usuarios. Sobre agora-compras: GetItem (buscar la
+          # compra por compraId, GetCommand directo — no hay GSI de por
+          # medio) + UpdateItem condicional (aprobar/rechazar) — sin
+          # PutItem/Query/Scan, esta función nunca crea ni lista compras.
+          - PolicyName: agora-bold-webhook-compras-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraCompras.Arn
+          # GetItem sobre agora-eventos: nombre del evento para el correo de
+          # boletas emitidas. UpdateItem: confirmarSillas/liberarSillas de
+          # aforo.ts, invocadas desde procesarPagoAprobado/procesarPagoRechazado
+          # — sin este permiso la escritura condicional falla con
+          # AccessDeniedException en vez de ConditionalCheckFailedException,
+          # mismo gotcha real ya encontrado en staging con aprobaciones.ts
+          # (MEMORY.md §7).
+          - PolicyName: agora-bold-webhook-eventos-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt AgoraEventos.Arn
+          # PutItem sobre agora-boletas: emitirBoletas() de boleteria.ts,
+          # invocada tras confirmar el aforo de un pago Bold aprobado.
+          - PolicyName: agora-bold-webhook-boletas-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                  Resource: !GetAtt AgoraBoletas.Arn
+          # ses:SendEmail (no ses:*), acotado a la identidad verificada de
+          # letiende.co — el correo de boletas emitidas es el único que esta
+          # función envía.
+          - PolicyName: agora-bold-webhook-ses-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ses:SendEmail
+                    - ses:SendRawEmail
+                  Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/letiende.co'
+          # Sin política de S3: bold-webhook.ts nunca toca comprobantes ni
+          # activos. Sin permiso saliente adicional para llamar a Bold: la
+          # verificación de firma es HMAC local (services/bold.ts), esta
+          # función nunca hace la consulta de reconciliación (esa vive en
+          # aforo.ts, invocada desde compras.ts/ventas-efectivo.ts) — y una
+          # petición HTTPS saliente no requiere ningún permiso IAM (no es
+          # una llamada a un servicio de AWS).
 
     ComprobantesLambdaRole:
       Type: AWS::IAM::Role

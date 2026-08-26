@@ -6,6 +6,7 @@ const {
   confirmarSillasMock,
   emitirBoletasMock,
   firmarCodigoBoletaMock,
+  firmarBotonMock,
   generarTokenEnlaceMock,
   enviarMock,
 } = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ const {
   confirmarSillasMock: vi.fn(),
   emitirBoletasMock: vi.fn(),
   firmarCodigoBoletaMock: vi.fn(),
+  firmarBotonMock: vi.fn(),
   generarTokenEnlaceMock: vi.fn(),
   enviarMock: vi.fn(),
 }));
@@ -24,6 +26,9 @@ vi.mock('../lib/enlaces-magicos', () => ({ generarTokenEnlace: generarTokenEnlac
 // (boletería opcional), mismo criterio de mock que ventas-efectivo.spec.ts.
 vi.mock('../lib/firma-boletas', () => ({ firmarCodigoBoleta: firmarCodigoBoletaMock }));
 vi.mock('../services/boleteria', () => ({ emitirBoletas: emitirBoletasMock }));
+// Bold (roadmap #19, Sub-tarea 1) — necesario solo para la rama "pago con
+// Bold"; su propia lógica de firma ya está cubierta en services/bold.spec.ts.
+vi.mock('../services/bold', () => ({ firmarBoton: firmarBotonMock }));
 vi.mock('../services/notificaciones', () => ({
   CanalCorreoSes: vi.fn().mockImplementation(function (this: { enviar: typeof enviarMock }) {
     this.enviar = enviarMock;
@@ -63,6 +68,11 @@ const eventoPublicado = {
   estado: 'publicado',
   maxBoletasPorCompra: 4,
   plazoComprobanteMinutos: 10,
+  // Bold (roadmap #19, Sub-tarea 1) — todo ítem real de agora-eventos
+  // siempre trae mediosPago (eventos.ts lo exige al crear/actualizar); sin
+  // 'bold' aquí a propósito, para que las pruebas de "Bold no habilitado"
+  // reflejen el caso real más común.
+  mediosPago: ['transferencia'],
   etapas: [
     { etapaId: 'et-1', nombre: 'Preventa', precio: 45000, cierraEn: '2026-09-01T00:00:00.000Z', orden: 1 },
   ],
@@ -92,6 +102,12 @@ async function invocar(metodo: string, opciones?: Parameters<typeof crearPeticio
 
 const eventoSinEtapas = { ...eventoPublicado, slug: 'charla-libre', etapas: [] };
 
+// Bold (roadmap #19, Sub-tarea 1) — mismo evento base, con 'bold' habilitado
+// entre sus mediosPago (invariante ya reforzada en eventos.ts: nunca puede
+// tener 'bold' con etapas: [], así que no hace falta una variante sin
+// etapas para este medio).
+const eventoConBold = { ...eventoPublicado, slug: 'concierto-bold', mediosPago: ['bold', 'transferencia'] };
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(AHORA);
@@ -100,8 +116,10 @@ beforeEach(() => {
   confirmarSillasMock.mockReset();
   emitirBoletasMock.mockReset();
   firmarCodigoBoletaMock.mockReset();
+  firmarBotonMock.mockReset();
   generarTokenEnlaceMock.mockReset();
   enviarMock.mockReset();
+  firmarBotonMock.mockReturnValue('firma-bold-simulada');
   generarTokenEnlaceMock.mockReturnValue({ token: 'token-en-claro', hash: 'hash-derivado' });
   confirmarSillasMock.mockResolvedValue(undefined);
   emitirBoletasMock.mockResolvedValue([
@@ -458,6 +476,157 @@ describe('POST /api/compras — adquisición sin etapas (boletería opcional)', 
 
     expect(respuesta.statusCode).toBe(409);
     expect(confirmarSillasMock).not.toHaveBeenCalled();
+  });
+});
+
+// Bold (roadmap #19, Sub-tarea 1 — .omc/plans/bold-pagos.md).
+describe('POST /api/compras — pago con Bold', () => {
+  it('reserva sillas, deja la compra en esperando_pago_bold y devuelve firma/llave/compraId para el widget', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Items: [eventoConBold] }) // QueryCommand por slug
+      .mockResolvedValueOnce({}); // PutCommand de la compra
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: {
+        slug: 'concierto-bold',
+        cantidad: 2,
+        cliente: clienteValido,
+        autorizacionDatos: true,
+        medioPago: 'bold',
+      },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.estado).toBe('esperando_pago_bold');
+    expect(cuerpo.montoTotal).toBe(90000);
+    expect(cuerpo.compraId).toEqual(expect.any(String));
+    expect(cuerpo.bold).toMatchObject({
+      llaveIdentidad: expect.any(String),
+      firma: 'firma-bold-simulada',
+      moneda: 'COP',
+    });
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(firmarBotonMock).toHaveBeenCalledWith(cuerpo.compraId, 90000, 'COP');
+
+    const comandoPut = sendMock.mock.calls[1]?.[0];
+    expect(comandoPut.input.Item).toMatchObject({
+      eventoId: 'evt-1',
+      etapaId: 'et-1',
+      cantidad: 2,
+      montoTotal: 90000,
+      medioPago: 'bold',
+      estado: 'esperando_pago_bold',
+    });
+    // Sin tokenComprobanteHash — ese medio no aplica a Bold.
+    expect(comandoPut.input.Item.tokenComprobanteHash).toBeUndefined();
+    expect(typeof comandoPut.input.Item.expiraEn).toBe('number');
+
+    // Sin enlace de comprobante ni correo — el flujo de Bold no envía este
+    // correo, la confirmación llega vía bold-webhook.ts cuando el pago se
+    // aprueba.
+    expect(generarTokenEnlaceMock).not.toHaveBeenCalled();
+    expect(enviarMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 409 si el evento no tiene Bold habilitado, sin importar lo que el payload pida', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoPublicado] }); // eventoPublicado no tiene 'bold' en mediosPago
+
+    const respuesta = await invocar('POST', {
+      cuerpo: {
+        slug: 'concierto-jazz',
+        cantidad: 1,
+        cliente: clienteValido,
+        autorizacionDatos: true,
+        medioPago: 'bold',
+      },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 400 si medioPago no es transferencia ni bold (ej. "efectivo", exclusivo de venta presencial)', async () => {
+    const respuesta = await invocar('POST', {
+      cuerpo: {
+        slug: 'concierto-bold',
+        cantidad: 1,
+        cliente: clienteValido,
+        autorizacionDatos: true,
+        medioPago: 'efectivo',
+      },
+    });
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 409 con las sillas disponibles reales cuando el aforo no alcanza (CU-17)', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConBold] });
+    reservarSillasMock.mockRejectedValueOnce(new AforoInsuficienteError(1));
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-bold', cantidad: 3, cliente: clienteValido, autorizacionDatos: true, medioPago: 'bold' },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.sillasDisponibles).toBe(1);
+  });
+
+  it('responde 409 si colisiona el compraId al persistir (condición fallida)', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Items: [eventoConBold] })
+      .mockRejectedValueOnce(new ConditionalCheckFailedException());
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-bold', cantidad: 1, cliente: clienteValido, autorizacionDatos: true, medioPago: 'bold' },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+  });
+
+  it('nunca acepta el monto/total del payload — siempre lo calcula del backend, igual que transferencia', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConBold] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: {
+        slug: 'concierto-bold',
+        cantidad: 1,
+        cliente: clienteValido,
+        autorizacionDatos: true,
+        medioPago: 'bold',
+        montoTotal: 1,
+      },
+    });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.montoTotal).toBe(45000);
+  });
+
+  it('el camino de transferencia existente sigue sin cambios de comportamiento cuando medioPago se envía explícitamente', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoPublicado] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: {
+        slug: 'concierto-jazz',
+        cantidad: 2,
+        cliente: clienteValido,
+        autorizacionDatos: true,
+        medioPago: 'transferencia',
+      },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.estado).toBe('esperando_comprobante');
+    const comandoPut = sendMock.mock.calls[1]?.[0];
+    expect(comandoPut.input.Item.medioPago).toBe('transferencia');
+    expect(firmarBotonMock).not.toHaveBeenCalled();
   });
 });
 
