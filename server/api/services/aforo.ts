@@ -1,5 +1,6 @@
 import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from './dynamodb';
+import type { NotificacionBold } from './bold';
 
 /**
  * Las tres primitivas de escritura condicional del ciclo de vida del aforo
@@ -94,60 +95,155 @@ async function intentarReservar(eventoId: string, cantidad: number): Promise<voi
  * impedir el reintento de la reserva que sí importa — el TTL real sigue
  * siendo la red de seguridad final.
  */
-async function liberarReservasVencidas(eventoId: string): Promise<void> {
-  const ahoraEpoch = Math.floor(Date.now() / 1000);
+type EstadoConTtl = 'esperando_comprobante' | 'esperando_pago_bold';
 
-  let vencidas: Record<string, unknown>[];
+async function buscarComprasVencidas(
+  eventoId: string,
+  estado: EstadoConTtl,
+  ahoraEpoch: number,
+): Promise<Record<string, unknown>[]> {
   try {
     const resultado = await documentoDynamoDB.send(
       new QueryCommand({
         TableName: process.env['TABLA_COMPRAS'],
         IndexName: 'eventoId-creadaEn-index',
         KeyConditionExpression: 'eventoId = :eventoId',
-        FilterExpression: 'estado = :esperando AND expiraEn < :ahora',
+        FilterExpression: 'estado = :estado AND expiraEn < :ahora',
         ExpressionAttributeValues: {
           ':eventoId': eventoId,
-          ':esperando': 'esperando_comprobante',
+          ':estado': estado,
           ':ahora': ahoraEpoch,
         },
       }),
     );
-    vencidas = resultado.Items ?? [];
+    return resultado.Items ?? [];
   } catch {
+    return [];
+  }
+}
+
+async function expirarYLiberar(
+  eventoId: string,
+  compra: Record<string, unknown>,
+  estadoOrigen: EstadoConTtl,
+): Promise<void> {
+  const compraId = compra['compraId'];
+  const cantidadCompra = compra['cantidad'];
+  if (typeof compraId !== 'string' || typeof cantidadCompra !== 'number') {
     return;
   }
 
-  for (const compra of vencidas) {
+  try {
+    await documentoDynamoDB.send(
+      new UpdateCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        Key: { compraId },
+        UpdateExpression: 'SET estado = :expirada',
+        ConditionExpression: 'estado = :estadoOrigen',
+        ExpressionAttributeValues: { ':expirada': 'expirada', ':estadoOrigen': estadoOrigen },
+      }),
+    );
+  } catch {
+    // Condición fallida (alguien más ya la procesó) o cualquier otro error:
+    // se ignora esta compra puntual y se sigue con las demás.
+    return;
+  }
+
+  try {
+    await liberarSillas(eventoId, cantidadCompra);
+  } catch {
+    // Best-effort — si esto falla, el TTL real de esa compra la recupera
+    // más adelante (su estado ya no retiene aforo según liberar-reservas.ts,
+    // así que ese camino tampoco duplicaría la liberación si llegara a
+    // tener éxito después).
+  }
+}
+
+const BASE_URL_RECONCILIACION_BOLD = 'https://integrations.api.bold.co';
+
+/**
+ * Bold (roadmap #19, Sub-tarea 1, decisión 4 del plan aprobado en
+ * `.omc/plans/bold-pagos.md`) — antes de expirar una compra
+ * `esperando_pago_bold`, consulta UNA VEZ el endpoint de reconciliación de
+ * respaldo de Bold para confirmar que de verdad no hubo un pago aprobado
+ * que el webhook (`handlers/bold-webhook.ts`) no logró entregar (reintentos
+ * agotados, falla de red, etc.).
+ *
+ * **Hallazgo que cierra el bloqueo que el plan anticipaba** ("¿Ágora tiene
+ * el `payment_id` de Bold antes de que llegue el webhook?"): verificado hoy
+ * (25/08/2026) contra la documentación oficial
+ * (https://developers.bold.co/webhook) — el propio endpoint acepta
+ * consultar por la REFERENCIA EXTERNA en vez del `payment_id` de Bold, con
+ * el parámetro `is_external_reference=true`. La referencia externa es
+ * exactamente el `compraId` que Ágora ya le envía a Bold como
+ * `data-order-id` al renderizar el botón (`firmarBoton`, `services/bold.ts`)
+ * — Ágora nunca necesita guardar el `payment_id` de Bold de antemano, el
+ * bloqueo no existe.
+ *
+ * **Decisión de diseño explícita, más allá de lo que el plan detalló** (se
+ * documenta aquí porque es una bifurcación real, no algo que deba asumirse
+ * en silencio): si la reconciliación encuentra un `SALE_APPROVED`, esta
+ * función NO completa la aprobación (no llama `confirmarSillas`/
+ * `emitirBoletas`/notifica al cliente desde aquí) — hacerlo duplicaría la
+ * lógica de negocio completa de `handlers/bold-webhook.ts` dentro de
+ * `aforo.ts`, un servicio que hoy solo conoce DynamoDB, no boletería ni
+ * notificaciones (acoplamiento nuevo no pedido explícitamente por la
+ * tarea). En vez de eso, deja la compra tal cual — sin expirarla — para que
+ * el reintento del webhook de Bold (hasta 24 h) la resuelva por el camino
+ * normal la próxima vez que llegue. Esto ya mitiga el riesgo real de la
+ * decisión 4 (perder una venta real por expiración prematura) sin inventar
+ * una segunda vía de aprobación paralela.
+ *
+ * Si la consulta misma falla (red, Bold caído, credenciales), también se
+ * trata como "no seguro expirar" — más conservador que arriesgar una venta
+ * real por un fallo transitorio: el TTL real de DynamoDB (~48 h,
+ * `tech-specs.md` §5.4 punto 4) sigue siendo la red de seguridad final si
+ * esto queda colgado más de lo esperado.
+ */
+async function esSeguroExpirarReservaBold(compraId: string): Promise<boolean> {
+  try {
+    const llaveIdentidad = process.env['BOLD_LLAVE_IDENTIDAD'] ?? '';
+    const url = `${BASE_URL_RECONCILIACION_BOLD}/payments/webhook/notifications/${encodeURIComponent(compraId)}?is_external_reference=true`;
+    const respuesta = await fetch(url, { headers: { Authorization: `x-api-key ${llaveIdentidad}` } });
+    if (!respuesta.ok) {
+      return false;
+    }
+    const cuerpo = (await respuesta.json()) as { notifications?: Pick<NotificacionBold, 'type'>[] };
+    const hayPagoAprobado = (cuerpo.notifications ?? []).some(
+      (notificacion) => notificacion.type === 'SALE_APPROVED',
+    );
+    return !hayPagoAprobado;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Libera activamente las reservas de ESTE evento cuyo `expiraEn` ya pasó,
+ * en los dos estados que lo usan como TTL de negocio: `esperando_comprobante`
+ * (transferencia manual) y `esperando_pago_bold` (roadmap #19, Sub-tarea 1
+ * — reconciliada contra Bold antes de expirar, ver
+ * `esSeguroExpirarReservaBold`). Sin duplicar el resto de la función: ambas
+ * ramas comparten `buscarComprasVencidas`/`expirarYLiberar`.
+ */
+async function liberarReservasVencidas(eventoId: string): Promise<void> {
+  const ahoraEpoch = Math.floor(Date.now() / 1000);
+
+  const vencidasComprobante = await buscarComprasVencidas(eventoId, 'esperando_comprobante', ahoraEpoch);
+  for (const compra of vencidasComprobante) {
+    await expirarYLiberar(eventoId, compra, 'esperando_comprobante');
+  }
+
+  const vencidasBold = await buscarComprasVencidas(eventoId, 'esperando_pago_bold', ahoraEpoch);
+  for (const compra of vencidasBold) {
     const compraId = compra['compraId'];
-    const cantidadCompra = compra['cantidad'];
-    if (typeof compraId !== 'string' || typeof cantidadCompra !== 'number') {
+    if (typeof compraId !== 'string') {
       continue;
     }
-
-    try {
-      await documentoDynamoDB.send(
-        new UpdateCommand({
-          TableName: process.env['TABLA_COMPRAS'],
-          Key: { compraId },
-          UpdateExpression: 'SET estado = :expirada',
-          ConditionExpression: 'estado = :esperando',
-          ExpressionAttributeValues: { ':expirada': 'expirada', ':esperando': 'esperando_comprobante' },
-        }),
-      );
-    } catch {
-      // Condición fallida (alguien más ya la procesó) o cualquier otro
-      // error: se ignora esta compra puntual y se sigue con las demás.
+    if (!(await esSeguroExpirarReservaBold(compraId))) {
       continue;
     }
-
-    try {
-      await liberarSillas(eventoId, cantidadCompra);
-    } catch {
-      // Best-effort — si esto falla, el TTL real de esa compra la recupera
-      // más adelante (su estado ya no retiene aforo según liberar-reservas.ts,
-      // así que ese camino tampoco duplicaría la liberación si llegara a
-      // tener éxito después).
-    }
+    await expirarYLiberar(eventoId, compra, 'esperando_pago_bold');
   }
 }
 

@@ -139,6 +139,20 @@ jobs:
           # crea/edita bien en Ágora, pero nunca aparece en Calendar, sin
           # ningún error visible (encontrado en vivo en staging, MEMORY.md §7).
           GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_CALENDAR_SERVICE_ACCOUNT }}
+          # Mismo gotcha, esta vez con las Lambdas compras/boldWebhook
+          # (roadmap #19, Sub-tarea 1, Bold): sin BOLD_LLAVE_SECRETA, la
+          # firma del botón se calcula igual pero con una llave vacía y
+          # predecible (falsificable sin acceso al sistema, CLAUDE.md §5,
+          # A02) y la verificación del webhook rechaza toda firma real de
+          # producción. Sin BOLD_LLAVE_IDENTIDAD, compras.ts le devuelve al
+          # frontend una llave de identidad vacía y el botón de Bold nunca
+          # renderiza (Sub-tarea 2). Checklist obligatorio de este proyecto,
+          # verificado por CLI tras el despliegue (CLAUDE.md, protocolo de
+          # git): confirmar con `aws lambda get-function-configuration` que
+          # la Lambda real trae el valor real, no la cadena vacía por
+          # defecto de `${env:..., ''}`.
+          BOLD_LLAVE_SECRETA: ${{ secrets.BOLD_LLAVE_SECRETA }}
+          BOLD_LLAVE_IDENTIDAD: ${{ secrets.BOLD_LLAVE_IDENTIDAD }}
 
       - name: Smoke test contra staging recién desplegado
         run: |
@@ -205,3 +219,9 @@ jobs:
           SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}
           SECRETO_FIRMA_BOLETAS: ${{ secrets.SECRETO_FIRMA_BOLETAS }}
           GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_CALENDAR_SERVICE_ACCOUNT }}
+          # Mismo motivo que en desplegar-staging arriba. BOLD_MODO_PRUEBAS
+          # no viaja por aquí: es un literal 'true'/'false' resuelto por
+          # stage directamente en serverless.yml (Fn::If EsProduccion), no
+          # un secreto — no es sensible.
+          BOLD_LLAVE_SECRETA: ${{ secrets.BOLD_LLAVE_SECRETA }}
+          BOLD_LLAVE_IDENTIDAD: ${{ secrets.BOLD_LLAVE_IDENTIDAD }}

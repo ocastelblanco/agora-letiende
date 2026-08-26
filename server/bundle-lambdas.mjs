@@ -72,6 +72,11 @@ const entradas = [
   // firebase-admin (vía exigirRol) y documentoDynamoDB — mismo motivo de
   // bundle que aprobaciones.ts/ventas-efectivo.ts.
   { entrada: 'dist-server/api/handlers/reportes.js', salida: `${OUT_DIR}/reportes.js` },
+  // bold-webhook.ts (roadmap #19, Sub-tarea 1) depende de documentoDynamoDB
+  // y @aws-sdk/client-ses (vía notificaciones.ts) — mismo motivo de bundle
+  // que compras.ts, sin firebase-admin (endpoint público, nunca usa
+  // exigirRol: la única credencial es la firma HMAC de Bold).
+  { entrada: 'dist-server/api/handlers/bold-webhook.js', salida: `${OUT_DIR}/bold-webhook.js` },
 ];
 
 for (const { entrada, salida } of entradas) {

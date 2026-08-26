@@ -3,9 +3,15 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import type { DynamoDBStreamEvent, DynamoDBStreamHandler } from 'aws-lambda';
 import { SillasReservadasInsuficientesError, liberarSillas } from '../services/aforo';
 
+// 'esperando_pago_bold' (roadmap #19, Sub-tarea 1) — agregado en el mismo
+// cambio que handlers/compras.ts (única otra copia local de este tipo en el
+// backend, verificado con `grep -rn "type EstadoCompra" server/api`): una
+// compra en este estado también tiene sillas reservadas hasta que el
+// webhook de Bold la resuelva (handlers/bold-webhook.ts).
 type EstadoCompra =
   | 'iniciada'
   | 'esperando_comprobante'
+  | 'esperando_pago_bold'
   | 'en_revision'
   | 'aprobada'
   | 'rechazada'
@@ -17,6 +23,7 @@ type EstadoCompra =
 const ESTADOS_QUE_RETIENEN_AFORO: readonly EstadoCompra[] = [
   'iniciada',
   'esperando_comprobante',
+  'esperando_pago_bold',
   'en_revision',
 ];
 
