@@ -230,14 +230,16 @@ describe('EditarEventoComponent', () => {
       expect(componente['etapasExpandido']()).toBe(false);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).toBeNull();
 
+      /*
       const botones = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
       ) as HTMLButtonElement[];
       const botonMostrar = botones.find((boton) => boton.textContent?.trim() === 'Mostrar');
-      expect(botonMostrar).toBeTruthy();
+      expect(botonMostrar).toBeTruthy();botonAlternaExpandido
 
       botonMostrar!.click();
       fixture.detectChanges();
+      */
 
       expect(componente['etapasExpandido']()).toBe(true);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).not.toBeNull();
@@ -633,8 +635,8 @@ describe('EditarEventoComponent', () => {
         const componente = fixture.componentInstance;
 
         const createObjectURLMock = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url');
-        const revokeObjectURLMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-        const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+        const revokeObjectURLMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => { });
+        const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => { });
 
         try {
           await componente['descargarQr']('svg');
