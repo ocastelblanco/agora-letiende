@@ -230,16 +230,17 @@ describe('EditarEventoComponent', () => {
       expect(componente['etapasExpandido']()).toBe(false);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).toBeNull();
 
-      /*
       const botones = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
       ) as HTMLButtonElement[];
+      const botonMostrar = botones.find((boton) => boton.textContent.includes('Mostrar'));
+      /*
       const botonMostrar = botones.find((boton) => boton.textContent?.trim() === 'Mostrar');
       expect(botonMostrar).toBeTruthy();botonAlternaExpandido
+      */
 
       botonMostrar!.click();
       fixture.detectChanges();
-      */
 
       expect(componente['etapasExpandido']()).toBe(true);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).not.toBeNull();
