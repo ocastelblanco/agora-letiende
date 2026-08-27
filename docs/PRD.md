@@ -2,7 +2,7 @@
 
 Documento de requisitos de producto de **Ágora**, la aplicación de boletería del teatro de Le Tiende. Está escrito en lenguaje de negocio: describe **qué** hace el producto y **para quién**, no cómo se implementa. El detalle técnico vive en `tech-specs.md`.
 
-**Estado del documento:** actualizado el 24/08/2026. **La v1 completa (§6) ya está en producción** en `https://agora.letiende.co`. Para el detalle de qué sigue después de v1 dirigido a los socios de Le Tiende (v2/v3, en lenguaje no técnico), ver `docs/roadmap-v2-v3.md`.
+**Estado del documento:** actualizado el 26/08/2026. **La v1 completa (§6) ya está en producción** en `https://agora.letiende.co`. Para el detalle de qué sigue después de v1 dirigido a los socios de Le Tiende (v2/v3, en lenguaje no técnico), ver `docs/roadmap-v2-v3.md`.
 
 ---
 
@@ -263,10 +263,10 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 
 | Funcionalidad | Prioridad | Estado |
 |---|---|---|
-| Boletería opcional (aforo sin cobro) | **Alta** | ✅ Implementado y validado en vivo en staging (roadmap #24, PR #46) — pendiente de fusionar |
-| Eventos con boletería externa | **Alta** | ✅ Implementado y validado en vivo en staging (roadmap #25, PR #47) — pendiente de fusionar |
+| Boletería opcional (aforo sin cobro) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #24, PR #46) |
+| Eventos con boletería externa | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #25, PR #47) |
 | Sincronización con Google Calendar | Media | ✅ Fusionado y verificado en producción (roadmap #22, PR #48) |
-| Pago automático con Bold | **Alta** | 🟡 En progreso — backend implementado y verificado de punta a punta en staging (roadmap #19, PR #50, sin fusionar); falta el botón de pago (frontend) |
+| Pago automático con Bold | **Alta** | ✅ Fusionado y validado de punta a punta en staging real, con tarjetas de prueba (aprobado/rechazado/error/abandono) (roadmap #19, PR #50/#51/#52) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
 | Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |

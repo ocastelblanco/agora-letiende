@@ -534,7 +534,7 @@ Plantillas de v1: enlace para cargar comprobante (cliente), aviso de comprobante
 | Firebase Authentication | ⬜ Por configurar | Google Sign-In del equipo. **Proyecto compartido con Comandante y Babel** | — |
 | AWS SES | ⬜ Por verificar remitente | Todos los correos, desde `taquilla@letiende.co` | — |
 | AWS S3 | ⬜ Por crear | Comprobantes (privado) y activos de evento | — |
-| Bold | 🟡 Backend fusionado y verificado (PR #50); fix de aforo de `esperando_pago_bold` ya fusionado (PR #52); frontend en revisión (PR #51) | — | v2: pago automático, webhook firmado y reconciliado, botón embebido en `comprar.component` — falta la validación manual final en staging con tarjetas de prueba antes de fusionar el PR #51 |
+| Bold | ✅ Fusionado y validado de punta a punta en staging real (PR #50 backend, #51 frontend, #52 fix de aforo) | — | v2: pago automático, webhook firmado y reconciliado, botón embebido en `comprar.component` con máquina de estados (checkout embebido, verificación/reapertura tras cierre sin confirmación) |
 | AWS End User Messaging Social | ⬜ No integrado | — | v2: WhatsApp. Requiere WABA aprobada por Meta |
 | Google Calendar API | ⬜ No integrado | — | v2: sincronización con `letiende.co@gmail.com` |
 | `api.letiende.co` | ⬜ Sin uso previsto | — | API compartida del ecosistema; Ágora no la consume hoy |

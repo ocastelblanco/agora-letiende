@@ -132,7 +132,7 @@ describe('PanelEventoComponent', () => {
     expect(texto).toContain('$90.000');
     // Tercera cifra de aforo — sillas en compras esperando_comprobante/
     // esperando_pago_bold sin resolver todavía (handlers/reportes.ts).
-    expect(texto).toContain('Sillas pendientes de confirmar');
+    expect(texto).toContain('Boletas pendientes de confirmar');
     expect(texto).toContain('7');
     // Totales que nunca desaparecen aunque `porEtapa` tenga huérfanos
     // (handlers/reportes.ts).
