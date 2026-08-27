@@ -5,415 +5,392 @@
     </h1>
 
     @if (cargando()) {
-      <p class="text-sm text-primary/70">Cargando…</p>
+    <p class="text-sm text-primary/70">Cargando…</p>
     } @else if (eventoNoEncontrado()) {
-      <p class="text-sm text-danger">No se encontró ese evento.</p>
+    <p class="text-sm text-danger">No se encontró ese evento.</p>
     } @else {
-      <form
-        [formGroup]="formulario"
-        (ngSubmit)="guardar()"
-        class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
-      >
-        <div>
-          <label for="nombre" class="mb-1 block text-sm font-semibold text-primary">Nombre</label>
-          <input
-            id="nombre"
-            type="text"
-            formControlName="nombre"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-          />
-        </div>
+    <form [formGroup]="formulario"
+          (ngSubmit)="guardar()"
+          class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+      <div>
+        <label for="nombre"
+               class="mb-1 block text-sm font-semibold text-primary">Nombre</label>
+        <input id="nombre"
+               type="text"
+               formControlName="nombre"
+               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+      </div>
 
-        <div>
-          <label for="descripcion" class="mb-1 block text-sm font-semibold text-primary">
-            Descripción
-          </label>
-          <textarea
-            id="descripcion"
-            formControlName="descripcion"
-            rows="4"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-          ></textarea>
-        </div>
+      <div>
+        <label for="descripcion"
+               class="mb-1 block text-sm font-semibold text-primary">
+          Descripción
+        </label>
+        <textarea id="descripcion"
+                  formControlName="descripcion"
+                  rows="4"
+                  class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"></textarea>
+      </div>
 
-        <div>
-          <label for="fechaHora" class="mb-1 block text-sm font-semibold text-primary">
-            Fecha y hora (Bogotá)
-          </label>
-          <input
-            id="fechaHora"
-            type="datetime-local"
-            formControlName="fechaHora"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-          />
-        </div>
+      <div>
+        <label for="fechaHora"
+               class="mb-1 block text-sm font-semibold text-primary">
+          Fecha y hora (Bogotá)
+        </label>
+        <input id="fechaHora"
+               type="datetime-local"
+               formControlName="fechaHora"
+               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+      </div>
 
-        <div>
-          <label for="slug" class="mb-1 block text-sm font-semibold text-primary">
-            Slug (URL pública)
-          </label>
-          <input
-            id="slug"
-            type="text"
-            formControlName="slug"
-            placeholder="concierto-de-jazz"
-            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          />
-          @if (formulario.controls.slug.invalid && formulario.controls.slug.touched) {
-            <p class="mt-1 text-xs text-danger">
-              Solo minúsculas, números y guiones, ej. "concierto-de-jazz".
-            </p>
-          }
-          @if (modoCrear()) {
-            <p class="mt-1 text-xs text-primary/60">
-              Se sugiere solo a partir del nombre y la fecha — puedes editarlo.
-            </p>
-          }
-        </div>
-
-        @if (!esProductor()) {
-          <div class="flex items-center justify-between rounded-xl border border-primary/20 px-3 py-2">
-            <div>
-              <span class="block text-sm font-semibold text-primary">Boletería administrada por Le Tiende</span>
-              <span class="block text-xs text-primary/60">
-                Desactívalo para eventos con boletería externa (WhatsApp, Instagram, web) — Ágora
-                solo lo anuncia, no vende ni controla el aforo.
-              </span>
-            </div>
-            <mat-slide-toggle formControlName="administradoPorLeTiende" />
-          </div>
+      <div>
+        <label for="slug"
+               class="mb-1 block text-sm font-semibold text-primary">
+          Slug (URL pública)
+        </label>
+        <input id="slug"
+               type="text"
+               formControlName="slug"
+               placeholder="concierto-de-jazz"
+               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50" />
+        @if (formulario.controls.slug.invalid && formulario.controls.slug.touched) {
+        <p class="mt-1 text-xs text-danger">
+          Solo minúsculas, números y guiones, ej. "concierto-de-jazz".
+        </p>
         }
-
-        @if (administradoPorLeTiende()) {
-          <div>
-            <label for="sillasTotales" class="mb-1 block text-sm font-semibold text-primary">
-              Sillas totales
-            </label>
-            <input
-              id="sillasTotales"
-              type="number"
-              formControlName="sillasTotales"
-              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            @if (!modoCrear()) {
-              <p class="mt-1 text-xs text-primary/60">
-                Cambiar este valor ajusta las sillas disponibles por la diferencia. No puedes bajar el
-                aforo por debajo de lo ya vendido o reservado.
-              </p>
-            }
-          </div>
-
-          <div>
-            <label for="maxBoletasPorCompra" class="mb-1 block text-sm font-semibold text-primary">
-              Máximo de boletas por compra
-            </label>
-            <input
-              id="maxBoletasPorCompra"
-              type="number"
-              formControlName="maxBoletasPorCompra"
-              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-            />
-          </div>
-
-          <div>
-            <label
-              for="plazoComprobanteMinutos"
-              class="mb-1 block text-sm font-semibold text-primary"
-            >
-              Plazo para subir el comprobante (minutos)
-            </label>
-            <input
-              id="plazoComprobanteMinutos"
-              type="number"
-              formControlName="plazoComprobanteMinutos"
-              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-            />
-          </div>
-
-          @if (esProductor()) {
-            <div>
-              <span class="mb-1 block text-sm font-semibold text-primary">Productores</span>
-              <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
-                {{ productoresParaMostrar() }}
-              </p>
-            </div>
-            <div>
-              <span class="mb-1 block text-sm font-semibold text-primary">Porteros</span>
-              <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
-                {{ porterosParaMostrar() }}
-              </p>
-            </div>
-          } @else {
-            <mat-form-field appearance="outline">
-              <mat-label>Productores</mat-label>
-              <mat-select formControlName="productores" multiple>
-                @for (usuario of productoresDisponibles(); track usuario.email) {
-                  <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
-                }
-              </mat-select>
-              @if (formulario.controls.productores.invalid && formulario.controls.productores.touched) {
-                <mat-error>Se necesita al menos un productor.</mat-error>
-              }
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Porteros</mat-label>
-              <mat-select formControlName="porteros" multiple>
-                @for (usuario of porterosDisponibles(); track usuario.email) {
-                  <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-          }
-        } @else {
-          <div formGroupName="vinculoExterno" class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3">
-            <h2 class="text-sm font-semibold text-primary">Más información</h2>
-            <p class="text-xs text-primary/60">
-              El público verá un enlace "MÁS INFORMACIÓN" hacia este vínculo en vez del flujo de compra.
-            </p>
-            <mat-form-field appearance="outline">
-              <mat-label>Tipo de vínculo</mat-label>
-              <mat-select formControlName="tipo">
-                @for (tipo of tiposVinculoDisponibles; track tipo.valor) {
-                  <mat-option [value]="tipo.valor">{{ tipo.etiqueta }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-            <div>
-              @switch (formulario.controls.vinculoExterno.controls.tipo.value) {
-                @case ('whatsapp') {
-                  <label for="vinculoValor" class="mb-1 block text-xs text-primary/60">
-                    10 dígitos (se arma como https://wa.me/57 + el número)
-                  </label>
-                }
-                @case ('instagram') {
-                  <label for="vinculoValor" class="mb-1 block text-xs text-primary/60">
-                    Usuario de Instagram, sin @ (se arma como https://www.instagram.com/ + el usuario)
-                  </label>
-                }
-                @default {
-                  <label for="vinculoValor" class="mb-1 block text-xs text-primary/60">
-                    URL completa, debe empezar con https://
-                  </label>
-                }
-              }
-              <input
-                id="vinculoValor"
-                type="text"
-                formControlName="valor"
-                class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-              />
-              @if (
-                formulario.controls.vinculoExterno.controls.valor.invalid &&
-                formulario.controls.vinculoExterno.controls.valor.touched
-              ) {
-                <p class="mt-1 text-xs text-danger">Valor inválido para el tipo de vínculo seleccionado.</p>
-              }
-            </div>
-          </div>
+        @if (modoCrear()) {
+        <p class="mt-1 text-xs text-primary/60">
+          Se sugiere solo a partir del nombre y la fecha — puedes editarlo.
+        </p>
         }
+      </div>
 
+      @if (!esProductor()) {
+      <div class="flex items-center justify-between rounded-xl border border-primary/20 px-3 py-2">
+        <div>
+          <span class="block text-sm font-semibold text-primary">Boletería administrada por Le Tiende</span>
+          <span class="block text-xs text-primary/60">
+            Desactívalo para eventos con boletería externa (WhatsApp, Instagram, web) — Ágora
+            solo lo anuncia, no vende ni controla el aforo.
+          </span>
+        </div>
+        <mat-slide-toggle formControlName="administradoPorLeTiende" />
+      </div>
+      }
+
+      @if (administradoPorLeTiende()) {
+      <div>
+        <label for="sillasTotales"
+               class="mb-1 block text-sm font-semibold text-primary">
+          Sillas totales
+        </label>
+        <input id="sillasTotales"
+               type="number"
+               formControlName="sillasTotales"
+               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary disabled:cursor-not-allowed disabled:opacity-50" />
         @if (!modoCrear()) {
-          <div>
-            <label for="estado" class="mb-1 block text-sm font-semibold text-primary">Estado</label>
-            <select
-              id="estado"
-              formControlName="estado"
-              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-            >
-              <option value="borrador">Borrador</option>
-              <option value="publicado">Publicado</option>
-              <option value="agotado">Agotado</option>
-              <option value="finalizado">Finalizado</option>
-              <option value="cancelado">Cancelado</option>
-            </select>
-          </div>
+        <p class="mt-1 text-xs text-primary/60">
+          Cambiar este valor ajusta las sillas disponibles por la diferencia. No puedes bajar el
+          aforo por debajo de lo ya vendido o reservado.
+        </p>
         }
+      </div>
 
-        @if (administradoPorLeTiende()) {
-          <fieldset formGroupName="mediosPago" class="flex flex-col gap-2">
-            <legend class="mb-1 text-sm font-semibold text-primary">Medios de pago</legend>
-            @for (medio of mediosPagoDisponibles; track medio.valor) {
-              <label class="flex items-center gap-2 text-sm text-primary">
-                <input type="checkbox" [formControlName]="medio.valor" />
-                {{ medio.etiqueta }}
-              </label>
-            }
-            @if (etapas.length === 0 && !esProductor()) {
-              <p class="text-xs text-primary/60">
-                Bold se habilita al agregar al menos una etapa de boletería.
-              </p>
-            }
-          </fieldset>
+      <div>
+        <label for="maxBoletasPorCompra"
+               class="mb-1 block text-sm font-semibold text-primary">
+          Máximo de boletas por compra
+        </label>
+        <input id="maxBoletasPorCompra"
+               type="number"
+               formControlName="maxBoletasPorCompra"
+               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+      </div>
 
-          <div>
-            <div class="mb-2 flex items-center justify-between">
-              <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
-              <div class="flex items-center gap-2">
-                @if (!esProductor()) {
-                  <button mat-stroked-button type="button" (click)="agregarEtapa()">
-                    Agregar etapa
-                  </button>
-                }
-                <button
-                  type="button"
-                  class="text-xs font-semibold text-primary/60"
-                  [attr.aria-expanded]="etapasExpandido()"
-                  (click)="alternarEtapasExpandido()"
-                >
-                  {{ etapasExpandido() ? 'Ocultar' : 'Mostrar' }}
-                </button>
-              </div>
-            </div>
+      <div>
+        <label for="plazoComprobanteMinutos"
+               class="mb-1 block text-sm font-semibold text-primary">
+          Plazo para subir el comprobante (minutos)
+        </label>
+        <input id="plazoComprobanteMinutos"
+               type="number"
+               formControlName="plazoComprobanteMinutos"
+               class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+      </div>
 
-            @if (!etapasExpandido()) {
-              <p class="text-xs text-primary/60">{{ etapas.length }} etapa(s) configurada(s).</p>
-            }
-            @if (etapas.length === 0) {
-              <p class="text-xs text-primary/60">
-                Sin etapas, este evento no cobra nada — solo controla el aforo.
-              </p>
-            }
-
-            @if (etapasExpandido()) {
-              <div formArrayName="etapas" class="flex flex-col gap-4">
-                @for (grupo of etapas.controls; track grupo; let indice = $index) {
-                  <div
-                    [formGroupName]="indice"
-                    class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
-                  >
-                    <div class="flex items-center justify-between">
-                      <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
-                      @if (!esProductor()) {
-                        <button
-                          mat-stroked-button
-                          color="warn"
-                          type="button"
-                          (click)="quitarEtapa(indice)"
-                        >
-                          Quitar
-                        </button>
-                      }
-                    </div>
-
-                    <input
-                      type="text"
-                      formControlName="nombre"
-                      placeholder="Nombre (ej. Preventa)"
-                      class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                    />
-                    <input
-                      type="number"
-                      formControlName="precio"
-                      placeholder="Precio en COP"
-                      class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                    />
-                    <p class="-mt-2 text-xs text-primary/60">
-                      {{ grupo.controls.precio.value | precio }}
-                    </p>
-                    <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
-                    <input
-                      type="datetime-local"
-                      formControlName="cierraEn"
-                      class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                    />
-                  </div>
-                }
-              </div>
-            }
-          </div>
+      @if (esProductor()) {
+      <div>
+        <span class="mb-1 block text-sm font-semibold text-primary">Productores</span>
+        <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
+          {{ productoresParaMostrar() }}
+        </p>
+      </div>
+      <div>
+        <span class="mb-1 block text-sm font-semibold text-primary">Porteros</span>
+        <p class="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-sm text-primary/70">
+          {{ porterosParaMostrar() }}
+        </p>
+      </div>
+      } @else {
+      <mat-form-field appearance="outline">
+        <mat-label>Productores</mat-label>
+        <mat-select formControlName="productores"
+                    multiple>
+          @for (usuario of productoresDisponibles(); track usuario.email) {
+          <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+          }
+        </mat-select>
+        @if (formulario.controls.productores.invalid && formulario.controls.productores.touched) {
+        <mat-error>Se necesita al menos un productor.</mat-error>
         }
-
-        <div class="flex flex-col gap-3">
-          <h2 class="text-sm font-semibold text-primary">Imagen y logotipo</h2>
-          @if (!puedeSubirActivos()) {
-            <p class="text-xs text-primary/60">Guarda el evento primero para subir imágenes.</p>
-          } @else {
-            <div>
-              <label class="mb-1 block text-xs text-primary/60">
-                Imagen del evento
-                @if (imagenKey()) {
-                  — cargada
-                }
-              </label>
-              <input
-                #inputImagen
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                class="hidden"
-                [disabled]="subiendoImagen()"
-                (change)="subirImagen($event, 'imagen')"
-              />
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="subiendoImagen()"
-                (click)="inputImagen.click()"
-              >
-                {{ subiendoImagen() ? 'Subiendo…' : 'Seleccionar imagen' }}
-              </button>
-            </div>
-            <div>
-              <label class="mb-1 block text-xs text-primary/60">
-                Logotipo
-                @if (logotipoKey()) {
-                  — cargado
-                }
-              </label>
-              <input
-                #inputLogotipo
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                class="hidden"
-                [disabled]="subiendoLogotipo()"
-                (change)="subirImagen($event, 'logotipo')"
-              />
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="subiendoLogotipo()"
-                (click)="inputLogotipo.click()"
-              >
-                {{ subiendoLogotipo() ? 'Subiendo…' : 'Seleccionar logotipo' }}
-              </button>
-            </div>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Porteros</mat-label>
+        <mat-select formControlName="porteros"
+                    multiple>
+          @for (usuario of porterosDisponibles(); track usuario.email) {
+          <mat-option [value]="usuario.email">{{ usuario.nombre }} ({{ usuario.email }})</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      }
+      } @else {
+      <div formGroupName="vinculoExterno"
+           class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3">
+        <h2 class="text-sm font-semibold text-primary">Más información</h2>
+        <p class="text-xs text-primary/60">
+          El público verá un enlace "MÁS INFORMACIÓN" hacia este vínculo en vez del flujo de compra.
+        </p>
+        <mat-form-field appearance="outline">
+          <mat-label>Tipo de vínculo</mat-label>
+          <mat-select formControlName="tipo">
+            @for (tipo of tiposVinculoDisponibles; track tipo.valor) {
+            <mat-option [value]="tipo.valor">{{ tipo.etiqueta }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <div>
+          @switch (formulario.controls.vinculoExterno.controls.tipo.value) {
+          @case ('whatsapp') {
+          <label for="vinculoValor"
+                 class="mb-1 block text-xs text-primary/60">
+            10 dígitos (se arma como https://wa.me/57 + el número)
+          </label>
+          }
+          @case ('instagram') {
+          <label for="vinculoValor"
+                 class="mb-1 block text-xs text-primary/60">
+            Usuario de Instagram, sin @ (se arma como https://www.instagram.com/ + el usuario)
+          </label>
+          }
+          @default {
+          <label for="vinculoValor"
+                 class="mb-1 block text-xs text-primary/60">
+            URL completa, debe empezar con https://
+          </label>
+          }
+          }
+          <input id="vinculoValor"
+                 type="text"
+                 formControlName="valor"
+                 class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+          @if (
+          formulario.controls.vinculoExterno.controls.valor.invalid &&
+          formulario.controls.vinculoExterno.controls.valor.touched
+          ) {
+          <p class="mt-1 text-xs text-danger">Valor inválido para el tipo de vínculo seleccionado.</p>
           }
         </div>
+      </div>
+      }
 
-        @if (puedeSubirActivos()) {
-          <div class="flex flex-col gap-3">
-            <h2 class="text-sm font-semibold text-primary">Código QR para afiches</h2>
-            <p class="text-xs text-primary/60">
-              Enlaza a la página pública del evento. Ideal para imprimir en afiches y volantes.
-            </p>
-            <div class="flex gap-2">
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="descargandoQr() === 'svg'"
-                (click)="descargarQr('svg')"
-              >
-                {{ descargandoQr() === 'svg' ? 'Descargando…' : 'Descargar QR (SVG)' }}
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="descargandoQr() === 'png'"
-                (click)="descargarQr('png')"
-              >
-                {{ descargandoQr() === 'png' ? 'Descargando…' : 'Descargar QR (PNG)' }}
-              </button>
-            </div>
+      @if (!modoCrear()) {
+      <div>
+        <label for="estado"
+               class="mb-1 block text-sm font-semibold text-primary">Estado</label>
+        <select id="estado"
+                formControlName="estado"
+                class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary">
+          <option value="borrador">Borrador</option>
+          <option value="publicado">Publicado</option>
+          <option value="agotado">Agotado</option>
+          <option value="finalizado">Finalizado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      }
+
+      @if (administradoPorLeTiende()) {
+      <fieldset formGroupName="mediosPago"
+                class="flex flex-col gap-2">
+        <legend class="mb-1 text-sm font-semibold text-primary">Medios de pago</legend>
+        @for (medio of mediosPagoDisponibles; track medio.valor) {
+        <label class="flex items-center gap-2 text-sm text-primary">
+          <input type="checkbox"
+                 [formControlName]="medio.valor" />
+          {{ medio.etiqueta }}
+        </label>
+        }
+        @if (etapas.length === 0 && !esProductor()) {
+        <p class="text-xs text-primary/60">
+          Bold se habilita al agregar al menos una etapa de boletería.
+        </p>
+        }
+      </fieldset>
+
+      <div>
+        <div class="mb-2 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-primary">Etapas de boletería</h2>
+          <div class="flex items-center gap-2">
+            <button matButton
+                    class="text-xs font-semibold text-primary/60"
+                    [attr.aria-expanded]="etapasExpandido()"
+                    (click)="alternarEtapasExpandido()">
+              @if (etapasExpandido()) {
+              Ocultar
+              <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+              } @else {
+              Mostrar
+              <mat-icon iconPositionEnd>arrow_drop_up</mat-icon>
+              }
+              <!-- {{ etapasExpandido() ? 'Ocultar' : 'Mostrar' }} -->
+            </button>
+            @if (!esProductor()) {
+            <button mat-stroked-button
+                    type="button"
+                    (click)="agregarEtapa()">
+              Agregar etapa
+            </button>
+            }
           </div>
+        </div>
+
+        @if (!etapasExpandido()) {
+        <p class="text-xs text-primary/60">{{ etapas.length }} etapa(s) configurada(s).</p>
+        }
+        @if (etapas.length === 0) {
+        <p class="text-xs text-primary/60">
+          Sin etapas, este evento no cobra nada — solo controla el aforo.
+        </p>
         }
 
-        <button
-          type="submit"
-          [disabled]="guardando()"
-          class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {{ guardando() ? 'Guardando…' : modoCrear() ? 'Crear evento' : 'Guardar cambios' }}
-        </button>
-      </form>
+        @if (etapasExpandido()) {
+        <div formArrayName="etapas"
+             class="flex flex-col gap-4">
+          @for (grupo of etapas.controls; track grupo; let indice = $index) {
+          <div [formGroupName]="indice"
+               class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
+              @if (!esProductor()) {
+              <button mat-stroked-button
+                      color="warn"
+                      type="button"
+                      (click)="quitarEtapa(indice)">
+                Quitar
+              </button>
+              }
+            </div>
+
+            <input type="text"
+                   formControlName="nombre"
+                   placeholder="Nombre (ej. Preventa)"
+                   class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+            <input type="number"
+                   formControlName="precio"
+                   placeholder="Precio en COP"
+                   class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+            <p class="-mt-2 text-xs text-primary/60">
+              {{ grupo.controls.precio.value | precio }}
+            </p>
+            <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
+            <input type="datetime-local"
+                   formControlName="cierraEn"
+                   class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary" />
+          </div>
+          }
+        </div>
+        }
+      </div>
+      }
+
+      <div class="flex flex-col gap-3">
+        <h2 class="text-sm font-semibold text-primary">Imagen y logotipo</h2>
+        @if (!puedeSubirActivos()) {
+        <p class="text-xs text-primary/60">Guarda el evento primero para subir imágenes.</p>
+        } @else {
+        <div>
+          <label class="mb-1 block text-xs text-primary/60">
+            Imagen del evento
+            @if (imagenKey()) {
+            — cargada
+            }
+          </label>
+          <input #inputImagen
+                 type="file"
+                 accept="image/jpeg,image/png,image/webp"
+                 class="hidden"
+                 [disabled]="subiendoImagen()"
+                 (change)="subirImagen($event, 'imagen')" />
+          <button mat-stroked-button
+                  type="button"
+                  [disabled]="subiendoImagen()"
+                  (click)="inputImagen.click()">
+            {{ subiendoImagen() ? 'Subiendo…' : 'Seleccionar imagen' }}
+          </button>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs text-primary/60">
+            Logotipo
+            @if (logotipoKey()) {
+            — cargado
+            }
+          </label>
+          <input #inputLogotipo
+                 type="file"
+                 accept="image/jpeg,image/png,image/webp"
+                 class="hidden"
+                 [disabled]="subiendoLogotipo()"
+                 (change)="subirImagen($event, 'logotipo')" />
+          <button mat-stroked-button
+                  type="button"
+                  [disabled]="subiendoLogotipo()"
+                  (click)="inputLogotipo.click()">
+            {{ subiendoLogotipo() ? 'Subiendo…' : 'Seleccionar logotipo' }}
+          </button>
+        </div>
+        }
+      </div>
+
+      @if (puedeSubirActivos()) {
+      <div class="flex flex-col gap-3">
+        <h2 class="text-sm font-semibold text-primary">Código QR para afiches</h2>
+        <p class="text-xs text-primary/60">
+          Enlaza a la página pública del evento. Ideal para imprimir en afiches y volantes.
+        </p>
+        <div class="flex gap-2">
+          <button mat-stroked-button
+                  type="button"
+                  [disabled]="descargandoQr() === 'svg'"
+                  (click)="descargarQr('svg')">
+            {{ descargandoQr() === 'svg' ? 'Descargando…' : 'Descargar QR (SVG)' }}
+          </button>
+          <button mat-stroked-button
+                  type="button"
+                  [disabled]="descargandoQr() === 'png'"
+                  (click)="descargarQr('png')">
+            {{ descargandoQr() === 'png' ? 'Descargando…' : 'Descargar QR (PNG)' }}
+          </button>
+        </div>
+      </div>
+      }
+
+      <button type="submit"
+              [disabled]="guardando()"
+              class="flex h-12 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+        {{ guardando() ? 'Guardando…' : modoCrear() ? 'Crear evento' : 'Guardar cambios' }}
+      </button>
+    </form>
     }
   </div>
 </div>

@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatIconModule } from '@angular/material/icon';
 import { merge } from 'rxjs';
 import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
@@ -96,6 +97,7 @@ const PREFIJO_VINCULO_WEB = 'https://';
     MatFormFieldModule,
     MatSelectModule,
     MatSlideToggleModule,
+    MatIconModule,
     PrecioPipe,
   ],
   templateUrl: './editar-evento.component.html',
@@ -690,26 +692,26 @@ export class EditarEventoComponent {
         eventoId,
         this.esProductor()
           ? {
-              maxBoletasPorCompra: valores.maxBoletasPorCompra,
-              plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
-            }
+            maxBoletasPorCompra: valores.maxBoletasPorCompra,
+            plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
+          }
           : {
-              nombre: valores.nombre,
-              descripcion: valores.descripcion,
-              fechaHora: desdeInputBogota(valores.fechaHora),
-              administradoPorLeTiende: valores.administradoPorLeTiende,
-              sillasTotales: valores.sillasTotales,
-              maxBoletasPorCompra: valores.maxBoletasPorCompra,
-              plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
-              etapas: this.etapasFormulario(),
-              mediosPago: this.mediosPagoSeleccionados(),
-              productores: valores.productores,
-              porteros: valores.porteros,
-              estado: valores.estado as Evento['estado'],
-              ...(valores.administradoPorLeTiende
-                ? {}
-                : { vinculoExterno: this.vinculoExternoDesdeFormulario() }),
-            },
+            nombre: valores.nombre,
+            descripcion: valores.descripcion,
+            fechaHora: desdeInputBogota(valores.fechaHora),
+            administradoPorLeTiende: valores.administradoPorLeTiende,
+            sillasTotales: valores.sillasTotales,
+            maxBoletasPorCompra: valores.maxBoletasPorCompra,
+            plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
+            etapas: this.etapasFormulario(),
+            mediosPago: this.mediosPagoSeleccionados(),
+            productores: valores.productores,
+            porteros: valores.porteros,
+            estado: valores.estado as Evento['estado'],
+            ...(valores.administradoPorLeTiende
+              ? {}
+              : { vinculoExterno: this.vinculoExternoDesdeFormulario() }),
+          },
       );
 
       if (resultado.exito) {
