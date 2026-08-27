@@ -1,7 +1,7 @@
 # Roadmap de Ágora — Qué sigue después del lanzamiento
 
 **Dirigido a:** los socios de Le Tiende.
-**Última actualización:** 25 de agosto de 2026.
+**Última actualización:** 26 de agosto de 2026.
 
 Este documento explica, en lenguaje sencillo, qué funcionalidades quedan pendientes en Ágora (la boletería del teatro) después del primer lanzamiento, por qué se dejaron para después, y **qué necesitamos de ustedes** para poder avanzar en cada una. No es un documento técnico — el detalle de arquitectura vive en `docs/tech-specs.md`, y el detalle completo de producto en `docs/PRD.md`.
 
@@ -12,7 +12,7 @@ Este documento explica, en lenguaje sencillo, qué funcionalidades quedan pendie
 **Ágora ya está en producción**, disponible en [`agora.letiende.co`](https://agora.letiende.co). El ciclo completo de un evento funciona de punta a punta:
 
 - El equipo crea y publica el evento (aforo, precios por etapa, medios de pago, productores y porteros asignados).
-- El cliente compra sin necesidad de cuenta, paga por transferencia o efectivo, y sube su comprobante.
+- El cliente compra sin necesidad de cuenta, paga por transferencia, efectivo, o con tarjeta/PSE en línea a través de Bold (confirmación automática, sin comprobante que subir), y sube su comprobante cuando el pago no es automático.
 - El productor aprueba o rechaza el comprobante desde un enlace que le llega por correo.
 - El cliente recibe su boleta digital con código QR por correo.
 - El portero valida el ingreso en la puerta escaneando el QR, con aviso claro si la boleta ya se usó, no existe, o es de otro evento.
@@ -28,10 +28,10 @@ La v2 se enfoca en quitarle trabajo manual al equipo (sobre todo a los productor
 
 | Funcionalidad | Qué le resuelve a Le Tiende | Qué necesitamos de ustedes | Estado |
 |---|---|---|---|
-| **Boletería opcional (aforo sin cobro)** | Hoy todo evento necesita al menos un precio configurado, aunque sea $0. Con esto, un evento puede no tener ninguna etapa de boletería — sirve solo para controlar el aforo (por ejemplo, un conversatorio de entrada libre con cupo limitado), sin fingir un cobro que no existe. La adquisición queda disponible directamente en línea o en taquilla, sin pasar por comprobante ni aprobación. | Nada de su parte — es trabajo interno de desarrollo. | ✅ Ya construido y probado en el ambiente de pruebas — falta pasarlo a producción |
-| **Eventos con boletería externa** | Hay eventos que se realizan en el teatro pero cuya boletería la vende un tercero. Con esto, ese evento igual se anuncia en la Cartelera de Ágora (con su imagen y su código QR para el afiche), pero en vez de un botón de compra muestra un enlace de WhatsApp, Instagram o una página web hacia donde el interesado debe ir a conseguir su boleta. | Nada de su parte — es trabajo interno de desarrollo. | ✅ Ya construido y probado en el ambiente de pruebas — falta pasarlo a producción |
+| **Boletería opcional (aforo sin cobro)** | Hoy todo evento necesita al menos un precio configurado, aunque sea $0. Con esto, un evento puede no tener ninguna etapa de boletería — sirve solo para controlar el aforo (por ejemplo, un conversatorio de entrada libre con cupo limitado), sin fingir un cobro que no existe. La adquisición queda disponible directamente en línea o en taquilla, sin pasar por comprobante ni aprobación. | Nada de su parte — es trabajo interno de desarrollo. | ✅ En producción, ya funcionando |
+| **Eventos con boletería externa** | Hay eventos que se realizan en el teatro pero cuya boletería la vende un tercero. Con esto, ese evento igual se anuncia en la Cartelera de Ágora (con su imagen y su código QR para el afiche), pero en vez de un botón de compra muestra un enlace de WhatsApp, Instagram o una página web hacia donde el interesado debe ir a conseguir su boleta. | Nada de su parte — es trabajo interno de desarrollo. | ✅ En producción, ya funcionando |
 | **Sincronización con Google Calendar** | Cada evento que se crea en Ágora aparece automáticamente en el calendario de `letiende.co@gmail.com`, sin tener que agregarlo a mano. | Nada de su parte — ya se confirmó el calendario y se dio el acceso necesario. | ✅ En producción, ya funcionando |
-| **Pago automático con Bold** | El cliente paga en línea con tarjeta u otros medios de Bold, y el sistema confirma el pago solo — sin comprobante que cargar ni productor que apruebe. Es la mejora que más tiempo le ahorra al equipo. | Nada de su parte — ya nos dieron las llaves de acceso a la API de Bold; queda trabajo interno de desarrollo (el botón de pago que verá el cliente). | 🟡 En progreso — la parte técnica del servidor ya está lista y verificada; falta el botón de pago que verá el cliente |
+| **Pago automático con Bold** | El cliente paga en línea con tarjeta o PSE, sin salir del sitio (el pago se abre en un panel dentro de la misma página), y el sistema confirma el pago solo — sin comprobante que cargar ni productor que apruebe. Probado en el ambiente de pruebas con tarjetas de prueba en los cuatro escenarios posibles (pago aprobado, rechazado por el banco, error de la transacción, y cliente que abandona el pago sin completarlo). Es la mejora que más tiempo le ahorra al equipo. | Nada de su parte — ya se completó todo el trabajo interno de desarrollo. | ✅ En producción, ya funcionando |
 | **Notificaciones por WhatsApp** | Todo lo que hoy llega por correo (enlace para cargar el comprobante, aviso de aprobación al productor, entrega de la boleta) llegaría también por WhatsApp — el canal donde hoy realmente ocurre la conversación con el cliente. | Ver la sección 4 abajo — es el requisito más largo de resolver de todo este documento. | 🟡 No iniciado, depende de un trámite de Meta |
 | **Exportación de reportes en PDF** | Complementa la exportación en Excel (que ya funciona hoy) con un formato listo para imprimir o compartir sin abrir una hoja de cálculo. | Nada de su parte — es trabajo interno de desarrollo. | 🟡 No iniciado |
 
@@ -67,7 +67,7 @@ Esta es la lista concreta de lo que nos falta de parte de ustedes — sin esto, 
 | **Una línea telefónica nueva y dedicada a Ágora**, que **nunca haya estado activa en la app normal de WhatsApp** (es un requisito de Meta, no nuestro) | Notificaciones por WhatsApp | Es el paso que más se demora de todo este documento. El trámite de verificación de negocio ante Meta y la aprobación de las plantillas de mensaje puede tomar varias semanas y **no está bajo nuestro control** — mientras antes se consiga el número y se inicie el trámite, antes se puede activar WhatsApp. |
 | **Retroalimentación real del uso de Ágora en los primeros eventos** | Definir qué se prioriza primero dentro de esta lista | Es lo único que estamos esperando ahora mismo para decidir la siguiente prioridad — preferimos ajustar el rumbo con la experiencia real del equipo y los clientes, no solo con lo que imaginamos desde el escritorio. |
 
-**Ya resuelto, sin necesidad de más gestión de su parte:** la activación de la cuenta Bold de Le Tiende y sus llaves de acceso a la API (identidad y secreta, de pruebas y de producción) ya se obtuvieron y ya están configuradas — lo que falta de Pago automático con Bold es enteramente trabajo interno de desarrollo (el botón de pago), no algo pendiente de ustedes.
+**Ya resuelto, sin necesidad de más gestión de su parte:** la activación de la cuenta Bold de Le Tiende y sus llaves de acceso a la API (identidad y secreta, de pruebas y de producción) ya se obtuvieron y ya están configuradas — **Pago automático con Bold ya está completo y en producción**, no queda nada pendiente de ustedes ni de desarrollo para esta funcionalidad.
 
 ---
 

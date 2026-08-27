@@ -25,11 +25,14 @@ El objetivo es reemplazar el proceso manual —conversaciones de WhatsApp, compr
 * Validación de boletas en la puerta por escaneo de QR, con veredicto claro (válida / usada / inexistente / de otro evento)
 * Venta en efectivo desde la puerta o presencial
 * Etapas de boletería (preventa, taquilla, etc.) con cierre automático por fecha
-* Panel de control del evento (vendidas, disponibles, ingresados) con exportación de reportes en Excel
+* Panel de control del evento (vendidas, disponibles, ingresados, sillas pendientes de confirmar) con exportación de reportes en Excel
 * Gestión de usuarios y roles propios de Ágora (`administrador` / `productor` / `portero`), autorización por evento asignado
 * Autenticación con Google (Firebase Authentication), proyecto compartido con Comandante y Babel
+* Boletería opcional para eventos sin cobro (solo controla aforo) y eventos con boletería vendida por un tercero (se anuncian en la Cartelera con un enlace externo)
+* Sincronización automática de cada evento con Google Calendar
+* Pago automático en línea con tarjeta o PSE vía **Bold** (checkout embebido, sin salir del sitio), como alternativa a la transferencia manual — confirmación por webhook firmado y reconciliado, nunca por lo que reporte el navegador del cliente
 
-Lo que sigue después de v1 — pago automático con Bold, notificaciones por WhatsApp, exportación en PDF, sincronización con Google Calendar — está descrito para audiencia no técnica en [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
+Lo que sigue después de v1 — notificaciones por WhatsApp y exportación de reportes en PDF — está descrito para audiencia no técnica en [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
 
 ## Estado del proyecto
 
