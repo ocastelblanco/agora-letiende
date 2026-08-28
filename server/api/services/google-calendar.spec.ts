@@ -42,6 +42,7 @@ const eventoAdministrado = {
 // "contaminar" al siguiente, que espera que SSM no esté configurado).
 let crearEventoCalendar: typeof import('./google-calendar').crearEventoCalendar;
 let actualizarEventoCalendar: typeof import('./google-calendar').actualizarEventoCalendar;
+let eliminarEventoCalendar: typeof import('./google-calendar').eliminarEventoCalendar;
 let resolverProductores: typeof import('./google-calendar').resolverProductores;
 let credencialCalendarConfigurada: typeof import('./google-calendar').credencialCalendarConfigurada;
 
@@ -61,6 +62,7 @@ beforeEach(async () => {
   const modulo = await import('./google-calendar');
   crearEventoCalendar = modulo.crearEventoCalendar;
   actualizarEventoCalendar = modulo.actualizarEventoCalendar;
+  eliminarEventoCalendar = modulo.eliminarEventoCalendar;
   resolverProductores = modulo.resolverProductores;
   credencialCalendarConfigurada = modulo.credencialCalendarConfigurada;
 });
@@ -256,6 +258,57 @@ describe('actualizarEventoCalendar', () => {
     const resultado = await actualizarEventoCalendar('gcal-existente', eventoAdministrado, []);
 
     expect(resultado).toEqual({ exito: false });
+  });
+});
+
+describe('eliminarEventoCalendar', () => {
+  it('hace DELETE a calendars/letiende.co%40gmail.com/events/{id} y devuelve true', async () => {
+    requestMock.mockResolvedValueOnce({});
+
+    const resultado = await eliminarEventoCalendar('gcal-existente');
+
+    expect(resultado).toBe(true);
+    expect(requestMock).toHaveBeenCalledTimes(1);
+    const llamada = requestMock.mock.calls[0]?.[0];
+    expect(llamada.method).toBe('DELETE');
+    expect(llamada.url).toBe(
+      'https://www.googleapis.com/calendar/v3/calendars/letiende.co%40gmail.com/events/gcal-existente',
+    );
+  });
+
+  it('devuelve false de inmediato si SSM no tiene una credencial válida, sin llamar a Calendar', async () => {
+    ssmSendMock.mockResolvedValue({ Parameter: { Value: 'sin-configurar' } });
+    vi.resetModules();
+    ({ eliminarEventoCalendar } = await import('./google-calendar'));
+
+    const resultado = await eliminarEventoCalendar('gcal-existente');
+
+    expect(resultado).toBe(false);
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it('trata un 404 (el evento ya no existe en Calendar) como éxito', async () => {
+    requestMock.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }));
+
+    const resultado = await eliminarEventoCalendar('gcal-existente');
+
+    expect(resultado).toBe(true);
+  });
+
+  it('trata un 410 (Gone) como éxito', async () => {
+    requestMock.mockRejectedValueOnce(Object.assign(new Error('Gone'), { status: 410 }));
+
+    const resultado = await eliminarEventoCalendar('gcal-existente');
+
+    expect(resultado).toBe(true);
+  });
+
+  it('devuelve false sin lanzar cuando la llamada HTTP falla por otro motivo', async () => {
+    requestMock.mockRejectedValueOnce(new Error('Calendar API no disponible'));
+
+    const resultado = await eliminarEventoCalendar('gcal-existente');
+
+    expect(resultado).toBe(false);
   });
 });
 

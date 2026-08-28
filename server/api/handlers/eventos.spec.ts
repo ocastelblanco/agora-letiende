@@ -8,6 +8,7 @@ const {
   credencialCalendarConfiguradaMock,
   crearEventoCalendarMock,
   actualizarEventoCalendarMock,
+  eliminarEventoCalendarMock,
   resolverProductoresMock,
 } = vi.hoisted(() => ({
   exigirRolMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   credencialCalendarConfiguradaMock: vi.fn(),
   crearEventoCalendarMock: vi.fn(),
   actualizarEventoCalendarMock: vi.fn(),
+  eliminarEventoCalendarMock: vi.fn(),
   resolverProductoresMock: vi.fn(),
 }));
 
@@ -40,6 +42,7 @@ vi.mock('../services/google-calendar', () => ({
   credencialCalendarConfigurada: credencialCalendarConfiguradaMock,
   crearEventoCalendar: crearEventoCalendarMock,
   actualizarEventoCalendar: actualizarEventoCalendarMock,
+  eliminarEventoCalendar: eliminarEventoCalendarMock,
   resolverProductores: resolverProductoresMock,
 }));
 
@@ -670,6 +673,52 @@ describe('handler de /api/eventos', () => {
 
         expect(respuesta.statusCode).toBe(200);
         expect(JSON.parse(respuesta.body!)).toMatchObject({ eventoId: 'e1' });
+      });
+
+      // A pedido del usuario: un evento cancelado se borra de Calendar en
+      // vez de quedar reflejado ahí como "cancelado".
+      describe('evento pasa a estado cancelado', () => {
+        it('borra el evento de Calendar (nunca lo actualiza) y limpia googleCalendarEventId del ítem', async () => {
+          credencialCalendarConfiguradaMock.mockReturnValue(true);
+          eliminarEventoCalendarMock.mockResolvedValue(true);
+          sendMock.mockResolvedValue({
+            Attributes: { ...atributosBase, estado: 'cancelado', googleCalendarEventId: 'gcal-existente' },
+          });
+
+          const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { estado: 'cancelado' } });
+
+          expect(respuesta.statusCode).toBe(200);
+          expect(eliminarEventoCalendarMock).toHaveBeenCalledWith('gcal-existente');
+          expect(actualizarEventoCalendarMock).not.toHaveBeenCalled();
+          expect(crearEventoCalendarMock).not.toHaveBeenCalled();
+          // Segundo UpdateCommand: limpia googleCalendarEventId del ítem.
+          const comandoLimpieza = sendMock.mock.calls[1]?.[0];
+          expect(comandoLimpieza.input.UpdateExpression).toBe('REMOVE googleCalendarEventId');
+        });
+
+        it('no llama a Calendar si el evento cancelado nunca se había sincronizado (sin googleCalendarEventId)', async () => {
+          credencialCalendarConfiguradaMock.mockReturnValue(true);
+          sendMock.mockResolvedValue({ Attributes: { ...atributosBase, estado: 'cancelado' } });
+
+          const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { estado: 'cancelado' } });
+
+          expect(respuesta.statusCode).toBe(200);
+          expect(eliminarEventoCalendarMock).not.toHaveBeenCalled();
+          expect(crearEventoCalendarMock).not.toHaveBeenCalled();
+          expect(actualizarEventoCalendarMock).not.toHaveBeenCalled();
+        });
+
+        it('responde 200 y no propaga el error aunque falle el borrado en Calendar (best-effort)', async () => {
+          credencialCalendarConfiguradaMock.mockReturnValue(true);
+          eliminarEventoCalendarMock.mockRejectedValue(new Error('Calendar API no disponible'));
+          sendMock.mockResolvedValue({
+            Attributes: { ...atributosBase, estado: 'cancelado', googleCalendarEventId: 'gcal-existente' },
+          });
+
+          const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { estado: 'cancelado' } });
+
+          expect(respuesta.statusCode).toBe(200);
+        });
       });
     });
 
@@ -1365,6 +1414,36 @@ describe('handler de /api/eventos', () => {
       const respuesta = await invocar('DELETE', { eventoId: 'e1' });
 
       expect(respuesta.statusCode).toBe(204);
+    });
+
+    // A pedido del usuario: eliminar el evento también lo borra de Calendar.
+    describe('borrado del espejo en Google Calendar', () => {
+      it('borra el evento de Calendar cuando el ítem eliminado tenía googleCalendarEventId', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1', googleCalendarEventId: 'gcal-existente' } });
+
+        const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+        expect(respuesta.statusCode).toBe(204);
+        expect(eliminarEventoCalendarMock).toHaveBeenCalledWith('gcal-existente');
+      });
+
+      it('no llama a Calendar si el evento eliminado nunca se había sincronizado (sin googleCalendarEventId)', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1' } });
+
+        const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+        expect(respuesta.statusCode).toBe(204);
+        expect(eliminarEventoCalendarMock).not.toHaveBeenCalled();
+      });
+
+      it('responde 204 aunque falle el borrado en Calendar (best-effort)', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1', googleCalendarEventId: 'gcal-existente' } });
+        eliminarEventoCalendarMock.mockRejectedValue(new Error('Calendar API no disponible'));
+
+        const respuesta = await invocar('DELETE', { eventoId: 'e1' });
+
+        expect(respuesta.statusCode).toBe(204);
+      });
     });
   });
 

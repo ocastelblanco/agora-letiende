@@ -327,3 +327,48 @@ export async function actualizarEventoCalendar(
     productoresResueltos,
   );
 }
+
+/**
+ * `DELETE /calendars/{CALENDAR_ID}/events/{googleCalendarEventId}` — borra
+ * el evento espejo de Calendar por completo. Se usa al eliminar un evento
+ * de Ágora o al pasarlo a `cancelado`: a diferencia de
+ * `actualizarEventoCalendar()`, no lo reemplaza, lo quita — nadie debe ver
+ * en su calendario un evento que ya no va a ocurrir. Best-effort, mismo
+ * patrón que el resto de este servicio: si la credencial no está
+ * configurada o la llamada falla, no lanza y devuelve `false`. Un 404/410
+ * de Google (el evento ya no existe en Calendar, por ejemplo si ya se
+ * había borrado a mano) se trata como éxito: el estado final deseado
+ * (nada en Calendar) ya se cumple.
+ */
+export async function eliminarEventoCalendar(googleCalendarEventId: string): Promise<boolean> {
+  const credencial = await obtenerCredencial();
+  if (!credencial) {
+    return false;
+  }
+
+  try {
+    const cliente = new JWT({
+      email: credencial.client_email,
+      key: credencial.private_key,
+      scopes: [ESCOPO_CALENDAR],
+    });
+
+    await cliente.request({
+      method: 'DELETE',
+      url: `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(googleCalendarEventId)}`,
+    });
+    return true;
+  } catch (error) {
+    const errorConDatos = error as { status?: unknown; response?: { data?: unknown } };
+    if (errorConDatos.status === 404 || errorConDatos.status === 410) {
+      return true;
+    }
+    console.error('La eliminación en Google Calendar falló', {
+      nombreError: error instanceof Error ? error.name : 'error desconocido',
+      mensaje: error instanceof Error ? error.message : undefined,
+      estadoHttp: typeof errorConDatos.status === 'number' ? errorConDatos.status : undefined,
+      cuerpoError: errorConDatos.response?.data,
+    });
+    return false;
+  }
+}
