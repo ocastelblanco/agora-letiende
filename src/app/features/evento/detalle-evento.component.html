@@ -11,26 +11,20 @@
       </div>
     } @else if (evento(); as detalleEvento) {
       <div class="overflow-hidden rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
-        @if (detalleEvento.imagenUrl || avisoEstado()) {
-          <div class="relative overflow-hidden">
-            @if (detalleEvento.imagenUrl) {
-              <img
-                [src]="detalleEvento.imagenUrl"
-                [alt]="detalleEvento.nombre"
-                class="h-64 w-full object-cover"
-              />
-            } @else if (avisoEstado()) {
-              <div class="h-64 w-full bg-primary/5"></div>
-            }
-            @if (avisoEstado(); as aviso) {
-              <span
-                class="absolute left-1/2 top-1/2 w-[150%] -translate-x-1/2 -translate-y-1/2 -rotate-12 bg-danger py-2 text-center text-lg font-bold uppercase tracking-widest text-white shadow-lg"
-              >
-                {{ aviso }}
-              </span>
-            }
-          </div>
-        }
+        <div class="relative overflow-hidden">
+          <img
+            [src]="detalleEvento.imagenUrl || '/eventos-placeholder.png'"
+            [alt]="detalleEvento.nombre"
+            class="aspect-[2/1] w-full object-cover"
+          />
+          @if (avisoEstado(); as aviso) {
+            <span
+              class="absolute left-1/2 top-1/2 w-[150%] -translate-x-1/2 -translate-y-1/2 -rotate-12 bg-danger py-2 text-center text-lg font-bold uppercase tracking-widest text-white shadow-lg"
+            >
+              {{ aviso }}
+            </span>
+          }
+        </div>
         <div class="p-6">
           <h1 class="mb-2 text-2xl font-bold text-primary">{{ detalleEvento.nombre }}</h1>
           <p class="mb-4 text-sm text-primary/70">{{ fechaLegible(detalleEvento.fechaHora) }}</p>
