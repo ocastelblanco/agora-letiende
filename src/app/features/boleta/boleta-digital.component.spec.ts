@@ -69,7 +69,7 @@ describe('BoletaDigitalComponent', () => {
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
   });
 
-  it('no muestra el logotipo si el evento no tiene uno', async () => {
+  it('muestra el logotipo placeholder genérico si el evento no tiene uno', async () => {
     const obtenerBoletaMock = vi
       .fn()
       .mockResolvedValue({ exito: true, boleta: { ...boletaEjemplo, logotipoUrl: undefined } });
@@ -77,9 +77,9 @@ describe('BoletaDigitalComponent', () => {
 
     await activarConCodigo(fixture, 'bol-1.firma123');
 
-    // Solo el QR debe quedar como <img> — sin logotipo.
+    // Logotipo (placeholder) + QR, ambos <img>.
     const imagenes = fixture.nativeElement.querySelectorAll('img');
-    expect(imagenes.length).toBe(1);
-    expect(imagenes[0].getAttribute('alt')).toBe('Código QR de la boleta');
+    expect(imagenes.length).toBe(2);
+    expect(imagenes[0].getAttribute('src')).toBe('/logotipo-placeholder.png');
   });
 });

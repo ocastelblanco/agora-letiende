@@ -18,24 +18,23 @@
             [routerLink]="['/evento', evento.slug]"
             class="block overflow-hidden rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)] transition-opacity hover:opacity-90"
           >
-            @if (evento.imagenUrl || avisoEstado(evento)) {
-              <div class="relative overflow-hidden">
-                @if (evento.imagenUrl) {
-                  <img [src]="evento.imagenUrl" [alt]="evento.nombre" class="h-40 w-full object-cover" />
-                } @else if (avisoEstado(evento)) {
-                  <div class="h-40 w-full bg-primary/5"></div>
-                }
-                @if (avisoEstado(evento); as aviso) {
-                  <span
-                    class="absolute left-1/2 top-1/2 w-[150%] -translate-x-1/2 -translate-y-1/2 -rotate-12 bg-danger py-1.5 text-center text-sm font-bold uppercase tracking-widest text-white shadow-lg"
-                  >
-                    {{ aviso }}
-                  </span>
-                }
-              </div>
-            }
+            <div class="relative overflow-hidden">
+              <img
+                [src]="evento.imagenUrl || '/eventos-placeholder.png'"
+                [alt]="evento.nombre"
+                class="aspect-[2/1] w-full object-cover"
+              />
+              @if (avisoEstado(evento); as aviso) {
+                <span
+                  class="absolute left-1/2 top-1/2 w-[150%] -translate-x-1/2 -translate-y-1/2 -rotate-12 bg-danger py-1.5 text-center text-sm font-bold uppercase tracking-widest text-white shadow-lg"
+                >
+                  {{ aviso }}
+                </span>
+              }
+            </div>
             <div class="p-4">
               <h2 class="text-lg font-semibold text-primary">{{ evento.nombre }}</h2>
+              <p class="mt-1 line-clamp-2 text-sm text-primary/70">{{ evento.descripcion }}</p>
               <p class="mt-1 text-sm text-primary/70">{{ fechaLegible(evento.fechaHora) }}</p>
             </div>
           </a>

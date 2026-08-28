@@ -221,8 +221,8 @@ describe('EditarEventoComponent', () => {
     });
   });
 
-  describe('colapso de "Etapas de boletería"', () => {
-    it('empieza colapsado (sin el FormArray de etapas visible en el DOM) y se expande al hacer click en el control', async () => {
+  describe('panel de expansión de "Etapas de boletería"', () => {
+    it('empieza colapsado (sin el FormArray de etapas visible en el DOM), muestra "Evento gratuito, sin etapas" y se expande al hacer click en el encabezado', async () => {
       const { fixture } = configurarPrueba({});
       await activarConId(fixture, 'nuevo');
       const componente = fixture.componentInstance;
@@ -230,17 +230,29 @@ describe('EditarEventoComponent', () => {
       expect(componente['etapasExpandido']()).toBe(false);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).toBeNull();
 
-      const botones = Array.from(
-        fixture.nativeElement.querySelectorAll('button'),
-      ) as HTMLButtonElement[];
-      const botonMostrar = botones.find((boton) => boton.textContent?.trim() === 'Mostrar');
-      expect(botonMostrar).toBeTruthy();
+      const encabezado = fixture.nativeElement.querySelector(
+        'mat-expansion-panel-header',
+      ) as HTMLElement | null;
+      expect(encabezado).toBeTruthy();
+      expect(encabezado!.textContent).toContain('Etapas de boletería');
+      expect(encabezado!.textContent).toContain('Evento gratuito, sin etapas');
 
-      botonMostrar!.click();
+      encabezado!.click();
       fixture.detectChanges();
 
       expect(componente['etapasExpandido']()).toBe(true);
       expect(fixture.nativeElement.querySelector('[formarrayname="etapas"]')).not.toBeNull();
+    });
+
+    it('muestra "X etapas configuradas" en la descripción cuando el evento ya tiene etapas', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'e1');
+      fixture.detectChanges();
+
+      const encabezado = fixture.nativeElement.querySelector(
+        'mat-expansion-panel-header',
+      ) as HTMLElement | null;
+      expect(encabezado!.textContent).toContain('1 etapas configuradas');
     });
   });
 

@@ -25,6 +25,7 @@ import {
   actualizarEventoCalendar,
   crearEventoCalendar,
   credencialCalendarConfigurada,
+  eliminarEventoCalendar,
   resolverProductores,
   type EventoParaCalendar,
 } from '../services/google-calendar';
@@ -341,6 +342,15 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
  * funcionando sin la credencial real. `item` es el ítem completo ya
  * persistido (`ALL_NEW` en edición): si ya trae `googleCalendarEventId`, se edita (reemplazo
  * completo); si no (evento nuevo o legado nunca sincronizado), se crea.
+ *
+ * Un evento que pasa a `estado: 'cancelado'` se BORRA de Calendar en vez de
+ * reflejarse como "cancelado" ahí (a pedido del usuario) — nadie debe ver en
+ * su calendario un evento que ya no va a ocurrir. Si nunca se había
+ * sincronizado (sin `googleCalendarEventId`), no hay nada que borrar. Si el
+ * borrado en Calendar tiene éxito, se limpia `googleCalendarEventId` del
+ * ítem para que, si el evento se reactiva más adelante (otro cambio de
+ * `estado`), la próxima sincronización cree un evento nuevo en vez de
+ * intentar reemplazar uno que ya no existe.
  */
 async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Promise<void> {
   if (!(await credencialCalendarConfigurada())) {
@@ -349,6 +359,33 @@ async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Prom
 
   const eventoId = item['eventoId'];
   if (typeof eventoId !== 'string') {
+    return;
+  }
+
+  const googleCalendarEventIdExistente =
+    typeof item['googleCalendarEventId'] === 'string' ? item['googleCalendarEventId'] : undefined;
+
+  if (item['estado'] === 'cancelado') {
+    if (!googleCalendarEventIdExistente) {
+      return;
+    }
+    try {
+      const eliminado = await eliminarEventoCalendar(googleCalendarEventIdExistente);
+      if (eliminado) {
+        await documentoDynamoDB.send(
+          new UpdateCommand({
+            TableName: process.env['TABLA_EVENTOS'],
+            Key: { eventoId },
+            UpdateExpression: 'REMOVE googleCalendarEventId',
+          }),
+        );
+      }
+    } catch (error) {
+      console.error('La sincronización con Google Calendar falló', {
+        eventoId,
+        nombreError: error instanceof Error ? error.name : 'error desconocido',
+      });
+    }
     return;
   }
 
@@ -372,9 +409,6 @@ async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Prom
           : undefined,
       etapas: Array.isArray(item['etapas']) ? (item['etapas'] as EventoParaCalendar['etapas']) : [],
     };
-
-    const googleCalendarEventIdExistente =
-      typeof item['googleCalendarEventId'] === 'string' ? item['googleCalendarEventId'] : undefined;
 
     const resultado = googleCalendarEventIdExistente
       ? await actualizarEventoCalendar(googleCalendarEventIdExistente, eventoParaCalendar, productoresResueltos)
@@ -1140,23 +1174,29 @@ async function eliminarActivosDelEvento(eventoId: string): Promise<void> {
 
 /**
  * `DELETE /api/eventos/:eventoId` — elimina el evento y, mejor esfuerzo, sus
- * activos en S3 (imagen/logotipo). Sin lectura previa del ítem de DynamoDB:
- * la `ConditionExpression` distingue 404 (no existe) de 204 (eliminado),
- * mismo criterio que `usuarios.ts`.
+ * activos en S3 (imagen/logotipo) y su espejo en Google Calendar. Sin
+ * lectura previa por separado del ítem de DynamoDB: `ReturnValues: 'ALL_OLD'`
+ * en el propio `DeleteCommand` devuelve el ítem eliminado (para leer
+ * `googleCalendarEventId`) en la misma llamada; la `ConditionExpression`
+ * sigue distinguiendo 404 (no existe) de 204 (eliminado), mismo criterio que
+ * `usuarios.ts`.
  */
 async function eliminarEvento(eventoId: string | undefined): Promise<APIGatewayProxyResultV2> {
   if (!eventoId) {
     return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
   }
 
+  let itemEliminado: Record<string, unknown> | undefined;
   try {
-    await documentoDynamoDB.send(
+    const resultado = await documentoDynamoDB.send(
       new DeleteCommand({
         TableName: process.env['TABLA_EVENTOS'],
         Key: { eventoId },
         ConditionExpression: 'attribute_exists(eventoId)',
+        ReturnValues: 'ALL_OLD',
       }),
     );
+    itemEliminado = resultado.Attributes;
   } catch (error) {
     if (esErrorCondicionFallida(error)) {
       return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
@@ -1165,6 +1205,17 @@ async function eliminarEvento(eventoId: string | undefined): Promise<APIGatewayP
   }
 
   await eliminarActivosDelEvento(eventoId);
+
+  const googleCalendarEventId = itemEliminado?.['googleCalendarEventId'];
+  if (typeof googleCalendarEventId === 'string') {
+    try {
+      // Best-effort, mismo patrón que `eliminarActivosDelEvento()`: nunca
+      // bloquea ni afecta la respuesta 204 si Calendar falla.
+      await eliminarEventoCalendar(googleCalendarEventId);
+    } catch {
+      // Best-effort — ver comentario de arriba.
+    }
+  }
 
   return { statusCode: 204 };
 }

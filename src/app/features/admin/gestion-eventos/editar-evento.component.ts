@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -93,6 +94,7 @@ const PREFIJO_VINCULO_WEB = 'https://';
   imports: [
     ReactiveFormsModule,
     MatButtonModule,
+    MatExpansionModule,
     MatFormFieldModule,
     MatSelectModule,
     MatSlideToggleModule,
@@ -241,10 +243,6 @@ export class EditarEventoComponent {
 
   /** Colapsado por defecto — evita que el formulario de edición abra con una lista larga de etapas ya expandida. */
   protected readonly etapasExpandido = signal(false);
-
-  protected alternarEtapasExpandido(): void {
-    this.etapasExpandido.update((v) => !v);
-  }
 
   /**
    * `true` en cuanto el administrador edita el campo `slug` a mano — a
