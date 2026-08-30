@@ -228,3 +228,4 @@ Frontend,27/08/2026 12:55,27/08/2026 13:06,0:11:00,AI,Sonnet 5,Reemplaza boton d
 Frontend,27/08/2026 19:30,27/08/2026 19:56,0:26:00,AI,Sonnet 5,Agrega descripcion y aspecto 2:1 en cartelera/detalle publico mas placeholder e imagen ayuda,Claude Code,cli,medium
 Backend,27/08/2026 19:56,27/08/2026 20:27,0:31:00,AI,Sonnet 5,Borra el evento espejo de Calendar al eliminar o cancelar un evento; agrega placeholder de logotipo,Claude Code,cli,medium
 Workspace setting,27/08/2026 21:25,27/08/2026 21:29,0:04:00,AI,Sonnet 5,Vuelve a main actualizada y elimina rama local ya fusionada de ajustes UI,Claude Code,cli,low
+Workspace setting,29/08/2026 21:03,29/08/2026 21:04,0:01:00,AI,Sonnet 5,Actualiza main tras fusion del PR 56 y borra rama local docs/tracking-cierre-limpieza-ramas ya fusionada,Claude Code,cli,low
