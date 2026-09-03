@@ -21,11 +21,23 @@ export class EmbebidoService {
    * Se calcula una sola vez por instancia (una instancia por petición en
    * SSR, dado que `providedIn: 'root'` crea un injector nuevo por render
    * del lado servidor). En el navegador usa `window.location.hostname`
-   * (autoritativo); en SSR usa el header `Host` de la petición real vía
-   * `REQUEST` — `null` en rutas prerenderizadas (SSG) o durante el build,
-   * caso en el que se asume `false` (comportamiento actual sin cambios,
-   * el más seguro por defecto) y el navegador lo corrige en el primer
-   * bootstrap del lado cliente.
+   * (autoritativo); en SSR usa el header `x-le-tiende-host`.
+   *
+   * Hallazgo real, no el diseño original: el header `Host` real del
+   * visitante NUNCA llega aquí. La política de origen
+   * `AllViewerExceptHostHeader` que exige API Gateway (si no, 403 —
+   * tech-specs.md §7.2 del contenedor) reenvía todos los encabezados del
+   * visitante EXCEPTO `Host` — este SSR siempre vería el hostname crudo de
+   * `execute-api`, nunca `letiende.co`/`staging.letiende.co`. La
+   * distribución de CloudFront del contenedor copia el `Host` real a
+   * `x-le-tiende-host` con una CloudFront Function antes de reenviar
+   * (`FuncionInyectarHostVisitante`, repo `letiende.co`) — ese es el
+   * encabezado que hay que leer. `null`/vacío en rutas prerenderizadas
+   * (SSG), durante el build, o si se accede fuera del proxy (directo por
+   * `agora.letiende.co`, sin esa CloudFront Function delante) — en ese
+   * caso se asume `false` (comportamiento actual sin cambios, el más
+   * seguro por defecto) y el navegador lo corrige en el primer bootstrap
+   * del lado cliente.
    */
   readonly embebido: boolean = this.calcular();
 
@@ -33,7 +45,7 @@ export class EmbebidoService {
     if (isPlatformBrowser(this.platformId)) {
       return esEmbebido(window.location.hostname);
     }
-    const host = this.request?.headers.get('host') ?? '';
+    const host = this.request?.headers.get('x-le-tiende-host') ?? '';
     return esEmbebido(host.split(':')[0]);
   }
 }
