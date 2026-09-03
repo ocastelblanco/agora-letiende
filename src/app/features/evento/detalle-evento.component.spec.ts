@@ -12,12 +12,20 @@ const eventoEjemplo: EventoPublico = {
   nombre: 'Concierto de jazz',
   descripcion: 'Una noche de jazz en Le Tiende',
   imagenUrl: 'https://agora-activos-test.s3.us-east-1.amazonaws.com/eventos/e1/imagen-abc.png',
-  fechaHora: '2026-09-15T01:00:00.000Z',
+  fechaHora: '2099-09-15T01:00:00.000Z',
   administradoPorLeTiende: true,
   sillasTotales: 100,
   sillasDisponibles: 80,
   sillasReservadas: 5,
-  etapas: [{ etapaId: 'et1', nombre: 'Preventa', precio: 45000, cierraEn: '2026-09-01T00:00:00.000Z', orden: 1 }],
+  // `cierraEn` en 2099 (mismo criterio ya usado en la prueba "distingue la
+  // etapa vigente" de este archivo, línea ~209): una fecha fija en 2026 se
+  // vuelve pasado real con el tiempo y la etapa deja de ser vigente sin que
+  // nadie toque el código — exactamente lo que le pasó a esta fecha
+  // (`cierraEn: '2026-09-01T00:00:00.000Z'`, ya en el pasado al 03/09/2026),
+  // que hacía fallar `jsonLd.offers[0]` (el componente omite `offers` para
+  // una etapa no vigente, comportamiento correcto — el bug era la fecha del
+  // fixture, no el componente).
+  etapas: [{ etapaId: 'et1', nombre: 'Preventa', precio: 45000, cierraEn: '2099-09-01T00:00:00.000Z', orden: 1 }],
   maxBoletasPorCompra: 4,
   mediosPago: ['efectivo'],
   plazoComprobanteMinutos: 10,
@@ -303,7 +311,7 @@ describe('DetalleEventoComponent', () => {
     const jsonLd = JSON.parse(script!.textContent!);
     expect(jsonLd['@type']).toBe('Event');
     expect(jsonLd.name).toBe('Concierto de jazz');
-    expect(jsonLd.startDate).toBe('2026-09-15T01:00:00.000Z');
+    expect(jsonLd.startDate).toBe('2099-09-15T01:00:00.000Z');
     expect(jsonLd.offers[0]).toMatchObject({ name: 'Preventa', price: 45000, priceCurrency: 'COP' });
   });
 
