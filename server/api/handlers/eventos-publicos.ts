@@ -20,7 +20,7 @@ import { respuestaJson } from '../lib/http';
 const ESTADOS_QUE_PUEDEN_SER_VISIBLES = ['publicado', 'agotado', 'cancelado'] as const;
 const ESTADOS_VISIBLES = new Set<string>(ESTADOS_QUE_PUEDEN_SER_VISIBLES);
 
-const BASE_URL_PUBLICA = 'https://agora.letiende.co';
+const BASE_URL_PUBLICA = 'https://letiende.co/cartelera';
 
 // v2 (roadmap #25) — prefijo fijo de cada tipo de vínculo externo; `valor`
 // (guardado en `agora-eventos`) solo tiene la parte variable, sin este
