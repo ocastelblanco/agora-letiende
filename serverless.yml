@@ -226,6 +226,17 @@ functions:
       - httpApi:
           path: /sitemap.xml
           method: get
+      # Ruta adicional bajo el prefijo /cartelera: CloudFront reenvía la
+      # ruta COMPLETA sin OriginPath (tech-specs.md §7.2 del contenedor,
+      # detalle 3 — Ágora necesita el prefijo completo), así que
+      # staging.letiende.co/cartelera/sitemap.xml llega a API Gateway como
+      # literalmente "/cartelera/sitemap.xml", no como "/sitemap.xml". Sin
+      # este segundo evento, esa ruta no calzaba con ningún handler y
+      # devolvía 404 crudo de Express — hallazgo real, verificado en vivo
+      # (03/09/2026) al implementar el mismo sitemap en Babel (T-0014).
+      - httpApi:
+          path: /cartelera/sitemap.xml
+          method: get
 
   liberarReservas:
     handler: dist-server-bundle/liberar-reservas.handler

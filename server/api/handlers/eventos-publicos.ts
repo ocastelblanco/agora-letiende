@@ -183,6 +183,17 @@ function escaparXml(valor: string): string {
 }
 
 /**
+ * Dos rutas resuelven al mismo sitemap: `/sitemap.xml` (dominio directo,
+ * `agora.letiende.co`) y `/cartelera/sitemap.xml` (a través del proxy de
+ * letiende.co — CloudFront reenvía la ruta COMPLETA sin `OriginPath`,
+ * tech-specs.md §7.2 del contenedor, detalle 3). Hallazgo real, verificado
+ * en vivo (03/09/2026): sin la segunda ruta, `evento.rawPath` nunca
+ * coincidía con el literal `/sitemap.xml` cuando la petición llegaba
+ * embebida, y la ruta ni siquiera calzaba en `serverless.yml` — 404 crudo.
+ */
+const RUTAS_SITEMAP = new Set(['/sitemap.xml', '/cartelera/sitemap.xml']);
+
+/**
  * `GET /sitemap.xml` — ruta a nivel raíz del dominio (no bajo `/api`, ver
  * `serverless.yml`). `Query` sobre `estado-fechaHora-index` solo para
  * `estado = 'publicado'` (los `agotado` siguen siendo eventos reales pero no
@@ -239,7 +250,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (
   }
 
   try {
-    if ((evento.rawPath ?? '') === '/sitemap.xml') {
+    if (RUTAS_SITEMAP.has(evento.rawPath ?? '')) {
       return await generarSitemap();
     }
 
