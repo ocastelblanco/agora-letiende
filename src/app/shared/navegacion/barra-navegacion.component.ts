@@ -1,9 +1,10 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { PanelService } from '../../core/api/panel.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
+import { EmbebidoService } from '../../core/embebido/embebido.service';
 import { GRUPOS_NAVEGACION, tabsVisiblesDeGrupo } from './secciones-navegacion';
 
 /**
@@ -39,10 +40,34 @@ export class BarraNavegacionComponent {
   private readonly panelService = inject(PanelService);
   private readonly router = inject(Router);
 
+  /**
+   * `true` cuando la app se sirve embebida a través del proxy de
+   * letiende.co (Host `letiende.co`/`staging.letiende.co`) — en ese caso
+   * el `<header>` completo se reemplaza por la barra común del contenedor
+   * (solo el estado sin sesión; el panel autenticado no se toca).
+   */
+  protected readonly embebido = inject(EmbebidoService).embebido;
+
   protected readonly usuarioActual = this.servicioAuth.usuarioActual;
 
   /** Controla el drawer móvil (`< 768px`) — oculto por defecto. */
   protected readonly menuAbierto = signal(false);
+
+  /** Controla el panel móvil de la barra embebida (independiente del drawer del panel autenticado). */
+  protected readonly menuEmbebidoAbierto = signal(false);
+  private readonly botonMenuEmbebido = viewChild<ElementRef<HTMLButtonElement>>('botonMenuEmbebido');
+  private readonly botonCerrarEmbebido = viewChild<ElementRef<HTMLButtonElement>>('botonCerrarEmbebido');
+
+  constructor() {
+    // Cuando el panel móvil embebido se abre, el foco pasa a su botón de
+    // cierre — mismo patrón de accesibilidad que `BarraNavegacion` del
+    // contenedor letiende.co.
+    effect(() => {
+      if (this.menuEmbebidoAbierto()) {
+        this.botonCerrarEmbebido()?.nativeElement.focus();
+      }
+    });
+  }
 
   /**
    * Ruta actual, vía `Router.events` (`NavigationEnd`) convertido con
@@ -91,6 +116,16 @@ export class BarraNavegacionComponent {
 
   protected alternarMenu(): void {
     this.menuAbierto.set(!this.menuAbierto());
+  }
+
+  protected alternarMenuEmbebido(): void {
+    this.menuEmbebidoAbierto.update((abierto) => !abierto);
+  }
+
+  protected cerrarMenuEmbebido(): void {
+    if (!this.menuEmbebidoAbierto()) return;
+    this.menuEmbebidoAbierto.set(false);
+    this.botonMenuEmbebido()?.nativeElement.focus();
   }
 
   /** Último tab visible del grupo — mismo criterio que rutaDestinoParaRol: es el destino al hacer click en la etiqueta del grupo (nivel 1). */

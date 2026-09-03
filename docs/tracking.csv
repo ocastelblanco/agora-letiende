@@ -229,3 +229,4 @@ Frontend,27/08/2026 19:30,27/08/2026 19:56,0:26:00,AI,Sonnet 5,Agrega descripcio
 Backend,27/08/2026 19:56,27/08/2026 20:27,0:31:00,AI,Sonnet 5,Borra el evento espejo de Calendar al eliminar o cancelar un evento; agrega placeholder de logotipo,Claude Code,cli,medium
 Workspace setting,27/08/2026 21:25,27/08/2026 21:29,0:04:00,AI,Sonnet 5,Vuelve a main actualizada y elimina rama local ya fusionada de ajustes UI,Claude Code,cli,low
 Workspace setting,29/08/2026 21:03,29/08/2026 21:04,0:01:00,AI,Sonnet 5,Actualiza main tras fusion del PR 56 y borra rama local docs/tracking-cierre-limpieza-ramas ya fusionada,Claude Code,cli,low
+Frontend,03/09/2026 12:57,03/09/2026 13:22,0:25:00,AI,Sonnet 5,Integra Agora con el proxy de letiende.co: baseHref cartelera barra comun sitemap y redirecciones,Claude Code,cli,high

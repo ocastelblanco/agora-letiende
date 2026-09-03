@@ -326,7 +326,7 @@ describe('handler de /api/eventos-publicos', () => {
 
       expect(respuesta.statusCode).toBe(200);
       expect(respuesta.headers?.['Content-Type']).toBe('application/xml');
-      expect(respuesta.body).toContain('<loc>https://agora.letiende.co/evento/concierto-jazz</loc>');
+      expect(respuesta.body).toContain('<loc>https://letiende.co/cartelera/evento/concierto-jazz</loc>');
       expect(respuesta.body).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
 
       const comando = sendMock.mock.calls[0][0];
