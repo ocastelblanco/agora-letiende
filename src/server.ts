@@ -25,6 +25,30 @@ const angularApp = new AngularNodeAppEngine();
  */
 
 /**
+ * Redirección 301 desde el dominio antiguo, SOLO para las dos rutas con
+ * valor de SEO real (`/` y `/evento/:slug`) — decisión explícita del
+ * humano: el resto de la app (login, panel, compra, puerta, admin) sigue
+ * funcionando idéntica en agora.letiende.co, porque el staff entra
+ * directo por ese dominio, nunca a través de letiende.co/cartelera.
+ */
+const HOST_ANTIGUO = 'agora.letiende.co';
+const RUTA_DETALLE_EVENTO = /^\/evento\/[^/]+$/;
+
+app.use((req, res, next) => {
+  if (req.hostname !== HOST_ANTIGUO) {
+    next();
+    return;
+  }
+  const esRaiz = req.path === '/';
+  const esDetalleEvento = RUTA_DETALLE_EVENTO.test(req.path);
+  if (esRaiz || esDetalleEvento) {
+    res.redirect(301, `https://letiende.co/cartelera${req.originalUrl}`);
+    return;
+  }
+  next();
+});
+
+/**
  * Serve static files from /browser
  */
 app.use(
