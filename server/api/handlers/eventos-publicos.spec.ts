@@ -351,6 +351,16 @@ describe('handler de /api/eventos-publicos', () => {
 
       expect(respuesta.body).toContain('a&amp;b');
     });
+
+    it('también responde en /cartelera/sitemap.xml (ruta real cuando llega embebida a través del proxy de letiende.co, tech-specs.md §7.2 detalle 3)', async () => {
+      sendMock.mockResolvedValue({ Items: [eventoPublicado] });
+
+      const respuesta = await invocar('GET', { rawPath: '/cartelera/sitemap.xml' });
+
+      expect(respuesta.statusCode).toBe(200);
+      expect(respuesta.headers?.['Content-Type']).toBe('application/xml');
+      expect(respuesta.body).toContain('<loc>https://letiende.co/cartelera/evento/concierto-jazz</loc>');
+    });
   });
 
   it('responde 405 para un método no soportado', async () => {
