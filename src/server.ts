@@ -25,14 +25,29 @@ const angularApp = new AngularNodeAppEngine();
  */
 
 /**
- * Redirección 301 desde el dominio antiguo, SOLO para las dos rutas con
- * valor de SEO real (`/` y `/evento/:slug`) — decisión explícita del
- * humano: el resto de la app (login, panel, compra, puerta, admin) sigue
- * funcionando idéntica en agora.letiende.co, porque el staff entra
- * directo por ese dominio, nunca a través de letiende.co/cartelera.
+ * Redirección 301 desde el dominio antiguo (`agora.letiende.co`).
+ *
+ * El build de esta app usa `baseHref: /cartelera/` (para que el proxy de
+ * letiende.co funcione), lo que significa que el Router de Angular del
+ * lado cliente espera que la URL real del navegador ya empiece con
+ * `/cartelera`. Por eso hay dos ramas de redirección, según el valor SEO
+ * de la ruta — decisión explícita del humano:
+ *
+ * 1. `/` y `/evento/:slug` (rutas públicas con valor de SEO/contenido) →
+ *    301 CROSS-DOMAIN a `letiende.co/cartelera/...`. Consolida el SEO en
+ *    un solo dominio y evita contenido duplicado.
+ * 2. Cualquier otra ruta (login, panel, admin, compra, puerta, etc.) que
+ *    no venga ya con el prefijo `/cartelera` → 301 MISMO DOMINIO a
+ *    `agora.letiende.co/cartelera/...`. El staff sigue entrando por el
+ *    dominio de siempre; solo se le antepone el prefijo obligatorio para
+ *    que el Router/baseHref de Angular resuelva bien.
+ *
+ * La condición `!req.path.startsWith('/cartelera')` es lo que evita el
+ * bucle: la segunda petición (ya con el prefijo) cae al `next()` final.
  */
 const HOST_ANTIGUO = 'agora.letiende.co';
 const RUTA_DETALLE_EVENTO = /^\/evento\/[^/]+$/;
+const PREFIJO_CARTELERA = '/cartelera';
 
 app.use((req, res, next) => {
   if (req.hostname !== HOST_ANTIGUO) {
@@ -42,22 +57,32 @@ app.use((req, res, next) => {
   const esRaiz = req.path === '/';
   const esDetalleEvento = RUTA_DETALLE_EVENTO.test(req.path);
   if (esRaiz || esDetalleEvento) {
-    res.redirect(301, `https://letiende.co/cartelera${req.originalUrl}`);
+    res.redirect(301, `https://letiende.co${PREFIJO_CARTELERA}${req.originalUrl}`);
+    return;
+  }
+  if (!req.path.startsWith(PREFIJO_CARTELERA)) {
+    res.redirect(301, `https://agora.letiende.co${PREFIJO_CARTELERA}${req.originalUrl}`);
     return;
   }
   next();
 });
 
 /**
- * Serve static files from /browser
+ * Serve static files from /browser.
+ *
+ * El build genera los archivos en una carpeta plana (sin subcarpeta
+ * `cartelera/`), pero con `baseHref: /cartelera/` el HTML servido le pide
+ * al navegador los assets bajo ese prefijo. Por eso se monta el estático
+ * dos veces: bajo `/cartelera` (lo que el navegador realmente pide) y en
+ * la raíz (compatibilidad, por si algo pide la ruta sin prefijo).
  */
-app.use(
-  express.static(browserDistFolder, {
-    maxAge: '1y',
-    index: false,
-    redirect: false,
-  }),
-);
+const opcionesEstatico = {
+  maxAge: '1y',
+  index: false,
+  redirect: false,
+};
+app.use(PREFIJO_CARTELERA, express.static(browserDistFolder, opcionesEstatico));
+app.use(express.static(browserDistFolder, opcionesEstatico));
 
 /**
  * Handle all other requests by rendering the Angular application.
