@@ -2,40 +2,52 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
-**Estado al cierre de sesión (03/09/2026, actualizado) — Integración con el proxy de `letiende.co`:**
-pedido **externo** al roadmap de este repositorio, coordinado desde el proyecto contenedor
-`letiende.co` (T-0013 en su `TODO.md`). No ocupa un slot del motor JIT (Tarea 1/Tarea 2 siguen siendo
-las de v2, sin cambios). **PRs #58/#59/#60 ya fusionados**: `baseHref: /cartelera/`, barra de
-navegación común solo en el estado sin sesión, sitemap apuntando a `letiende.co/cartelera`, y
-redirección 301 desde `agora.letiende.co` (dos ramas: `/`/`evento/:slug` cross-domain por SEO, el
-resto mismo dominio con el prefijo agregado, para no romper el acceso directo del staff).
+**Estado al cierre de sesión (03/09/2026, actualizado) — Integración con el proxy de `letiende.co`,
+COMPLETA, todos los PRs fusionados y verificados en producción real:** pedido **externo** al roadmap de
+este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0013 en su `TODO.md`). No
+ocupó un slot del motor JIT (Tarea 1/Tarea 2 siguen siendo las de v2, sin cambios). `baseHref:
+/cartelera/`, barra de navegación común solo en el estado sin sesión, sitemap apuntando a
+`letiende.co/cartelera`, y redirección 301 desde `agora.letiende.co` a `agora.letiende.co/cartelera`.
 
 Tras el primer despliegue real a staging, verificado con curl y con navegador real
-(`claude-in-chrome`), aparecieron **dos hallazgos más, ninguno anticipado por la planeación original**,
-ambos ya corregidos y verificados en vivo pero **pendientes de revisión y fusión humana**:
+(`claude-in-chrome`), aparecieron **tres hallazgos más, ninguno anticipado por la planeación original**,
+todos ya corregidos, fusionados y verificados en vivo:
 
-- **PR #61 (`fix/sitemap-bajo-prefijo-cartelera`):** `staging.letiende.co/cartelera/sitemap.xml`
+- **PR #61 (`fix/sitemap-bajo-prefijo-cartelera`), fusionado:** `staging.letiende.co/cartelera/sitemap.xml`
   respondía 404 — CloudFront reenvía la ruta completa con el prefijo (sin `OriginPath`), pero el API
   Gateway de esta app solo tenía registrada `/sitemap.xml` sin prefijo. Se agregó un segundo evento
   `httpApi` (`/cartelera/sitemap.xml`) a la función `eventosPublicos`, y como su handler inspecciona
   `evento.rawPath`, se cambió esa igualdad exacta por un `Set` con las dos rutas válidas.
-- **PR #62 (`fix/api-embebida-antepone-prefijo`):** el hallazgo más grave de esta ronda, reportado en
-  vivo por el humano ("nada funciona") — `http.get('/api/eventos-publicos')` es una ruta **absoluta**,
-  y el navegador la resuelve contra el ORIGEN de la página (`staging.letiende.co`), **ignorando el
-  `<base href>`** por completo (a diferencia de una ruta relativa). Sin prefijo, CloudFront la enrutaba
-  al comportamiento por defecto (el contenedor `letiende.co`) en vez de a esta app. El fix del lado de
-  CloudFront (quitar el prefijo antes del origen, ya desplegado en `letiende.co`) era necesario pero
-  **insuficiente por sí solo**: el navegador nunca llegaba a enviar la URL con prefijo. Se completó
-  extendiendo el `absoluteUrlInterceptor` (ya existía para el caso SSR) para anteponer `/cartelera` a
-  las llamadas `/api/*` en el navegador cuando `EmbebidoService.embebido` es `true`. Verificado con
-  navegador real: `GET staging.letiende.co/cartelera/api/eventos-publicos` → 200, cartelera carga
-  datos reales, sin errores de consola.
+- **PR #62 (`fix/api-embebida-antepone-prefijo`), fusionado:** el hallazgo más grave de esta ronda,
+  reportado en vivo por el humano ("nada funciona") — `http.get('/api/eventos-publicos')` es una ruta
+  **absoluta**, y el navegador la resuelve contra el ORIGEN de la página (`staging.letiende.co`),
+  **ignorando el `<base href>`** por completo (a diferencia de una ruta relativa). Sin prefijo,
+  CloudFront la enrutaba al comportamiento por defecto (el contenedor `letiende.co`) en vez de a esta
+  app. El fix del lado de CloudFront (quitar el prefijo antes del origen, ya desplegado en
+  `letiende.co`) era necesario pero **insuficiente por sí solo**: el navegador nunca llegaba a enviar
+  la URL con prefijo. Se completó extendiendo el `absoluteUrlInterceptor` (ya existía para el caso SSR)
+  para anteponer `/cartelera` a las llamadas `/api/*` en el navegador cuando `EmbebidoService.embebido`
+  es `true`. Verificado con navegador real: `GET staging.letiende.co/cartelera/api/eventos-publicos` →
+  200, cartelera carga datos reales, sin errores de consola.
+- **PR #63 (`fix/redirige-mismo-dominio-hasta-cutover`), fusionado (03/09/2026) — incidente real de
+  producción, reportado en vivo por el humano:** la redirección de `/`/`evento/:slug` que el diseño
+  original de T-0013 hacía CROSS-DOMAIN a `letiende.co/cartelera/...` (para consolidar SEO) se desplegó
+  a producción antes de que el cutover real de `letiende.co` (T-14/T-15, todavía pendiente) hiciera que
+  ese destino existiera — `letiende.co` en producción sigue sirviendo el sitio estático viejo
+  (`E33QAN86FY24JZ`), sin ninguna ruta `/cartelera`. Como `agora.letiende.co` es hoy el único acceso
+  público real, quedó roto: el visitante caía en `/eventos`, el fallback del sitio viejo. Corregido
+  colapsando las dos ramas de redirección en una sola — **toda** ruta redirige mismo dominio con el
+  prefijo mientras el cutover no ocurra; la rama cross-domain queda comentada en el código para
+  restaurarse cuando T-14/T-15 esté hecho. Verificado con `aws lambda invoke` directo contra
+  `agora-letiende-staging-ssr` con un evento simulado (`Host: agora.letiende.co`, ya que `curl` contra
+  la URL cruda de `execute-api` no reenvía de forma confiable un `Host` suplantado) y, tras la fusión,
+  con `curl` real contra `https://agora.letiende.co/` en producción: 301 → `agora.letiende.co/cartelera/`
+  → 200.
 
-Detalle técnico completo de los 4 hallazgos (los 2 de la implementación original más estos 2) en
-`docs/MEMORY.md` §2/§7. **Pendiente:** que el humano revise y fusione los PRs #61 y #62 — hasta
-entonces, `agora.letiende.co` sigue funcionando exactamente igual que antes de esta tarea en
-producción (nada de esto se despliega a producción sin fusionar; en staging ya está desplegado y
-verificado).
+Detalle técnico completo de los 5 hallazgos en `docs/MEMORY.md` §2/§7. **Sin pendientes** — la
+integración está completa y en producción. Lo único que falta para que la redirección cross-domain de
+`/`/`evento/:slug` pueda restaurarse es el cutover real de `letiende.co` (T-14/T-15), que no es una
+tarea de este repositorio.
 
 **Estado al cierre de sesión (26/08/2026, continuación) — Roadmap #19 (Pago automático con Bold) completo, los 3 PR fusionados:** Sub-tarea 1 (backend, PR #50), Sub-tarea 2 (frontend, PR #51) y el fix de aforo de `esperando_pago_bold` encontrado validando esta última (PR #52) quedan todos fusionados en `main`. El usuario completó la validación manual final en staging real con tarjetas Visa/Mastercard y PSE de pruebas (aprobada, rechazada por el banco, error de transacción, abandono del pago) — funcionó de punta a punta. Resumen técnico completo movido a `docs/MEMORY.md` §2 (dos bullets, Sub-tarea 1 y Sub-tarea 2) y §9 (narrativa completa de las 3 rondas de bugs reales del frontend más el fix de aforo). Ramas `feature/bold-pagos-frontend`/`fix/aforo-esperando-pago-bold` limpiadas (locales y remotas, ya auto-eliminadas por GitHub al fusionar). Repositorio de vuelta en `main`, solo esa rama local.
 
