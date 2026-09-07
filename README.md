@@ -8,7 +8,7 @@
 
 <pre align="center">Boletería para los espectáculos del teatro de Le Tiende</pre>
 
-![Status](https://img.shields.io/badge/estado-en%20producción-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) [![SLIM](https://img.shields.io/badge/Best%20Practices%20from-SLIM-blue)](https://nasa-ammos.github.io/slim/)
+![Status](https://img.shields.io/badge/estado-en%20producción-brightgreen) ![License](https://img.shields.io/badge/license-Apache%202.0-blue) [![SLIM](https://img.shields.io/badge/Best%20Practices%20from-SLIM-blue)](https://nasa-ammos.github.io/slim/)
 
 Ágora es la aplicación de boletería del centro cultural **Le Tiende** (Bogotá, Colombia), en producción en [**agora.letiende.co**](https://agora.letiende.co). Permite al `cliente` comprar boletas para un evento sin necesidad de crear cuenta, al `productor` validar comprobantes de pago y ver el estado de venta de su evento, y al `portero` validar el ingreso en la puerta escaneando el código QR de cada boleta. El `administrador` crea y edita los eventos, y gestiona el equipo con acceso al sistema.
 
