@@ -2,6 +2,13 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
+**Coordinación externa (07/09/2026) — relicenciar a Apache 2.0:** pedido **externo** al roadmap de
+este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0018, ampliada, en
+`docs/TODO.md`; OPT-18 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT
+(Tarea 1/Tarea 2 siguen siendo las de v2, sin cambios). El archivo `LICENSE` de este repositorio ya
+era Apache 2.0 real; solo el badge de `README.md` decía "MIT" (inconsistencia conocida desde
+T-0002, corregida en esta ronda). PR abierto en `agora-letiende`, sin fusionar todavía.
+
 **Estado al cierre de sesión (03/09/2026, actualizado) — Integración con el proxy de `letiende.co`,
 COMPLETA, todos los PRs fusionados y verificados en producción real:** pedido **externo** al roadmap de
 este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0013 en su `TODO.md`). No
