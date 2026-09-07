@@ -1,9 +1,14 @@
 import { Component, OnInit, inject } from '@angular/core';
+import { Meta } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
 import type { EventoPublico } from '../../core/models/evento.model';
 import { avisoEstadoEvento } from '../../shared/utilidades/aviso-estado-evento';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
+
+/** `<meta name="description">` de la cartelera pública (OPT-1, `docs/optimizacion-aplicaciones.md`) — mismo texto que el README describe del rol `cliente`, sin inventar nada nuevo. */
+const DESCRIPCION_CARTELERA =
+  'Cartelera de espectáculos del teatro Le Tiende en Bogotá: consulta los eventos publicados y compra tus boletas en línea, sin necesidad de crear cuenta.';
 
 /**
  * Ruta pública `/` (tech-specs.md §4.5, TODO.md Tarea 1) — cartelera de
@@ -19,11 +24,13 @@ import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 })
 export class CarteleraComponent implements OnInit {
   private readonly eventosPublicosService = inject(EventosPublicosService);
+  private readonly meta = inject(Meta);
 
   protected readonly eventos = this.eventosPublicosService.eventos;
   protected readonly errorCarga = this.eventosPublicosService.error;
 
   ngOnInit(): void {
+    this.meta.updateTag({ name: 'description', content: DESCRIPCION_CARTELERA });
     void this.eventosPublicosService.cargarEventos();
   }
 
