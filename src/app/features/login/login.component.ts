@@ -15,7 +15,7 @@ import { rutaDestinoParaRol } from '../../shared/navegacion/secciones-navegacion
       <div
         class="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
       >
-        <img src="/logo_negro_sin_fondo.svg" alt="Le Tiende" class="mx-auto mb-3 h-auto w-36" />
+        <img src="/logo_negro_sin_fondo.svg" alt="Le Tiende" width="144" height="63" class="mx-auto mb-3 h-auto w-36" />
         <h1 class="mb-8 text-2xl font-bold text-primary">Ágora</h1>
 
         <button

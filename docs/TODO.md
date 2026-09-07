@@ -2,6 +2,17 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
+**Coordinación externa (07/09/2026) — logo sin `width`/`height` explícitos:** pedido **externo** al
+roadmap de este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0025, en
+`docs/TODO.md`; OPT-7 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT.
+Lighthouse (`unsized-images`, `/cartelera/`) marcaba el logo de la barra sin dimensiones — causa real
+de *layout shift*, no cosmético. Se agregó `width="73" height="32"` (barra de navegación, embebida y
+standalone) y `width="144" height="63"` (logo de login), proporción real del viewBox del SVG
+(525.26×230.56) — el tamaño visible lo sigue controlando Tailwind (`h-8 w-auto`, `h-auto w-36`). El
+resto de imágenes del repositorio (portadas de eventos, avatar, QR) ya tienen ambas dimensiones fijas
+o `aspect-ratio` explícito en CSS, así que no las marca el mismo audit — verificado antes de tocar
+nada. Build + 325/325 pruebas en verde. PR abierto en `agora-letiende`, sin fusionar todavía.
+
 **Coordinación externa (07/09/2026) — landmark `<main>` faltante en la cartelera pública:** pedido
 **externo** al roadmap de este repositorio, coordinado desde el proyecto contenedor `letiende.co`
 (T-0020, en `docs/TODO.md`; OPT-5 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del
