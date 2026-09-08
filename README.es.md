@@ -1,0 +1,122 @@
+<div align="center">
+
+# Ágora
+
+**Boletería para los espectáculos del teatro de Le Tiende**
+
+[![Live](https://img.shields.io/badge/en_vivo-agora.letiende.co-E8630A?style=flat-square)](https://agora.letiende.co)
+[![License](https://img.shields.io/badge/licencia-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Angular](https://img.shields.io/badge/Angular-22-DD0031?style=flat-square&logo=angular&logoColor=white)](https://angular.dev)
+[![AWS](https://img.shields.io/badge/AWS-Lambda_·_DynamoDB_·_API_Gateway-232F3E?style=flat-square&logo=amazonaws&logoColor=white)](https://aws.amazon.com)
+[![Serverless](https://img.shields.io/badge/IaC-Serverless_Framework_4-FD5750?style=flat-square&logo=serverless&logoColor=white)](https://serverless.com)
+[![Firebase](https://img.shields.io/badge/Auth-Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com)
+[![SLIM](https://img.shields.io/badge/Best%20Practices%20from-SLIM-blue?style=flat-square)](https://nasa-ammos.github.io/slim/)
+[![English](https://img.shields.io/badge/read_in-English-FFE7B3?style=flat-square)](./README.md)
+
+</div>
+
+---
+
+Ágora es la aplicación de boletería del centro cultural **Le Tiende** (Bogotá, Colombia), en producción en [**agora.letiende.co**](https://agora.letiende.co). Permite al `cliente` comprar boletas para un evento sin necesidad de crear cuenta, al `productor` validar comprobantes de pago y ver el estado de venta de su evento, y al `portero` validar el ingreso en la puerta escaneando el código QR de cada boleta. El `administrador` crea y edita los eventos, y gestiona el equipo con acceso al sistema.
+
+El objetivo es reemplazar el proceso manual —conversaciones de WhatsApp, comprobantes revisados a mano, listas de asistentes dispersas y validación de entrada leyendo nombres en papel— por un flujo digital de punta a punta, sin sobreventa y sin sobrecargar de trabajo simultáneo al equipo de Le Tiende.
+
+[PRD](docs/PRD.md) | [Especificaciones técnicas](docs/tech-specs.md) | [Roadmap v2/v3 (no técnico)](docs/roadmap-v2-v3.md) | [TODO / roadmap activo](docs/TODO.md) | [Memoria de proyecto](docs/MEMORY.md)
+
+## Features
+
+* Cartelera pública de eventos, sin necesidad de autenticación, indexable vía SSR, con código QR descargable para afiches
+* Compra de boletas con reserva temporal de sillas (sin sobreventa) y carga de comprobante de pago, con liberación activa de reservas vencidas
+* Aprobación de comprobantes por el productor, con emisión automática de boletas digitales
+* Boleta digital con código QR único, entregada por correo
+* Validación de boletas en la puerta por escaneo de QR, con veredicto claro (válida / usada / inexistente / de otro evento)
+* Venta en efectivo desde la puerta o presencial
+* Etapas de boletería (preventa, taquilla, etc.) con cierre automático por fecha
+* Panel de control del evento (vendidas, disponibles, ingresados, sillas pendientes de confirmar) con exportación de reportes en Excel
+* Gestión de usuarios y roles propios de Ágora (`administrador` / `productor` / `portero`), autorización por evento asignado
+* Autenticación con Google (Firebase Authentication), proyecto compartido con Comandante y Babel
+* Boletería opcional para eventos sin cobro (solo controla aforo) y eventos con boletería vendida por un tercero (se anuncian en la Cartelera con un enlace externo)
+* Sincronización automática de cada evento con Google Calendar
+* Pago automático en línea con tarjeta o PSE vía **Bold** (checkout embebido, sin salir del sitio), como alternativa a la transferencia manual — confirmación por webhook firmado y reconciliado, nunca por lo que reporte el navegador del cliente
+
+Lo que sigue después de v1 — notificaciones por WhatsApp y exportación de reportes en PDF — está descrito para audiencia no técnica en [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
+
+## Estado del proyecto
+
+**Ágora está en producción** desde el 14 de agosto de 2026, en [`agora.letiende.co`](https://agora.letiende.co). El ciclo completo de un evento (crear, vender, cobrar, emitir boleta, validar en puerta) funciona de punta a punta. La documentación de producto y arquitectura está en [`docs/PRD.md`](docs/PRD.md) y [`docs/tech-specs.md`](docs/tech-specs.md); el estado detallado y las decisiones tomadas en el camino están en [`docs/MEMORY.md`](docs/MEMORY.md). Las tareas activas (si las hay) están en [`docs/TODO.md`](docs/TODO.md) — el proyecto puede quedar sin una tarea activa mientras se espera retroalimentación real de uso antes de priorizar lo que sigue.
+
+## Contents
+
+* [Stack tecnológico](#stack-tecnológico)
+* [Quick Start](#quick-start)
+* [Seguridad y costos](#seguridad-y-costos)
+* [Contributing](#contributing)
+* [License](#license)
+* [Support](#support)
+
+## Stack tecnológico
+
+| Capa | Tecnología |
+|---|---|
+| Frontend | Angular 22.x (standalone components, Signals, SSR con `@angular/ssr`) |
+| UI | Angular Material 22.x + Tailwind CSS 4.x, tema Material 3 propio con la paleta de Le Tiende |
+| Backend | Node.js 24.x en AWS Lambda + API Gateway (IaC con Serverless Framework 4) |
+| Base de datos | AWS DynamoDB (`PAY_PER_REQUEST` siempre — ver `CLAUDE.md`) |
+| Autenticación | Google Firebase Authentication (proyecto compartido con Comandante y Babel, roles independientes) |
+| Correo | AWS SES, desde `taquilla@letiende.co` |
+| Código QR | Generación en servidor + `@zxing/browser` para el escaneo en puerta |
+| Costo de infraestructura objetivo | **< US$1/mes**, medido — ver `docs/advertencia-urgente-costos-aws.md` |
+
+Ver el detalle completo en [`docs/tech-specs.md`](docs/tech-specs.md) y [`CLAUDE.md`](CLAUDE.md).
+
+## Quick Start
+
+### Requisitos
+
+* Node.js 24.x
+* Cuenta de AWS (para despliegue de Lambda/DynamoDB)
+* Proyecto Firebase compartido con Comandante y Babel (Authentication)
+
+### Setup
+
+```bash
+git clone https://github.com/ocastelblanco/agora-letiende.git
+cd agora-letiende
+npm install
+```
+
+### Ejecutar en desarrollo
+
+```bash
+npm run start          # servidor de desarrollo local (ng serve)
+```
+
+### Build de producción (SSR)
+
+```bash
+npm run build -- --configuration=production
+npm run serve:ssr
+```
+
+### Tests
+
+```bash
+npm run test           # pruebas unitarias del frontend
+npm run test:api       # pruebas unitarias del backend (Lambdas en server/)
+```
+
+## Seguridad y costos
+
+Ágora maneja dinero real y datos personales de clientes sin cuenta — las reglas de seguridad obligatorias (control de acceso, prevención de sobreventa, manejo de comprobantes, Habeas Data) están en [`CLAUDE.md`](CLAUDE.md) §5. Las reglas de costo de infraestructura (DynamoDB siempre `PAY_PER_REQUEST`, presupuestos, etiquetado) están en la sección "Costos de infraestructura" del mismo documento y en [`docs/advertencia-urgente-costos-aws.md`](docs/advertencia-urgente-costos-aws.md) — lectura obligatoria antes de tocar cualquier infraestructura. El objetivo de **< US$1/mes** se fijó desde el arranque del proyecto (ADR propio, `docs/MEMORY.md`) como reacción directa a un incidente real y ya resuelto en **Babel** (proyecto hermano, misma cuenta AWS): US$94,44 facturados en un mes sobre un objetivo declarado de US$0, el 96% por DynamoDB `PROVISIONED` mal configurado. Ágora nunca repitió ese error: todas sus tablas usan `PAY_PER_REQUEST` desde la primera tarea de infraestructura.
+
+## Contributing
+
+Todo cambio de código pasa por un Pull Request hacia `main` desde una rama `feature/*`, `fix/*`, `docs/*`, `hotfix/*` o `refactor/*`. Ver el flujo completo (incluyendo las prohibiciones absolutas de Git) en [`CLAUDE.md`](CLAUDE.md) §6.
+
+## License
+
+Ver [`LICENSE`](LICENSE).
+
+## Support
+
+Proyecto interno de Le Tiende. Para dudas o soporte, contactar al equipo de Le Tiende.

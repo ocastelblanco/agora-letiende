@@ -2,6 +2,23 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
+**Coordinación externa (08/09/2026) — README bilingüe:** pedido **externo** al roadmap de este
+repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0029, en `docs/TODO.md`; OPT-11
+en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT. Alcance real del DoD
+original: traducir el contenido existente a inglés como `README.md`, mover el español a
+`README.es.md`, alinear insignias con el estilo `flat-square` que ya usan los otros tres repos —
+**no** una reescritura al formato de caso de estudio extendido que sí tienen Babel/Comandante, cuyo
+contenido (Pareto humano/agente, incidente de costos propio) es específico de esos repos y no
+aplica aquí sin inventar cifras. `docs/tracking.csv` de Ágora solo registra tiempo de ejecución del
+agente (`role` siempre `AI`, sin filas de tiempo humano por separado), así que no se calculó ni se
+mostró ningún reparto humano/agente — habría sido una cifra inventada. Insignias nuevas: `Live`
+(enlaza a producción, mismo patrón que Babel/Comandante), `Firebase` (autenticación real), cruce de
+idioma en ambos sentidos. Se agregó una frase real, verificada contra `docs/MEMORY.md`, explicando por
+qué el objetivo de costo de Ágora es `< US$1/mes` desde el arranque: reacción directa al incidente real
+de **Babel** (US$94,44 en un mes), nunca un incidente propio de Ágora — verificado antes de escribirlo,
+no asumido por similitud entre los tres repos hermanos. PR abierto en `agora-letiende`, sin fusionar
+todavía.
+
 **Coordinación externa (07/09/2026) — logo sin `width`/`height` explícitos:** pedido **externo** al
 roadmap de este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0025, en
 `docs/TODO.md`; OPT-7 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT.
