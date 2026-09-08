@@ -2,6 +2,25 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
+**Coordinación externa (08/09/2026) — formato moderno de imágenes de eventos:** pedido **externo** al
+roadmap de este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0032, en
+`docs/TODO.md`; OPT-14 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT.
+Lighthouse (`image-delivery-insight`) marcaba las portadas de eventos del bucket `agora-activos-
+production` sin comprimir y sin formato moderno. Se agregó `convertirImagenAWebp()` (nueva,
+`src/app/shared/utilidades/`) — convierte a WEBP y reduce el lado más largo a máximo 1600px, con
+`canvas.toBlob('image/webp', 0.82)`, antes de subir la portada/logotipo de un evento
+(`EditarEventoComponent.subirImagen()`). **Decisión de diseño:** conversión en el cliente, no un
+servicio de transformación en el borde (Lambda@Edge/CloudFront Function) — no exige infraestructura
+nueva y resuelve el problema para toda subida futura; las imágenes ya subidas antes de este cambio no
+se tocan (nunca se reprocesan retroactivamente). Degradación explícita: si el navegador no soporta
+`createImageBitmap`/`canvas.toBlob` (verificado con *feature-detection*, no con *user-agent
+sniffing*), sube el archivo original sin conversión — nunca bloquea la subida por esto. `letiende.co`
+no necesita ningún cambio propio: embebe las mismas imágenes del mismo bucket, así que las subidas
+nuevas ya llegan optimizadas sin tocar ese repositorio. Build + 328/328 pruebas frontend en verde
+(3 nuevas, incluida la conversión real simulada con `canvas`/`createImageBitmap` mockeados, porque el
+entorno de pruebas — `jsdom` — no implementa esas APIs de verdad). PR abierto en `agora-letiende`, sin
+fusionar todavía.
+
 **Coordinación externa (08/09/2026) — Cache-Control en imágenes de eventos:** pedido **externo** al
 roadmap de este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0030, en
 `docs/TODO.md`; OPT-12 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT.
