@@ -164,8 +164,16 @@ export class EventosService {
 
       // Subida directa a S3 con la URL prefirmada — nunca lleva el
       // encabezado Authorization de nuestra API (CLAUDE.md §5, A02).
+      // Cache-Control debe coincidir exacto con el que firmó el backend
+      // (url-carga) o S3 rechaza la firma — la key lleva un UUID nuevo en
+      // cada subida, así que cachear "para siempre" es seguro (OPT-12).
       await firstValueFrom(
-        this.http.put(url, archivo, { headers: { 'Content-Type': archivo.type } }),
+        this.http.put(url, archivo, {
+          headers: {
+            'Content-Type': archivo.type,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        }),
       );
 
       return { exito: true, key };

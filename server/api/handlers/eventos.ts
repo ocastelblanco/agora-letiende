@@ -1128,6 +1128,12 @@ async function generarUrlCargaActivo(
   const extension = tipoMime.split('/')[1];
   const key = `eventos/${eventoId}/${tipo}-${randomUUID()}.${extension}`;
 
+  // La key lleva un UUID nuevo en cada subida — nunca se reescribe el mismo
+  // objeto con contenido distinto — así que cachear "para siempre" es
+  // seguro (Lighthouse cache-insight: 0ms de cacheLifetime real, era el
+  // mayor hallazgo de OPT-12). Firmado dentro del PutObjectCommand: el PUT
+  // del cliente (EventosService.subirActivo) debe enviar el mismo
+  // encabezado exacto o la firma no valida.
   const url = await getSignedUrl(
     clienteS3,
     new PutObjectCommand({
@@ -1135,6 +1141,7 @@ async function generarUrlCargaActivo(
       Key: key,
       ContentType: tipoMime,
       ContentLength: tamano,
+      CacheControl: 'public, max-age=31536000, immutable',
     }),
     { expiresIn: 900 },
   );

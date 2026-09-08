@@ -273,6 +273,7 @@ describe('EventosService', () => {
       expect(peticionS3.request.method).toBe('PUT');
       expect(peticionS3.request.headers.get('Authorization')).toBeNull();
       expect(peticionS3.request.headers.get('Content-Type')).toBe('image/png');
+      expect(peticionS3.request.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
       peticionS3.flush(null);
 
       expect(await promesa).toEqual({ exito: true, key: 'eventos/e1/imagen-abc.png' });
