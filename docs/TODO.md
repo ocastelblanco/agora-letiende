@@ -2,6 +2,22 @@
 
 Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** activas. Al completar cualquiera, se elimina, se mueve su resumen a `MEMORY.md` §2, y se calcula la siguiente tarea más prioritaria comparando `PRD.md` (roadmap) contra `MEMORY.md` (estado actual).
 
+**Coordinación externa (08/09/2026) — Cache-Control en imágenes de eventos:** pedido **externo** al
+roadmap de este repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0030, en
+`docs/TODO.md`; OPT-12 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT.
+Lighthouse (`cache-insight`) marcaba el bucket `agora-activos-production` con `cacheLifetimeMs: 0` —
+las imágenes de eventos (portadas/logotipos) nunca se cacheaban, ni en `agora.letiende.co` ni en
+`letiende.co` (que las embebe en su portada vía el proxy). Investigado antes de tocar nada: cada key de
+S3 lleva un UUID nuevo por subida (`eventos/:eventoId/:tipo-<uuid>.<ext>`), nunca se reescribe con
+contenido distinto, así que un `Cache-Control` de larga duración es seguro. Se agregó
+`CacheControl: 'public, max-age=31536000, immutable'` al `PutObjectCommand` firmado en
+`server/api/handlers/eventos.ts` (`url-carga`) — el encabezado forma parte de la firma, así que
+`EventosService.subirActivo()` (frontend) también tuvo que agregar el mismo encabezado exacto en el
+`PUT` a S3, o la firma no habría validado. Los otros dos buckets de Ágora (`comprobantes`, `reportes`)
+no se tocaron — son contenido privado de un solo uso, no cacheable por diseño, y no aparecían en el
+audit. Build + 325 pruebas frontend + 447 backend en verde (incluida una prueba nueva que verifica el
+encabezado real enviado a S3). PR abierto en `agora-letiende`, sin fusionar todavía.
+
 **Coordinación externa (08/09/2026) — README bilingüe:** pedido **externo** al roadmap de este
 repositorio, coordinado desde el proyecto contenedor `letiende.co` (T-0029, en `docs/TODO.md`; OPT-11
 en `docs/optimizacion-aplicaciones.md` §4). No ocupa un slot del motor JIT. Alcance real del DoD
