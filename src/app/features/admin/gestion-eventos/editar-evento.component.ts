@@ -20,6 +20,7 @@ import {
   VinculoExterno,
 } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
+import { convertirImagenAWebp } from '../../../shared/utilidades/convertir-imagen-webp';
 import { desdeInputBogota, paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
 import { slugificar } from '../../../shared/utilidades/slugificar';
 
@@ -756,7 +757,12 @@ export class EditarEventoComponent {
     const señalCargando = tipo === 'imagen' ? this.subiendoImagen : this.subiendoLogotipo;
     señalCargando.set(true);
     try {
-      const subida = await this.eventosService.subirActivo(eventoId, tipo, archivo);
+      // OPT-14: comprime y convierte a WEBP antes de subir (Lighthouse
+      // image-delivery-insight marcaba las portadas sin comprimir). Si el
+      // navegador no soporta la conversión, sube el archivo original tal
+      // cual — nunca bloquea la subida por esto.
+      const archivoOptimizado = await convertirImagenAWebp(archivo);
+      const subida = await this.eventosService.subirActivo(eventoId, tipo, archivoOptimizado);
       if (!subida.exito) {
         this.snackBar.open(subida.error, 'Cerrar', { duration: 6000 });
         return;
