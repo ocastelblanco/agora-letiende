@@ -23,12 +23,20 @@ async function invocar(metodo: string, opciones?: { rawPath?: string; slug?: str
   return respuesta as { statusCode: number; body?: string; headers?: Record<string, string> };
 }
 
+// Relativas a "ahora" (nunca una fecha fija) para que los eventos sigan
+// vigentes sin importar cuándo corra esta prueba — una fecha fija cercana ya
+// causó un fallo real de CI el 16/09/2026 al quedar en el pasado (ver
+// docs/tracking.csv). eventoAgotado va antes que eventoPublicado por
+// fechaHora, igual que en el dato original.
+const FECHA_EVENTO_AGOTADO_VIGENTE = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+const FECHA_EVENTO_VIGENTE = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
 const eventoPublicado = {
   eventoId: 'e1',
   slug: 'concierto-jazz',
   nombre: 'Concierto de jazz',
   descripcion: 'Una noche de jazz en Le Tiende',
-  fechaHora: '2026-09-15T01:00:00.000Z',
+  fechaHora: FECHA_EVENTO_VIGENTE,
   imagenKey: 'eventos/e1/imagen-abc.png',
   logotipoKey: 'eventos/e1/logotipo-def.png',
   etapas: [{ etapaId: 'et1', nombre: 'Preventa', precio: 45000, cierraEn: '2026-09-01T00:00:00.000Z', orden: 1 }],
@@ -41,7 +49,7 @@ const eventoAgotado = {
   slug: 'stand-up-agotado',
   nombre: 'Stand up',
   descripcion: 'Comedia',
-  fechaHora: '2026-09-10T01:00:00.000Z',
+  fechaHora: FECHA_EVENTO_AGOTADO_VIGENTE,
   etapas: [{ etapaId: 'et2', nombre: 'Única', precio: 30000, cierraEn: '2026-09-10T00:00:00.000Z', orden: 1 }],
   estado: 'agotado',
   productores: [],

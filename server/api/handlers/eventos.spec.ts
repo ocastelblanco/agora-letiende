@@ -76,6 +76,11 @@ const etapaValida = {
   orden: 1,
 };
 
+// Relativa a "ahora" (nunca una fecha fija) para que el evento siga vigente
+// sin importar cuándo corra esta prueba — una fecha fija cercana ya causó un
+// fallo real de CI el 16/09/2026 al quedar en el pasado (ver docs/tracking.csv).
+const FECHA_EVENTO_VIGENTE = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
 const eventoValido = {
   slug: 'concierto-jazz',
   nombre: 'Concierto de jazz',
@@ -859,7 +864,7 @@ describe('handler de /api/eventos', () => {
               estado: 'agotado',
               sillasTotales: 100,
               sillasDisponibles: 0,
-              fechaHora: '2026-09-15T01:00:00.000Z',
+              fechaHora: FECHA_EVENTO_VIGENTE,
               etapas: [{ etapaId: 'et1', cierraEn: '2026-09-10T00:00:00.000Z' }],
             },
           })
@@ -879,7 +884,7 @@ describe('handler de /api/eventos', () => {
               estado: 'agotado',
               sillasTotales: 100,
               sillasDisponibles: 0,
-              fechaHora: '2026-09-15T01:00:00.000Z',
+              fechaHora: FECHA_EVENTO_VIGENTE,
               etapas: [{ etapaId: 'et1', cierraEn: '2026-09-10T00:00:00.000Z' }],
             },
           })
