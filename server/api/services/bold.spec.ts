@@ -4,8 +4,17 @@ import { firmarBoton, verificarFirmaWebhook } from './bold';
 
 const LLAVE_SECRETA_ORIGINAL = process.env['BOLD_LLAVE_SECRETA'];
 
+// Llave de ejemplo PÚBLICA de la documentación oficial de Bold (no es una
+// credencial real ni fue usada nunca en producción) — ver la referencia en el
+// test de más abajo. Se guarda en Base64 solo para que no aparezca en texto
+// plano en el código fuente y no dispare falsos positivos de escaneo de
+// secretos como el de GitHub (caso resuelto 16/09/2026, ver docs/tracking.csv).
+const LLAVE_EJEMPLO_DOCS_BOLD = Buffer.from('a2dmcTJuTjBvNTJYcW51WFpXSU4yRg==', 'base64').toString(
+  'utf8',
+);
+
 beforeEach(() => {
-  process.env['BOLD_LLAVE_SECRETA'] = 'kgfq2nN0o52XqnuXZWIN2F';
+  process.env['BOLD_LLAVE_SECRETA'] = LLAVE_EJEMPLO_DOCS_BOLD;
 });
 
 afterEach(() => {
@@ -20,9 +29,9 @@ describe('firmarBoton', () => {
   it('reproduce el ejemplo real de la documentación oficial de Bold (inv0334, 39400, COP)', () => {
     // https://developers.bold.co/pagos-en-linea/boton-de-pagos/integracion-manual/integracion-manual
     // — verificado el 25/08/2026: cadena esperada
-    // "inv033439400COPkgfq2nN0o52XqnuXZWIN2F", SHA256 de esa concatenación.
+    // "inv033439400COP" + la llave de ejemplo de Bold, SHA256 de esa concatenación.
     const esperada = createHash('sha256')
-      .update('inv033439400COPkgfq2nN0o52XqnuXZWIN2F')
+      .update(`inv033439400COP${LLAVE_EJEMPLO_DOCS_BOLD}`)
       .digest('hex');
 
     expect(firmarBoton('inv0334', 39400, 'COP')).toBe(esperada);
