@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, RESPONSE_INIT, signal } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
@@ -42,6 +42,12 @@ export class DetalleEventoComponent {
   private readonly meta = inject(Meta);
   private readonly title = inject(Title);
   private readonly documento = inject(DOCUMENT);
+  /**
+   * `null` fuera de SSR en modo servidor (navegación cliente tras hidratar).
+   * `optional: true` es obligatorio por eso — inyectarlo sin esa opción
+   * rompería la navegación normal del visitante.
+   */
+  private readonly responseInit = inject(RESPONSE_INIT, { optional: true });
 
   readonly slug = input.required<string>();
 
@@ -90,6 +96,12 @@ export class DetalleEventoComponent {
     const resultado = await this.eventosPublicosService.cargarEventoPorSlug(slug);
 
     if (!resultado.exito) {
+      // El backend (`eventos-publicos.ts`) ya devuelve 404 real para un
+      // evento inexistente o vencido — sin esto, Google Search Console lo
+      // reporta como "soft 404" (HTML de "no encontrado" con HTTP 200).
+      if (this.responseInit) {
+        this.responseInit.status = 404;
+      }
       this.noEncontrado.set(true);
       this.cargando.set(false);
       return;
