@@ -93,6 +93,7 @@ El administrador define, para cada evento:
 
 - Nombre y descripción.
 - Imagen gráfica del evento (opcional) y logotipo para incluir en la boleta (opcional).
+  - **Tamaño recomendado de la imagen del evento: 1600 × 800 px (proporción 2:1, el doble de ancho que de alto).** La cartelera y la página del evento la muestran siempre en esa proporción: una imagen con otra forma se recorta por los bordes para llenar el espacio, así que conviene dejar lo importante (títulos, rostros) hacia el centro. Una imagen más grande no mejora la calidad: el sistema la reduce a un máximo de 1600 px en su lado más largo y la convierte a WebP antes de subirla.
 - Fecha y hora.
 - Cantidad de sillas disponibles.
 - Etapas de boletería (por defecto una sola), cada una con su precio y su fecha de cierre. El precio puede ser $0 para eventos gratuitos.
