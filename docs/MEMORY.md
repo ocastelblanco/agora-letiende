@@ -1582,7 +1582,7 @@ Tras fusionar el PR #52, el usuario intentó fusionar el PR #51 y GitHub report�
 
 **Sesión del 30/09/2026 — Hotfix de slug único y plan de ajustes a eventos**
 
-1. **Consulta puntual:** la URL del webhook de Bold en staging (`https://ttukw9i82m.execute-api.us-east-1.amazonaws.com/api/pagos/bold/webhook`), verificada contra el API Gateway real. OCM pidió no registrarla en el tracking.
+1. **Consulta puntual:** la URL del webhook de Bold en staging (ya anotada en `docs/tareas-a-realizar.md`), verificada contra el API Gateway real. OCM pidió no registrarla en el tracking.
 2. **Planeación** de cinco ajustes pedidos por OCM: duración de eventos, lista de eventos con estado/orden/filtros, duplicar evento, lista de paneles con orden y filtro por periodo, y pruebas Playwright del flujo de compra con Bold. Decisiones resueltas con `AskUserQuestion`: pruebas híbridas (ADR-015), slug editable en borrador, filtro de periodo con flechas, y copia completa al duplicar (imágenes copiadas en S3, fechas copiadas). Plan completo en `docs/plan-ajustes-eventos.md`.
 3. **Hallazgo en producción, detectado por OCM al planear el duplicado:** varias funciones del mismo día compartían slug (ver §7 y ADR-014). Hotfix en el **PR #77 (fusionado)**. Luego, con aprobación explícita de OCM:
    - 7 eventos renombrados por hora con escrituras condicionales. Escaneo posterior: 0 slugs repetidos.
