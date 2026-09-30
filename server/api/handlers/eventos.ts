@@ -18,7 +18,7 @@ import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
 import { generarQrPng, generarQrSvg } from '../services/qr';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
-import { haFinalizadoPorVigencia } from '../lib/vigencia-evento';
+import { estadoEfectivo, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import {
   DURACION_POR_DEFECTO_MINUTOS,
   duracionMinutosDe,
@@ -399,6 +399,7 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
     new ScanCommand({ TableName: process.env['TABLA_EVENTOS'] }),
   );
   const items = resultado.Items ?? [];
+  const ahora = new Date();
   const visibles = items
     .filter((item) => tieneAccesoAlEvento(item as Record<string, unknown>, permisos))
     // v2 (roadmap #25) — retrocompatibilidad: un evento creado antes de esta
@@ -410,6 +411,19 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
       administradoPorLeTiende: item['administradoPorLeTiende'] !== false,
       // Roadmap #26 — un evento anterior al campo se devuelve con la duración por defecto.
       duracionMinutos: duracionMinutosDe(item['duracionMinutos']),
+      // Roadmap #27 — estado efectivo (vigencia real), igual que la cartelera: el
+      // `estado` persistido de un evento vencido que nadie visitó sigue en 'publicado'.
+      estado:
+        typeof item['estado'] === 'string'
+          ? estadoEfectivo(
+              {
+                fechaHora: String(item['fechaHora']),
+                etapas: Array.isArray(item['etapas']) ? (item['etapas'] as { cierraEn: string }[]) : [],
+                estado: item['estado'],
+              },
+              ahora,
+            )
+          : item['estado'],
     }));
   return respuestaJson(200, visibles);
 }
