@@ -139,6 +139,17 @@ describe('crearEventoCalendar', () => {
     });
   });
 
+  // Roadmap #26 — la hora de fin ya no es una constante de 3 horas.
+  it('usa duracionMinutos para la hora de fin (90 min → 02:30Z) y 180 cuando el evento no lo trae', async () => {
+    requestMock.mockResolvedValue({ data: { id: 'gcal-123' } });
+
+    await crearEventoCalendar({ ...eventoAdministrado, duracionMinutos: 90 }, []);
+    await crearEventoCalendar(eventoAdministrado, []);
+
+    expect(requestMock.mock.calls[0]?.[0].data.end.dateTime).toBe('2026-09-15T02:30:00.000Z');
+    expect(requestMock.mock.calls[1]?.[0].data.end.dateTime).toBe('2026-09-15T04:00:00.000Z');
+  });
+
   it('devuelve { exito: false } sin lanzar cuando la llamada HTTP falla', async () => {
     requestMock.mockRejectedValueOnce(new Error('Calendar API no disponible'));
 

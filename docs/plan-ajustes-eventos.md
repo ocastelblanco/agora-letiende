@@ -29,10 +29,10 @@ Por qué este orden: la duración es un campo que el duplicado ya debe copiar (1
 
 - **Modelo:** campo nuevo `duracionMinutos: number` en `agora-eventos`. Es un entero entre 15 y 1440 minutos, con 180 por defecto. Se valida en `crearEvento()` y `actualizarEvento()` (`server/api/handlers/eventos.ts`).
 - **Quién lo edita:** solo el administrador. No se agrega a `CAMPOS_EDITABLES_PRODUCTOR`.
-- **Formulario** (`editar-evento.component`): dos campos, horas (0–24) y minutos (en pasos de 5), precargados con 3 h 00 min. Se envían como un único `duracionMinutos`.
+- **Formulario** (`editar-evento.component`): dos campos, horas (0–24) y minutos (con paso de 5), precargados con 3 h 00 min. Se envían como un único `duracionMinutos`. Sin texto de ayuda sobre Google Calendar: el campo podría usarse para otras cosas más adelante (decisión de OCM, 30/09/2026).
 - **Google Calendar** (`server/api/services/google-calendar.ts`): la constante `DURACION_EVENTO_MS` desaparece. La hora de fin pasa a ser `fechaHora + duracionMinutos`, y `EventoParaCalendar` recibe `duracionMinutos`. Si se cambia la duración, Calendar se actualiza con el mismo `sincronizarConGoogleCalendar()` que ya corre tras cada `PUT`.
 - **Eventos existentes:**
-  - Un script de un solo uso (`server/scripts/rellenar-duracion.ts`) escanea la tabla y aplica `UpdateItem` con `ConditionExpression: attribute_not_exists(duracionMinutos)`, así que nunca sobrescribe un evento que ya tenga el campo.
+  - Un script de un solo uso (`server/scripts/rellenar-duracion.mjs`, en JavaScript plano para no depender de la compilación de las Lambdas) escanea la tabla y aplica `UpdateItem` con `ConditionExpression: attribute_not_exists(duracionMinutos)`, así que nunca sobrescribe un evento que ya tenga el campo.
   - Se ejecuta primero en staging. En producción solo con aprobación explícita de OCM.
   - Además, toda lectura usa 180 cuando el campo falta (defensa en profundidad).
   - Las entradas de Calendar existentes ya duran 3 h, así que no hay que resincronizar.

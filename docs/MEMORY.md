@@ -17,11 +17,11 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | **URL de producción** | ✅ `https://agora.letiende.co` — **en vivo** (roadmap #17 completo, PR #43, ADR-013). Verificado por CLI el 14/08/2026: certificado ACM `ISSUED`, `GET /api/salud` y `GET /` responden `200` con TLS válido a través del dominio, confirmado también en vivo por el usuario |
 | **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` — login con Google + `GET /api/usuarios/me` verificados de punta a punta (02/08/2026), Gestión de usuarios (PR #10), CRUD de eventos (PR #11), Cartelera pública (PR #12), el menú de navegación (PR #13), el QR del evento (PR #14), Motor de aforo (PR #15), Compra y reserva de sillas (PR #16), Carga de comprobante (PR #17), Aprobación del productor (PR #18), Emisión de boletas (PR #19) y Validación en puerta (PR #20) **todos validados en vivo por el usuario** — PR #20 incluyó un bug real reportado en el propio PR (portero aterrizaba en la cartelera pública tras el login, no en `/puerta`) y corregido en la misma rama antes de la validación final. Venta en efectivo (PR #21) **fusionada**. Panel de control básico (PR #22) **fusionado y validado en vivo por el usuario** — la propia validación manual (flujo real de compra por transferencia y en efectivo) encontró un bug real de datos (ver §7, `expiraEn`/TTL) corregido y consolidado en el mismo PR antes de fusionar. Exportación XLSX (PR #25) **fusionada** — el usuario confirmó la fusión (11/08/2026), iba a eliminar y recrear los eventos de prueba de staging antes de validar en vivo. Fix de `etapaId` (PR #26) **fusionado** — validado en vivo por el usuario ("todo funciona bien") antes de fusionar. Etapas de boletería con cierre automático (PR #28) **fusionado** — implementado y verificado dos veces (incluido el fix del bug real de dinero de `etapaVigente()` ordenando por `orden` en vez de `cierraEn`), sin desplegar a producción todavía |
 | **Rama principal** | `main` |
-| **Último commit en `main`** | merge del PR #77 (hotfix de slug único por función, 30/09/2026) |
+| **Último commit en `main`** | merge del PR #78 (plan de ajustes a eventos, 30/09/2026) |
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 30/09/2026 — Hotfix de slug único por función (PR #77, fusionado; 7 slugs de producción corregidos y resincronizados en Google Calendar, ADR-014) y plan de ajustes a eventos (`docs/plan-ajustes-eventos.md`, roadmap #26 a #30, ADR-015). Ver §9 |
+| **Última sesión** | 30/09/2026 (continuación) — Duración de eventos (roadmap #26, PR #79): implementada, revisada por OCM en staging y relleno aplicado en producción. Antes, PR #78 (plan de ajustes) fusionado. Ver §9 |
 
 ---
 
@@ -96,9 +96,9 @@ Ninguno — **v1 completa, incluido Dominio personalizado (PR #43, 14/08/2026)**
   **Hallazgo 5 (PR #63, fusionado 03/09/2026) — incidente real de producción, reportado en vivo por el humano:** el diseño original de T-0013 redirigía `/` y `/evento/:slug` en una rama aparte, CROSS-DOMAIN a `letiende.co/cartelera/...`, para consolidar el SEO en un solo dominio — decisión explícita, correcta como diseño final, pero desplegada a producción ANTES de que el cutover real de `letiende.co` (T-14/T-15, todavía pendiente) hiciera que ese destino existiera: `letiende.co` en producción sigue sirviendo el sitio estático viejo (`E33QAN86FY24JZ`), sin ninguna ruta `/cartelera`. Como `agora.letiende.co` es hoy el único acceso público real (el contenedor nuevo aún no está en el dominio raíz), quedó roto — el visitante caía en `/eventos`, el fallback del sitio viejo. **Lección:** una redirección cross-domain diseñada para un estado futuro del sistema (el cutover) no debe desplegarse a producción antes de que ese estado exista, aunque el propio repositorio esté "listo" — el acoplamiento entre repositorios importa tanto como el código de cada uno. Corregido colapsando las dos ramas de `src/server.ts` en una sola: mientras el cutover no ocurra, toda ruta redirige mismo dominio con el prefijo, sin excepción; la rama cross-domain queda documentada en un comentario para restaurarse cuando T-14/T-15 esté hecho. Verificado en staging con `aws lambda invoke` directo contra `agora-letiende-staging-ssr` con un evento `APIGatewayProxyEventV2` simulado (`headers.host: 'agora.letiende.co'`) — necesario porque `curl` contra la URL cruda de `execute-api` no reenvía de forma confiable un `Host` suplantado al comportamiento real del Lambda — y, tras la fusión, con `curl` real en producción: `https://agora.letiende.co/` → 301 → `https://agora.letiende.co/cartelera/` → 200.
 - [ ] Notificaciones por WhatsApp — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo)
 - [x] Hotfix: enlace (slug) único por función (30/09/2026, **PR #77, fusionado**): `crearEvento()` asigna contador romano (`-ii`, `-iii`…) a un slug ocupado; 7 eventos de producción renombrados por hora y resincronizados en Google Calendar. Ver §7, ADR-014 y §9
-- [ ] Duración de eventos (roadmap #26) — Tarea 1 activa de `TODO.md`, `docs/plan-ajustes-eventos.md`
-- [ ] Lista de eventos con estado, orden y filtros (roadmap #27) — Tarea 2 activa de `TODO.md`
-- [ ] Duplicar evento (roadmap #28) — en cola
+- [x] Duración de eventos (30/09/2026, roadmap #26, **PR #79**): `duracionMinutos` (15–1440, 180 por defecto) validado en crear/editar y solo editable por administrador; formulario con horas y minutos; la hora de fin de Google Calendar usa la duración en vez de la constante de 3 h. Script de relleno `server/scripts/rellenar-duracion.mjs` (simulacro por defecto, escritura condicional `attribute_not_exists`) aplicado en producción (18/18 eventos a 180 min, verificado con un segundo simulacro: 0 pendientes) y staging (ya al día). Ver §9
+- [ ] Lista de eventos con estado, orden y filtros (roadmap #27) — Tarea 1 activa de `TODO.md`
+- [ ] Duplicar evento (roadmap #28) — Tarea 2 activa de `TODO.md`, arranca al fusionarse la lista de eventos
 - [ ] Lista de paneles con orden y filtro por periodo (roadmap #29) — en cola
 - [ ] Pruebas E2E Playwright del flujo de compra con Bold (roadmap #30) — en cola, ADR-015
 - [ ] Exportación PDF (XLSX ya implementado y fusionado, PR #25) — en cola detrás de los ajustes de `docs/plan-ajustes-eventos.md` (antes era la Tarea 1)
@@ -1590,4 +1590,18 @@ Tras fusionar el PR #52, el usuario intentó fusionar el PR #51 y GitHub report�
    - Los 7 eventos resincronizados en Google Calendar: 7/7 `exito: true`, mismos `googleCalendarEventId`.
 4. **PR 0 (`docs/plan-ajustes-eventos`):** PRD §5.2/§5.6/§6/§8, tech-specs §4.3/§5.1/§10/§11 (#26 a #30), DESIGN §10 (chips de estado con contraste calculado), TODO (motor JIT reordenado por decisión de OCM) y este documento.
 
-**Próxima tarea sugerida:** Tarea 1 de `TODO.md`, Duración de eventos (roadmap #26).
+**Próxima tarea sugerida:** ver la sesión de continuación de abajo.
+
+---
+
+**Sesión del 30/09/2026 (continuación) — Duración de eventos (roadmap #26, PR #79)**
+
+Primera tarea con el flujo nuevo de OCM: desarrollo, PR, revisión en staging, ajustes, aprobación, y solo entonces documentación y tracking en el mismo PR.
+
+1. **Implementación:** `duracionMinutos` validado en `crearEvento()`/`actualizarEvento()`; un productor que lo envía recibe 403 antes de tocar DynamoDB. `listarEventos()` devuelve 180 para un evento anterior al campo. La hora de fin de Google Calendar es `fechaHora + duracionMinutos`. Formulario con horas y minutos (3 h 0 min por defecto), con un validador de grupo para el total (15 min a 24 h).
+2. **Decisión de estructura:** la duración por defecto y su validación viven en `server/api/lib/duracion-evento.ts`, no en `google-calendar.ts`. Las pruebas de `eventos.spec.ts` reemplazan ese módulo entero con un `vi.mock`, así que una constante importada desde él habría sido `undefined`.
+3. **Ajuste pedido por OCM en la revisión:** se quitó el texto de ayuda "Define la hora de fin del evento en Google Calendar" del campo, porque la duración podría usarse para otras cosas más adelante.
+4. **Relleno de datos** (con autorización explícita de OCM para producción): un primer intento de simulacro que también apuntaba a producción fue bloqueado por el sistema de permisos y no se reintentó por otra vía; OCM lo autorizó en su siguiente mensaje. Staging ya estaba al día (el único evento se había guardado entre tanto). Producción: simulacro (18 sin duración), escritura (18 rellenados) y segundo simulacro (0 pendientes).
+5. **Motor JIT recalculado:** Tarea 1 = Lista de eventos (#27), Tarea 2 = Duplicar evento (#28, arranca al fusionarse la Tarea 1). En cola: lista de paneles (#29), Playwright (#30) y PDF (#21).
+
+**Próxima tarea sugerida:** Tarea 1 de `TODO.md`, Lista de eventos con estado, orden y filtros (roadmap #27).

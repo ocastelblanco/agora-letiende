@@ -48,6 +48,39 @@
           />
         </div>
 
+        <fieldset formGroupName="duracion">
+          <legend class="mb-1 block text-sm font-semibold text-primary">Duración del evento</legend>
+          <div class="flex items-center gap-2">
+            <input
+              id="duracionHoras"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              max="24"
+              step="1"
+              formControlName="horas"
+              aria-label="Horas de duración"
+              class="w-20 rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+            <span class="text-sm text-primary">h</span>
+            <input
+              id="duracionMinutos"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              max="55"
+              step="5"
+              formControlName="minutos"
+              aria-label="Minutos de duración"
+              class="w-20 rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+            />
+            <span class="text-sm text-primary">min</span>
+          </div>
+          @if (formulario.controls.duracion.errors?.['duracionInvalida'] && formulario.controls.duracion.touched) {
+            <p class="mt-1 text-xs text-danger">La duración debe estar entre 15 minutos y 24 horas.</p>
+          }
+        </fieldset>
+
         <div>
           <label for="slug" class="mb-1 block text-sm font-semibold text-primary">
             Slug (URL pública)

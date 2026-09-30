@@ -32,6 +32,8 @@ export interface Evento {
   imagenKey?: string;
   logotipoKey?: string;
   fechaHora: string;
+  /** Roadmap #26 — entero entre 15 y 1440; 180 por defecto. Define el fin del evento en Google Calendar. */
+  duracionMinutos: number;
   // v2 (roadmap #25) — `true` por defecto, retrocompatible con todo evento
   // existente. En `false`, Ágora no vende ni controla el aforo del evento:
   // los campos de boletería de abajo se normalizan a valores neutros en el
@@ -80,6 +82,8 @@ export interface DatosNuevoEvento {
   nombre: string;
   descripcion: string;
   fechaHora: string;
+  /** Roadmap #26 — opcional: el backend usa 180 si falta. */
+  duracionMinutos?: number;
   // v2 (roadmap #25) — el backend normaliza los campos de boletería a
   // valores neutros cuando esto es `false`, sin importar lo que se envíe
   // para ellos (CLAUDE.md §5, A04/A08); en ese caso `vinculoExterno` es
@@ -107,6 +111,7 @@ export interface DatosEditarEvento {
   nombre?: string;
   descripcion?: string;
   fechaHora?: string;
+  duracionMinutos?: number;
   /** v2 (roadmap #25) — al enviarse en `false`, el backend exige `vinculoExterno` en el mismo PUT. */
   administradoPorLeTiende?: boolean;
   sillasTotales?: number;

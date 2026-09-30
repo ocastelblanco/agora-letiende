@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -22,6 +22,13 @@ import {
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
 import { convertirImagenAWebp } from '../../../shared/utilidades/convertir-imagen-webp';
 import { desdeInputBogota, paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
+import {
+  DURACION_MAXIMA_MINUTOS,
+  DURACION_MINIMA_MINUTOS,
+  DURACION_POR_DEFECTO_MINUTOS,
+  horasMinutosAMinutos,
+  minutosAHorasMinutos,
+} from '../../../shared/utilidades/duracion-evento';
 import { slugificar } from '../../../shared/utilidades/slugificar';
 
 // Bre-B no es un medio de pago aparte: es una transferencia entre cuentas
@@ -50,6 +57,18 @@ const PATRONES_VALOR_VINCULO: Record<TipoVinculo, RegExp> = {
   web: /^https:\/\/.{1,256}$/,
 };
 const PREFIJO_VINCULO_WEB = 'https://';
+
+/** Roadmap #26 — el total (horas × 60 + minutos) debe estar entre 15 min y 24 h, como en el backend. */
+function validarDuracionTotal(grupo: AbstractControl): ValidationErrors | null {
+  const { horas, minutos } = grupo.getRawValue() as { horas: number; minutos: number };
+  if (!Number.isInteger(horas) || !Number.isInteger(minutos)) {
+    return { duracionInvalida: true };
+  }
+  const total = horasMinutosAMinutos({ horas, minutos });
+  return total >= DURACION_MINIMA_MINUTOS && total <= DURACION_MAXIMA_MINUTOS
+    ? null
+    : { duracionInvalida: true };
+}
 
 /**
  * Rutas protegidas `/mis-eventos/eventos/nuevo` (exclusiva de
@@ -180,6 +199,15 @@ export class EditarEventoComponent {
     nombre: ['', Validators.required],
     descripcion: ['', Validators.required],
     fechaHora: ['', Validators.required],
+    // Roadmap #26 — horas y minutos en pantalla, un único `duracionMinutos`
+    // en el payload. 3 h por defecto; el total debe estar entre 15 min y 24 h.
+    duracion: this.fb.nonNullable.group(
+      {
+        horas: [3, [Validators.required, Validators.min(0), Validators.max(24)]],
+        minutos: [0, [Validators.required, Validators.min(0), Validators.max(59)]],
+      },
+      { validators: validarDuracionTotal },
+    ),
     // v2 (roadmap #25) — `true` por defecto: Ágora administra la boletería.
     // En `false`, sincronizarBoleteriaExterna() (constructor) oculta la
     // necesidad de productores y habilita `vinculoExterno` en su lugar.
@@ -440,6 +468,7 @@ export class EditarEventoComponent {
       nombre: '',
       descripcion: '',
       fechaHora: '',
+      duracion: minutosAHorasMinutos(DURACION_POR_DEFECTO_MINUTOS),
       administradoPorLeTiende: true,
       vinculoExterno: { tipo: 'whatsapp', valor: '' },
       sillasTotales: 100,
@@ -498,6 +527,7 @@ export class EditarEventoComponent {
       nombre: evento.nombre,
       descripcion: evento.descripcion,
       fechaHora: paraInputBogota(evento.fechaHora),
+      duracion: minutosAHorasMinutos(evento.duracionMinutos ?? DURACION_POR_DEFECTO_MINUTOS),
       administradoPorLeTiende,
       vinculoExterno: vinculo
         ? { tipo: vinculo.tipo, valor: vinculo.tipo === 'web' ? `${PREFIJO_VINCULO_WEB}${vinculo.valor}` : vinculo.valor }
@@ -567,6 +597,7 @@ export class EditarEventoComponent {
       this.formulario.controls.nombre.disable();
       this.formulario.controls.descripcion.disable();
       this.formulario.controls.fechaHora.disable();
+      this.formulario.controls.duracion.disable();
       this.formulario.controls.administradoPorLeTiende.disable();
       this.formulario.controls.vinculoExterno.disable();
       this.formulario.controls.sillasTotales.disable();
@@ -647,6 +678,7 @@ export class EditarEventoComponent {
           nombre: valores.nombre,
           descripcion: valores.descripcion,
           fechaHora: desdeInputBogota(valores.fechaHora),
+          duracionMinutos: horasMinutosAMinutos(valores.duracion),
           administradoPorLeTiende: valores.administradoPorLeTiende,
           sillasTotales: valores.sillasTotales,
           maxBoletasPorCompra: valores.maxBoletasPorCompra,
@@ -707,6 +739,7 @@ export class EditarEventoComponent {
               nombre: valores.nombre,
               descripcion: valores.descripcion,
               fechaHora: desdeInputBogota(valores.fechaHora),
+              duracionMinutos: horasMinutosAMinutos(valores.duracion),
               administradoPorLeTiende: valores.administradoPorLeTiende,
               sillasTotales: valores.sillasTotales,
               maxBoletasPorCompra: valores.maxBoletasPorCompra,
