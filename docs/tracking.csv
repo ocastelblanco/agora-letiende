@@ -252,3 +252,4 @@ Documentation,30/09/2026 13:01,30/09/2026 13:08,0:07:00,AI,Opus 5.5,"PR 0: plan 
 Backend,30/09/2026 13:12,30/09/2026 13:45,0:33:00,AI,Sonnet 5.5,"Duración de eventos (roadmap #26): campo duracionMinutos, formulario, fin en Calendar, script de relleno y PR #79",Claude Code,cli,medium
 Cloud infraestructure,30/09/2026 13:40,30/09/2026 13:44,0:04:00,AI,Sonnet 5.5,"Rellena duracionMinutos=180 en 18 eventos de producción (simulacro, escritura y verificación) con aprobación de OCM",Claude Code,cli,low
 Frontend,30/09/2026 13:46,30/09/2026 14:29,0:43:00,AI,Sonnet 5.5,"Lista de eventos (roadmap #27): chip de estado, acciones con íconos, orden y filtros en la URL, estado efectivo; PR #80",Claude Code,cli,medium
+Backend,30/09/2026 14:31,30/09/2026 15:07,0:36:00,AI,Sonnet 5.5,"Duplicar evento (roadmap #28): endpoint, copia de imágenes en S3, slug editable en borrador con unicidad; PR #81",Claude Code,cli,high

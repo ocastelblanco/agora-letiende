@@ -109,6 +109,8 @@ export interface DatosNuevoEvento {
  */
 export interface DatosEditarEvento {
   nombre?: string;
+  /** Roadmap #28 — solo aceptado mientras el evento está en `borrador`; el backend lo hace único. */
+  slug?: string;
   descripcion?: string;
   fechaHora?: string;
   duracionMinutos?: number;

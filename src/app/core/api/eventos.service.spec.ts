@@ -198,6 +198,48 @@ describe('EventosService', () => {
     });
   });
 
+  describe('duplicarEvento', () => {
+    it('devuelve error sin llamar a la API cuando no hay ID Token', async () => {
+      const servicio = configurarPrueba(null);
+
+      const resultado = await servicio.duplicarEvento('e1');
+
+      expect(resultado).toEqual({ exito: false, error: 'No se pudo duplicar el evento. Intenta de nuevo.' });
+      httpMock.expectNone('/api/eventos/e1/duplicar');
+    });
+
+    it('hace POST sin cuerpo, recarga el listado y devuelve la copia cuando la API responde 201', async () => {
+      const servicio = configurarPrueba('token-valido');
+      const copia = { ...eventoEjemplo, eventoId: 'e2', slug: 'concierto-jazz-ii', estado: 'borrador' as const };
+
+      const promesa = servicio.duplicarEvento('e1');
+      await Promise.resolve();
+      const peticion = httpMock.expectOne('/api/eventos/e1/duplicar');
+      expect(peticion.request.method).toBe('POST');
+      expect(peticion.request.body).toBeNull();
+      expect(peticion.request.headers.get('Authorization')).toBe('Bearer token-valido');
+      peticion.flush(copia, { status: 201, statusText: 'Created' });
+
+      await Promise.resolve();
+      await Promise.resolve();
+      httpMock.expectOne('/api/eventos').flush([eventoEjemplo, copia]);
+
+      expect(await promesa).toEqual({ exito: true, evento: copia });
+    });
+
+    it('devuelve el mensaje de error del backend cuando la API responde 404', async () => {
+      const servicio = configurarPrueba('token-valido');
+
+      const promesa = servicio.duplicarEvento('e1');
+      await Promise.resolve();
+      httpMock
+        .expectOne('/api/eventos/e1/duplicar')
+        .flush({ mensaje: 'No existe un evento con ese eventoId' }, { status: 404, statusText: 'Not Found' });
+
+      expect(await promesa).toEqual({ exito: false, error: 'No existe un evento con ese eventoId' });
+    });
+  });
+
   describe('eliminarEvento', () => {
     it('elimina el evento, recarga el listado y devuelve éxito cuando la API responde 204', async () => {
       const servicio = configurarPrueba('token-valido');

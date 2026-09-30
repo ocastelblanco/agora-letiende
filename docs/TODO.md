@@ -145,24 +145,9 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Duplicar evento (roadmap #28)
+## Tarea 1 — Lista de paneles con orden y filtro por periodo (roadmap #29)
 
-**Prioridad Alta**, v2. Mismo orden decidido por OCM. **Desbloqueada:** la lista de eventos (roadmap #27, PR #80) y la duración (roadmap #26, PR #79) ya están fusionadas. El botón de duplicar (`content_copy`) se agrega a la columna de acciones de `gestion-eventos.component.html`, y el ícono hay que sumarlo a la lista `icon_names` de `src/index.html` (`docs/DESIGN.md` §10); la copia conserva la duración.
-
-**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 3.
-- `POST /api/eventos/:eventoId/duplicar`, exclusivo del administrador y sin payload: la copia se arma solo a partir del evento guardado.
-- Mismo nombre, estado `borrador`, aforo reiniciado, `etapaId` nuevos, sin `googleCalendarEventId`, con `duplicadoDe` y `creadoPor`.
-- Imágenes copiadas en S3 con `CopyObject` (permiso IAM nuevo: `s3:GetObject` sobre `eventos/*`).
-- Slug con contador romano (regla de ADR-014) y editable solo mientras el evento esté en `borrador`.
-- Guarda síncrona contra doble toque y navegación directa al modo edición.
-
-**Rama:** `feature/duplicar-evento`.
-
----
-
-## Tarea 2 — Lista de paneles con orden y filtro por periodo (roadmap #29)
-
-**Prioridad Media**, v2. Mismo orden decidido por OCM. **Desbloqueada** por el PR #80: reutiliza `shared/utilidades/periodo-eventos.ts` y `app-filtro-periodo`, sin reimplementar la lógica.
+**Prioridad Media**, v2. Mismo orden decidido por OCM. **Desbloqueada** (PR #80 fusionado): reutiliza `shared/utilidades/periodo-eventos.ts` y `app-filtro-periodo`, sin reimplementar la lógica.
 
 **Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 4.
 - Filtro Todos / Mes / Semana con flechas ‹ › en `/mis-eventos/panel` (`seleccion-panel.component`).
@@ -174,13 +159,27 @@ tarea de este repositorio.
 
 ---
 
+## Tarea 2 — Pruebas Playwright del flujo de compra con Bold (roadmap #30)
+
+**Prioridad Media**, v2. Última de las cinco tareas pedidas por OCM el 30/09/2026 (`docs/plan-ajustes-eventos.md`): con la duración (#26), la lista de eventos (#27) y el duplicado (#28) fusionados, y la lista de paneles (#29) sin relación con el flujo de compra, la interfaz que prueba ya está estable.
+
+**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 5 y ADR-015 (esquema híbrido).
+- Suite `simulado` (`e2e/simulado/`): API y Bold simulados; corre en CI en cada PR; Chromium de escritorio, Pixel e iPhone (WebKit).
+- Suite `staging` (`e2e/staging/`): checkout sandbox real de Bold; a demanda con `workflow_dispatch`; evento temporal sembrado en `globalSetup` y limpiado en `globalTeardown`.
+- Reporte HTML, trazas y video como *artifacts* de CI; badge y sección en el README; comandos `npm run e2e` y `npm run e2e:staging` en `CLAUDE.md` §3.
+- **Pendientes de OCM antes de la suite real** (`docs/tareas-a-realizar.md`): credenciales IAM propias para CI, limitadas a las tablas `agora-*-staging`, y confirmar las tarjetas de prueba vigentes del sandbox de Bold.
+- Empezar por el plan de la tarea: es la primera vez que el repositorio incorpora un framework de pruebas E2E, conviene confirmar con OCM la estructura de carpetas y el flujo de CI antes de escribir código.
+
+**Rama:** `feature/pruebas-playwright-bold`.
+
+---
+
 ## Backlog
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas) **completo y fusionado**. Tres hotfixes antes del paso a producción y segunda ronda de hotfixes **fusionados** (PR #41/#42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) fusionada (PR #46).** **Eventos con boletería externa (roadmap #25) fusionada (PR #47).** **Sincronización con Google Calendar (roadmap #22) fusionada y verificada también en producción por CLI (PR #48).** **Pago automático con Bold (roadmap #19) completo — PR #50 (backend), #51 (frontend) y #52 (fix de aforo) fusionados, validado de punta a punta en staging real por el usuario.** **Hotfix de slug único por función fusionado (PR #77, 30/09/2026)**, con los slugs repetidos de producción ya corregidos. WhatsApp (#20) sigue bloqueado por prerrequisito externo (ver "Pendientes que no son de código" abajo).
 
-**En cola, en este orden (`docs/plan-ajustes-eventos.md`, decidido por OCM el 30/09/2026):**
-1. Pruebas Playwright del flujo de compra con Bold (roadmap #30): va al final de los ajustes, sobre una interfaz ya estable.
-2. Exportación de reportes en PDF (roadmap #21, resto). Antes era la Tarea 1; pasa detrás de los ajustes. Su nota de alcance sigue vigente: empezar con una investigación corta de librerías de PDF viables en Lambda antes de escribir código.
+**En cola (`docs/plan-ajustes-eventos.md`, decidido por OCM el 30/09/2026):**
+1. Exportación de reportes en PDF (roadmap #21, resto). Antes era la Tarea 1; quedó detrás de los ajustes. Su nota de alcance sigue vigente: empezar con una investigación corta de librerías de PDF viables en Lambda antes de escribir código.
 
 ---
 

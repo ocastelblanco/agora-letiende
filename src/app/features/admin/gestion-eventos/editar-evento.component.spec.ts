@@ -179,7 +179,8 @@ describe('EditarEventoComponent', () => {
       // clase sobre la "segunda capa" en guardar().
       expect(componente['modoCrear']()).toBe(false);
       expect(componente['eventoId']()).toBe('e1');
-      expect(componente['formulario'].controls.slug.disabled).toBe(true);
+      // Roadmap #28 — recién creado sigue en borrador: el slug aún se puede ajustar.
+      expect(componente['formulario'].controls.slug.disabled).toBe(false);
     });
 
     describe('duración del evento (roadmap #26)', () => {
@@ -313,7 +314,7 @@ describe('EditarEventoComponent', () => {
 
       expect(componente['modoCrear']()).toBe(false);
       expect(componente['eventoId']()).toBe('e1');
-      expect(componente['formulario'].controls.slug.disabled).toBe(true);
+      expect(componente['formulario'].controls.slug.disabled).toBe(false);
       expect(componente['formulario'].controls.nombre.value).toBe('Concierto de jazz');
     });
   });
@@ -595,14 +596,14 @@ describe('EditarEventoComponent', () => {
   });
 
   describe('modo editar (id = eventoId real)', () => {
-    it('precarga el formulario y deshabilita slug (sillasTotales queda editable para administrador)', async () => {
+    it('precarga el formulario con slug editable por ser borrador (sillasTotales también editable para administrador)', async () => {
       const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
       await activarConId(fixture, 'e1');
       const componente = fixture.componentInstance;
 
       expect(componente['cargando']()).toBe(false);
       expect(componente['eventoNoEncontrado']()).toBe(false);
-      expect(componente['formulario'].controls.slug.disabled).toBe(true);
+      expect(componente['formulario'].controls.slug.disabled).toBe(false);
       expect(componente['formulario'].controls.sillasTotales.disabled).toBe(false);
       expect(componente['formulario'].controls.sillasTotales.value).toBe(100);
       expect(componente['formulario'].controls.nombre.value).toBe('Concierto de jazz');
@@ -611,6 +612,121 @@ describe('EditarEventoComponent', () => {
       // TODO.md Tarea 2: el etapaId real ya existente se preserva en el
       // FormArray, no se deja vacío.
       expect(componente['etapas'].at(0).controls.etapaId.value).toBe('et1');
+    });
+
+    describe('slug editable solo en borrador (roadmap #28)', () => {
+      const publicado: Evento = { ...eventoExistente, estado: 'publicado' };
+
+      it('un evento publicado deja el slug fijo (deshabilitado)', async () => {
+        const { fixture } = configurarPrueba({ eventos: [publicado] });
+        await activarConId(fixture, 'e1');
+
+        expect(fixture.componentInstance['slugEditable']()).toBe(false);
+        expect(fixture.componentInstance['formulario'].controls.slug.disabled).toBe(true);
+      });
+
+      it('un productor nunca puede editar el slug, aunque el evento esté en borrador', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente], rol: 'productor' });
+        await activarConId(fixture, 'e1');
+
+        expect(fixture.componentInstance['slugEditable']()).toBe(false);
+        expect(fixture.componentInstance['formulario'].controls.slug.disabled).toBe(true);
+      });
+
+      it('no envía slug si no cambió', async () => {
+        const actualizarEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente], actualizarEventoMock });
+        await activarConId(fixture, 'e1');
+
+        await fixture.componentInstance['guardar']();
+
+        expect(actualizarEventoMock.mock.calls[0][1]).not.toHaveProperty('slug');
+      });
+
+      it('envía el slug cuando el administrador lo cambió en un borrador', async () => {
+        const actualizarEventoMock = vi
+          .fn()
+          .mockResolvedValue({ exito: true, evento: { ...eventoExistente, slug: 'concierto-jazz-2026-10-01' } });
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente], actualizarEventoMock });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].controls.slug.setValue('concierto-jazz-2026-10-01');
+        await componente['guardar']();
+
+        expect(actualizarEventoMock.mock.calls[0][1].slug).toBe('concierto-jazz-2026-10-01');
+      });
+
+      it('avisa y refleja el slug que el backend asignó cuando agregó un contador', async () => {
+        const actualizarEventoMock = vi
+          .fn()
+          .mockResolvedValue({ exito: true, evento: { ...eventoExistente, slug: 'concierto-jazz-2026-10-01-ii' } });
+        const { fixture, snackBarOpenMock } = configurarPrueba({ eventos: [eventoExistente], actualizarEventoMock });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].controls.slug.setValue('concierto-jazz-2026-10-01');
+        await componente['guardar']();
+
+        expect(componente['formulario'].controls.slug.value).toBe('concierto-jazz-2026-10-01-ii');
+        expect(snackBarOpenMock).toHaveBeenCalledWith(
+          'Evento actualizado. Otra función ya usaba ese slug; se asignó "concierto-jazz-2026-10-01-ii".',
+          'Cerrar',
+          { duration: 8000 },
+        );
+      });
+
+      it('al guardar el evento ya publicado, el slug queda fijo', async () => {
+        const actualizarEventoMock = vi
+          .fn()
+          .mockResolvedValue({ exito: true, evento: { ...eventoExistente, estado: 'publicado' } });
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente], actualizarEventoMock });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].patchValue({ estado: 'publicado' });
+        await componente['guardar']();
+
+        expect(componente['formulario'].controls.slug.disabled).toBe(true);
+      });
+
+      it('al cambiar la fecha de un borrador sugiere el slug nuevo a partir del nombre y la fecha', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].controls.fechaHora.setValue('2026-10-01T20:00');
+
+        expect(componente['formulario'].controls.slug.value).toBe('concierto-de-jazz-2026-10-01');
+      });
+
+      it('cambiar el nombre de un borrador NO toca el slug', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].controls.nombre.setValue('Otro nombre');
+
+        expect(componente['formulario'].controls.slug.value).toBe('concierto-jazz');
+      });
+
+      it('si el administrador editó el slug a mano, un cambio de fecha ya no lo pisa', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].controls.slug.setValue('mi-slug-elegido');
+        componente['formulario'].controls.fechaHora.setValue('2026-10-01T20:00');
+
+        expect(componente['formulario'].controls.slug.value).toBe('mi-slug-elegido');
+      });
+
+      it('cargar el evento no dispara la sugerencia: el slug guardado se conserva', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+        await activarConId(fixture, 'e1');
+
+        expect(fixture.componentInstance['formulario'].controls.slug.value).toBe('concierto-jazz');
+      });
     });
 
     it('marca eventoNoEncontrado cuando el eventoId no está en el listado', async () => {

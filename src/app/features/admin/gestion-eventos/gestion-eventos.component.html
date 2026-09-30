@@ -88,6 +88,16 @@
                   <button
                     mat-icon-button
                     type="button"
+                    aria-label="Duplicar"
+                    matTooltip="Duplicar"
+                    [disabled]="duplicando()"
+                    (click)="duplicar(evento)"
+                  >
+                    <mat-icon fontSet="material-symbols-outlined">content_copy</mat-icon>
+                  </button>
+                  <button
+                    mat-icon-button
+                    type="button"
                     class="[--mat-icon-button-icon-color:var(--color-danger)]"
                     aria-label="Eliminar"
                     matTooltip="Eliminar"

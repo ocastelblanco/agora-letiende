@@ -113,6 +113,33 @@ export class EventosService {
     }
   }
 
+  /**
+   * Llama `POST /api/eventos/{eventoId}/duplicar` (roadmap #28): crea otra
+   * función del mismo espectáculo en borrador. Sin cuerpo — el backend arma
+   * la copia solo con lo que ya tiene guardado. Tras un `201`, recarga `eventos`.
+   */
+  async duplicarEvento(eventoId: string): Promise<ResultadoOperacionEvento> {
+    const idToken = await this.servicioAuth.obtenerIdToken();
+    if (!idToken) {
+      return { exito: false, error: 'No se pudo duplicar el evento. Intenta de nuevo.' };
+    }
+
+    try {
+      const evento = await firstValueFrom(
+        this.http.post<Evento>(`/api/eventos/${eventoId}/duplicar`, null, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        }),
+      );
+      await this.cargarEventos();
+      return { exito: true, evento };
+    } catch (error) {
+      return {
+        exito: false,
+        error: this.mensajeError(error, 'No se pudo duplicar el evento. Intenta de nuevo.'),
+      };
+    }
+  }
+
   /** Llama `DELETE /api/eventos/{eventoId}`. Tras un `204` exitoso, recarga `eventos`. */
   async eliminarEvento(eventoId: string): Promise<ResultadoEliminarEvento> {
     const idToken = await this.servicioAuth.obtenerIdToken();
