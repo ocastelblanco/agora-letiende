@@ -52,7 +52,7 @@ Por qué este orden: la duración es un campo que el duplicado ya debe copiar (1
   | Cancelado | `cancel` | Rojo |
 
 - **Estado que ve la lista:** `listarEventos()` pasa a devolver el estado efectivo, con el mismo `estadoEfectivo()` que ya usa la cartelera. Hoy devuelve el estado persistido, así que un evento vencido que nadie visitó sigue apareciendo como "publicado".
-- **Acciones:** solo botones de ícono (`mat-icon-button`, con `aria-label` y tooltip): `edit` (editar), `delete` (borrar) y `content_copy` (duplicar, que se conecta en la Tarea 3). Borrar y duplicar son exclusivos del administrador, igual que hoy.
+- **Acciones:** solo botones de ícono (`mat-icon-button`, con `aria-label` y tooltip): `edit` (editar) y `delete` (borrar, solo administrador). El botón `content_copy` (duplicar) **no se agregó en esta tarea**, a propósito: un botón sin acción sería peor que no tenerlo. Llega con la Tarea 3.
 - **Orden:** `MatSort` sobre nombre (comparación en español que ignora tildes) y fecha. Por defecto, fecha con la más reciente primero.
 - **Filtros** (en el cliente, porque `GET /api/eventos` ya trae la lista completa):
   - Estado: chips de selección múltiple.
@@ -61,7 +61,7 @@ Por qué este orden: la duración es un campo que el duplicado ya debe copiar (1
 - **Piezas reutilizables** (para la Tarea 4):
   - `shared/utilidades/periodo-eventos.ts`: funciones puras para el rango de un periodo en Bogotá, filtrar y ordenar.
   - `shared/filtros/filtro-periodo.component.ts`: el control de periodo con flechas.
-- **Íconos:** hoy no se usa `MatIconModule`, pero la fuente Material Icons ya se carga en `src/index.html`. Hay que verificar en la implementación que los cinco glifos existan en esa fuente (no en Material Symbols) antes de darlos por buenos.
+- **Íconos:** se verificó que la fuente Material Icons que ya cargaba `src/index.html` no incluye `draft`. Se cargan entonces como un subconjunto de Material Symbols Outlined (`icon_names`), y cada ícono nuevo se suma a esa lista (`docs/DESIGN.md` §10).
 
 ## Tarea 3 — Duplicar evento
 

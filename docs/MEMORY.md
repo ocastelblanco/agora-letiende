@@ -17,11 +17,11 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | **URL de producción** | ✅ `https://agora.letiende.co` — **en vivo** (roadmap #17 completo, PR #43, ADR-013). Verificado por CLI el 14/08/2026: certificado ACM `ISSUED`, `GET /api/salud` y `GET /` responden `200` con TLS válido a través del dominio, confirmado también en vivo por el usuario |
 | **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` — login con Google + `GET /api/usuarios/me` verificados de punta a punta (02/08/2026), Gestión de usuarios (PR #10), CRUD de eventos (PR #11), Cartelera pública (PR #12), el menú de navegación (PR #13), el QR del evento (PR #14), Motor de aforo (PR #15), Compra y reserva de sillas (PR #16), Carga de comprobante (PR #17), Aprobación del productor (PR #18), Emisión de boletas (PR #19) y Validación en puerta (PR #20) **todos validados en vivo por el usuario** — PR #20 incluyó un bug real reportado en el propio PR (portero aterrizaba en la cartelera pública tras el login, no en `/puerta`) y corregido en la misma rama antes de la validación final. Venta en efectivo (PR #21) **fusionada**. Panel de control básico (PR #22) **fusionado y validado en vivo por el usuario** — la propia validación manual (flujo real de compra por transferencia y en efectivo) encontró un bug real de datos (ver §7, `expiraEn`/TTL) corregido y consolidado en el mismo PR antes de fusionar. Exportación XLSX (PR #25) **fusionada** — el usuario confirmó la fusión (11/08/2026), iba a eliminar y recrear los eventos de prueba de staging antes de validar en vivo. Fix de `etapaId` (PR #26) **fusionado** — validado en vivo por el usuario ("todo funciona bien") antes de fusionar. Etapas de boletería con cierre automático (PR #28) **fusionado** — implementado y verificado dos veces (incluido el fix del bug real de dinero de `etapaVigente()` ordenando por `orden` en vez de `cierraEn`), sin desplegar a producción todavía |
 | **Rama principal** | `main` |
-| **Último commit en `main`** | merge del PR #78 (plan de ajustes a eventos, 30/09/2026) |
+| **Último commit en `main`** | merge del PR #79 (duración de eventos, 30/09/2026) |
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 30/09/2026 (continuación) — Duración de eventos (roadmap #26, PR #79): implementada, revisada por OCM en staging y relleno aplicado en producción. Antes, PR #78 (plan de ajustes) fusionado. Ver §9 |
+| **Última sesión** | 30/09/2026 (continuación) — Lista de eventos con estado, orden y filtros (roadmap #27, PR #80): implementada y validada en vivo en staging por OCM. Antes, PR #79 (duración de eventos) fusionado. Ver §9 |
 
 ---
 
@@ -97,9 +97,9 @@ Ninguno — **v1 completa, incluido Dominio personalizado (PR #43, 14/08/2026)**
 - [ ] Notificaciones por WhatsApp — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo)
 - [x] Hotfix: enlace (slug) único por función (30/09/2026, **PR #77, fusionado**): `crearEvento()` asigna contador romano (`-ii`, `-iii`…) a un slug ocupado; 7 eventos de producción renombrados por hora y resincronizados en Google Calendar. Ver §7, ADR-014 y §9
 - [x] Duración de eventos (30/09/2026, roadmap #26, **PR #79**): `duracionMinutos` (15–1440, 180 por defecto) validado en crear/editar y solo editable por administrador; formulario con horas y minutos; la hora de fin de Google Calendar usa la duración en vez de la constante de 3 h. Script de relleno `server/scripts/rellenar-duracion.mjs` (simulacro por defecto, escritura condicional `attribute_not_exists`) aplicado en producción (18/18 eventos a 180 min, verificado con un segundo simulacro: 0 pendientes) y staging (ya al día). Ver §9
-- [ ] Lista de eventos con estado, orden y filtros (roadmap #27) — Tarea 1 activa de `TODO.md`
-- [ ] Duplicar evento (roadmap #28) — Tarea 2 activa de `TODO.md`, arranca al fusionarse la lista de eventos
-- [ ] Lista de paneles con orden y filtro por periodo (roadmap #29) — en cola
+- [x] Lista de eventos con estado, orden y filtros (30/09/2026, roadmap #27, **PR #80**, validado en vivo en staging por el usuario): chip circular de estado con ícono (Material Symbols, subconjunto con `icon_names` porque Material Icons no trae `draft`), acciones solo con botones de ícono, orden por nombre (sin tildes) o fecha, filtros por estado y por mes/semana con flechas, todo en los parámetros de la URL; `GET /api/eventos` devuelve el estado efectivo (`estadoEfectivo()`, sin escribir). Nuevas piezas reutilizables: `periodo-eventos.ts` y `app-filtro-periodo`. El botón de duplicar se dejó para el roadmap #28. Ver §9
+- [ ] Duplicar evento (roadmap #28) — Tarea 1 activa de `TODO.md`
+- [ ] Lista de paneles con orden y filtro por periodo (roadmap #29) — Tarea 2 activa de `TODO.md`
 - [ ] Pruebas E2E Playwright del flujo de compra con Bold (roadmap #30) — en cola, ADR-015
 - [ ] Exportación PDF (XLSX ya implementado y fusionado, PR #25) — en cola detrás de los ajustes de `docs/plan-ajustes-eventos.md` (antes era la Tarea 1)
 
@@ -1604,4 +1604,18 @@ Primera tarea con el flujo nuevo de OCM: desarrollo, PR, revisión en staging, a
 4. **Relleno de datos** (con autorización explícita de OCM para producción): un primer intento de simulacro que también apuntaba a producción fue bloqueado por el sistema de permisos y no se reintentó por otra vía; OCM lo autorizó en su siguiente mensaje. Staging ya estaba al día (el único evento se había guardado entre tanto). Producción: simulacro (18 sin duración), escritura (18 rellenados) y segundo simulacro (0 pendientes).
 5. **Motor JIT recalculado:** Tarea 1 = Lista de eventos (#27), Tarea 2 = Duplicar evento (#28, arranca al fusionarse la Tarea 1). En cola: lista de paneles (#29), Playwright (#30) y PDF (#21).
 
-**Próxima tarea sugerida:** Tarea 1 de `TODO.md`, Lista de eventos con estado, orden y filtros (roadmap #27).
+**Próxima tarea sugerida:** ver la sesión de continuación de abajo.
+
+---
+
+**Sesión del 30/09/2026 (continuación) — Lista de eventos con estado, orden y filtros (roadmap #27, PR #80)**
+
+1. **Implementación:** utilidades puras de periodo y orden (`periodo-eventos.ts`, todo en hora de Bogotá: un evento del 31/oct a las 21:00 es de octubre aunque en UTC ya sea noviembre), control `app-filtro-periodo` (Todos / Mes / Semana con flechas), y la lista rehecha: chip de estado, acciones con íconos, `MatSort` sobre nombre y fecha, filtro de estado con `mat-chip-listbox`. Orden y filtros viven en los parámetros de la URL (solo lo que difiere del valor por defecto; los valores inválidos se ignoran).
+2. **Hallazgo:** la fuente Material Icons que ya cargaba el proyecto no incluye el glifo `draft` (verificado contra su lista de códigos). Se cambió a un subconjunto de Material Symbols Outlined con `icon_names` (verificado que Google devuelve el CSS subconjunto). Consecuencia a recordar: cada ícono nuevo se suma a esa lista en `src/index.html`.
+3. **Hallazgo de fondo:** `GET /api/eventos` devolvía el `estado` persistido, así que un evento vencido que nadie visitó seguía como "publicado" en la lista del administrador. Ahora usa `estadoEfectivo()` como la cartelera, sin escribir en DynamoDB.
+4. **Decisión de alcance:** el botón de duplicar no se agregó (quedaba sin acción); llega con el roadmap #28.
+5. **Validación:** OCM confirmó en staging que funciona ("Funciona bien"). Tests: 468 backend + 372 frontend en verde.
+6. **Motor JIT recalculado:** Tarea 1 = Duplicar evento (#28, desbloqueada), Tarea 2 = Lista de paneles (#29, desbloqueada: reutiliza las piezas de esta tarea). En cola: Playwright (#30) y PDF (#21).
+
+**Próxima tarea sugerida:** Tarea 1 de `TODO.md`, Duplicar evento (roadmap #28).
+
