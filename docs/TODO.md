@@ -145,27 +145,45 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Exportación de reportes en PDF (roadmap #21, resto)
+## Tarea 1 — Duración de eventos (roadmap #26)
 
-**Prioridad Media**, v2 — calculada por el algoritmo normal del motor JIT (comparar `PRD.md` roadmap contra `MEMORY.md` estado, sin bloqueo externo conocido). Con Bold (#19) completo y fusionado, Google Calendar (#22) completo, y Etapas de boletería (#23) entregado en v1, este es el único ítem de v2 sin ningún prerrequisito externo: WhatsApp (#20) sigue bloqueado por la Verificación de Negocio de Meta. La Exportación XLSX (roadmap #21) ya está implementada y fusionada desde v1 — el PDF nunca se inició.
+**Prioridad Alta**, v2. **Orden decidido por OCM (30/09/2026), no calculado por el motor JIT:** OCM pidió cinco ajustes (`docs/plan-ajustes-eventos.md`) por delante del orden normal. Esta es la primera tarea porque el duplicado (roadmap #28) ya debe copiar el campo nuevo.
 
-**Alcance:** `docs/PRD.md` §6 (tabla de roadmap v2) lista "Exportación de reportes en XLSX y PDF" con XLSX ya entregado; el motor de generación de PDF queda por definir (`CLAUDE.md` §2 lo deja explícitamente "por definir"). Ampliación prevista de `handlers/reportes.ts` (`docs/tech-specs.md` §11, endpoint `GET /api/eventos/:eventoId/reportes`, hoy responde `501` explícito para `?formato=pdf`), reutilizando el patrón ya probado de exportación XLSX (autorización por rol/pertenencia al evento, enlace de descarga prefirmado y de vida corta — datos personales, `CLAUDE.md` §5 sección Habeas Data).
+**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 1.
+- Campo `duracionMinutos` (entero, 15–1440, 180 por defecto), validado en `crearEvento()`/`actualizarEvento()`.
+- Horas y minutos en el formulario.
+- La hora de fin en Google Calendar pasa a ser `fechaHora + duracionMinutos`.
+- Script de relleno único a 180 para los eventos existentes: primero staging; producción solo con aprobación de OCM.
 
-**Primer paso probable, no implementación directa:** al no haber una librería de PDF ni un diseño de layout decididos todavía, la primera sesión de esta tarea probablemente empiece por una investigación corta (opciones de generación de PDF viables en Node 24/Lambda — tamaño de paquete, cold start, si hace falta un binario nativo tipo Chromium que complicaría el empaquetado — y qué columnas/formato debe llevar el reporte) antes de escribir código, mismo criterio que se usó para Google Calendar (`.omc/plans/google-calendar-sync.md` como formato de referencia).
+**Rama:** `feature/duracion-eventos`.
 
 ---
 
-## Tarea 2 — en pausa, sin candidato desbloqueado
+## Tarea 2 — Lista de eventos: estado, orden y filtros (roadmap #27)
 
-El algoritmo normal del motor JIT no encuentra un segundo ítem de v2 sin bloqueo externo: WhatsApp (#20) sigue esperando la Verificación de Negocio de Meta (lenta, sin control del equipo), y no queda ningún otro ítem de v2 pendiente además de la Exportación PDF (Tarea 1). Mismo criterio ya usado en la sesión del 25/08/2026 cuando ocurrió esta misma situación (justo antes de que el usuario decidiera anular el orden normal y arrancar Bold pese a su bloqueo).
+**Prioridad Alta**, v2. Mismo orden decidido por OCM. Crea las piezas reutilizables (`periodo-eventos.ts`, `FiltroPeriodoComponent`) que después usa la lista de paneles (roadmap #29), y la columna de acciones con íconos donde vivirá el botón de duplicar (roadmap #28).
 
-Si el usuario quiere anular el orden normal — por ejemplo, adelantar WhatsApp pese al bloqueo, o traer un ítem de v3 (`PRD.md` §6, "ideas no comprometidas") — es una decisión explícita suya, el motor JIT no la infiere solo.
+**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 2.
+- Chip de estado con ícono (tokens en `docs/DESIGN.md` §10).
+- Salen las columnas "Sillas" y "Estado".
+- Acciones solo con botones de ícono.
+- Orden por nombre o fecha.
+- Filtros por estado y por mes o semana con flechas, guardados en la URL.
+- `listarEventos()` con `estadoEfectivo()`.
+
+**Rama:** `feature/lista-eventos-filtros`.
 
 ---
 
 ## Backlog
 
-Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas) **completo y fusionado**. Tres hotfixes antes del paso a producción y segunda ronda de hotfixes **fusionados** (PR #41/#42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) fusionada (PR #46).** **Eventos con boletería externa (roadmap #25) fusionada (PR #47).** **Sincronización con Google Calendar (roadmap #22) fusionada y verificada también en producción por CLI (PR #48).** **Pago automático con Bold (roadmap #19) completo — PR #50 (backend), #51 (frontend) y #52 (fix de aforo) fusionados, validado de punta a punta en staging real por el usuario.** Exportación PDF (#21, resto) activa como Tarea 1; WhatsApp (#20) sigue bloqueado por prerrequisito externo (ver "Pendientes que no son de código" abajo); Tarea 2 en pausa por falta de candidato desbloqueado.
+Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas) **completo y fusionado**. Tres hotfixes antes del paso a producción y segunda ronda de hotfixes **fusionados** (PR #41/#42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) fusionada (PR #46).** **Eventos con boletería externa (roadmap #25) fusionada (PR #47).** **Sincronización con Google Calendar (roadmap #22) fusionada y verificada también en producción por CLI (PR #48).** **Pago automático con Bold (roadmap #19) completo — PR #50 (backend), #51 (frontend) y #52 (fix de aforo) fusionados, validado de punta a punta en staging real por el usuario.** **Hotfix de slug único por función fusionado (PR #77, 30/09/2026)**, con los slugs repetidos de producción ya corregidos. WhatsApp (#20) sigue bloqueado por prerrequisito externo (ver "Pendientes que no son de código" abajo).
+
+**En cola, en este orden (`docs/plan-ajustes-eventos.md`, decidido por OCM el 30/09/2026):**
+1. Duplicar evento (roadmap #28): entra cuando se cierren las Tareas 1 y 2.
+2. Lista de paneles con orden y filtro por periodo (roadmap #29).
+3. Pruebas Playwright del flujo de compra con Bold (roadmap #30).
+4. Exportación de reportes en PDF (roadmap #21, resto). Antes era la Tarea 1; pasa detrás de los ajustes. Su nota de alcance sigue vigente: empezar con una investigación corta de librerías de PDF viables en Lambda antes de escribir código.
 
 ---
 

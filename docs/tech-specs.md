@@ -273,12 +273,15 @@ export interface VinculoExterno {
 
 export interface Evento {
   eventoId: string;           // Clave primaria (UUID)
-  slug: string;               // Índice secundario global — URL pública
+  slug: string;               // Índice secundario global — URL pública. Único: crearEvento() agrega
+                              // un contador romano (-ii, -iii…) si ya está ocupado (PR #77, ADR-014).
+                              // Editable solo mientras estado === 'borrador' (roadmap #28)
   nombre: string;
   descripcion: string;
   imagenKey?: string;         // Clave en S3 de activos
   logotipoKey?: string;       // Sin uso si `administradoPorLeTiende` es `false` — no hay boleta que lo lleve
   fechaHora: string;          // ISO 8601 UTC — se muestra en America/Bogota
+  duracionMinutos: number;    // Roadmap #26 — entero 15–1440, por defecto 180. Fin en Google Calendar
   // v2 (roadmap #25) — `true` por defecto (retrocompatible con todo evento
   // existente). En `false`, Ágora no vende ni controla el aforo del evento:
   // los campos de boletería de abajo dejan de exigirse/mostrarse y en su
@@ -298,6 +301,8 @@ export interface Evento {
   porteros: string[];         // Análogo a productores, opcional
   estado: EstadoEvento;
   googleCalendarEventId?: string;    // v2
+  duplicadoDe?: string;       // Roadmap #28 — eventoId del original (auditoría, A09)
+  creadoPor?: string;         // Roadmap #28 — correo del administrador que duplicó
   creadoEn: string;
   actualizadoEn: string;
 }
@@ -403,8 +408,9 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | GET | `/api/boletas/:codigo` | Público con firma | Datos de la boleta digital para mostrarla | — |
 | POST | `/api/boletas/:codigo/validar` | Portero+ | **Valida en puerta** (transición condicional a `usada`) | `{ eventoId }` |
 | GET | `/api/eventos` | Administrador | Lista completa de eventos | — |
-| POST | `/api/eventos` | Administrador | Crea evento y genera su QR | `Evento` sin `eventoId` |
-| PUT | `/api/eventos/:eventoId` | Administrador | Edita evento | `Evento` parcial |
+| POST | `/api/eventos` | Administrador | Crea evento y genera su QR. Si el `slug` ya existe, asigna el primer contador romano libre (`-ii`, `-iii`…) y lo devuelve en la respuesta; `409` si no queda ninguno (PR #77) | `Evento` sin `eventoId` |
+| PUT | `/api/eventos/:eventoId` | Administrador | Edita evento. `slug` solo se acepta con el evento en `borrador` (`ConditionExpression`), con la misma resolución de unicidad excluyendo al propio evento (roadmap #28) | `Evento` parcial |
+| POST | `/api/eventos/:eventoId/duplicar` | Administrador | Crea otra función del evento en `borrador`, a partir del ítem guardado (sin payload): mismo nombre, aforo reiniciado, `etapaId` nuevos, imágenes copiadas en S3 (`CopyObject`), slug con contador (roadmap #28) | — |
 | POST | `/api/eventos/:eventoId/activos/url-carga` | Administrador | URL prefirmada para imagen/logotipo | `{ tipo, tipoMime, tamano }` |
 | GET | `/api/eventos/:eventoId/panel` | Productor del evento | Métricas del panel de control | — |
 | GET | `/api/eventos/:eventoId/reportes` | Productor del evento | URL prefirmada del `.xlsx` (una fila por boleta, `PRD.md` §5.6, roadmap #21). `?formato=pdf` responde `501` explícito — sin librería ni diseño de PDF decidido, no implementado | `?formato=xlsx\|pdf` |
@@ -717,6 +723,8 @@ Definidas en **`CLAUDE.md` §4** (idioma del código en español, Signals, stand
 
 Resumen operativo: se trabaja siempre en una rama `feature/*`, `fix/*`, `docs/*`, `hotfix/*` o `refactor/*` creada desde `main`; el agente IA **nunca** hace commit ni push a `main` ni fusiona un PR.
 
+**Pruebas:** unitarias con Vitest en frontend (`npm run test`) y backend (`npm run test:api`). A partir del roadmap #30, pruebas E2E con Playwright en `e2e/`, en dos suites: `simulado` (API y Bold simulados, corre en CI en cada PR) y `staging` (checkout sandbox real de Bold, a demanda con `workflow_dispatch`, con un evento temporal sembrado y limpiado automáticamente). Ver ADR-015 y `docs/plan-ajustes-eventos.md` Tarea 5.
+
 **Registro de tiempos:** toda tarea —de planeación o de ejecución, de humano o de IA— se registra como una fila en `docs/tracking.csv`, según `docs/instrucciones-tracking.md`. Es obligatorio y no opcional.
 
 ---
@@ -754,3 +762,8 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 23 | **v2** — Etapas de boletería con cierre automático por fecha (interfaz pública) | `shared/utilidades/etapa-vigente.ts` (nuevo, `etapaVigenteParaMostrar` centralizada), ampliación de `features/evento/detalle-evento.component.ts`/`.html`; `features/evento/comprar/comprar.component.ts` y `features/evento/venta-efectivo/venta-efectivo.component.ts` migrados a consumirla | 9, 14 |
 | 24 | **v2** — Boletería opcional (aforo sin cobro) | `server/api/handlers/eventos.ts` (`normalizarEtapas`/`normalizarMediosPago` sin mínimo de etapas, rechazo de `bold` sin etapas), `server/api/handlers/compras.ts` (generaliza el camino hoy rechazado en líneas 192-197 para compras sin comprobante ni aprobación), `server/api/lib/vigencia-evento.ts` (finalización solo por `fechaHora` sin etapas), `features/evento/detalle-evento.component.ts`/`.html` (texto "Adquirir boletas"), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`FormArray` de etapas inicia vacío, checkbox `bold` deshabilitado sin etapas) | 9, 14, 23 |
 | 25 | **v2** — Eventos con boletería externa | `core/models/evento.model.ts` (`administradoPorLeTiende`, `TipoVinculo`, `VinculoExterno`), `server/api/handlers/eventos.ts` (`normalizarVinculoExterno`), `server/api/handlers/eventos-publicos.ts` (`aVistaPublica` expone `administradoPorLeTiende`/`vinculoExterno`), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` (`mat-slide-toggle`, sección "Más información"), `features/evento/detalle-evento.component.ts`/`.html` (bloque "MÁS INFORMACIÓN:" con ícono + enlace) | 6, 7 |
+| 26 | **v2** — Duración de eventos | `server/api/handlers/eventos.ts` (validación de `duracionMinutos`), `server/api/services/google-calendar.ts` (fin = `fechaHora + duracionMinutos`, sin `DURACION_EVENTO_MS`), `server/scripts/rellenar-duracion.ts` (relleno único a 180), `features/admin/gestion-eventos/editar-evento.component.ts`/`.html` | 6, 22 |
+| 27 | **v2** — Lista de eventos con estado, orden y filtros | `features/admin/gestion-eventos/gestion-eventos.component.ts`/`.html` (chip de estado, `MatSort`, filtros), `shared/utilidades/periodo-eventos.ts`, `shared/filtros/filtro-periodo.component.ts`, `listarEventos()` con `estadoEfectivo()` | 6 |
+| 28 | **v2** — Duplicar evento | `server/api/handlers/eventos.ts` (`duplicarEvento`, `slug` editable en borrador), `serverless.yml` (ruta nueva, `s3:GetObject` sobre `eventos/*`), `features/admin/gestion-eventos/` (botón y navegación a edición) | 26, 27 |
+| 29 | **v2** — Lista de paneles con orden y filtro por periodo | `features/panel/seleccion-panel.component.ts`/`.html`, reutilizando `periodo-eventos.ts` y `FiltroPeriodoComponent` | 16, 27 |
+| 30 | **v2** — Pruebas E2E Playwright del flujo de compra con Bold | `playwright.config.ts`, `e2e/simulado/`, `e2e/staging/` (con `globalSetup`/`globalTeardown`), `.github/workflows/` (job de CI y `workflow_dispatch`) | 19, 26–29 |
