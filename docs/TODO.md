@@ -145,25 +145,9 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Lista de eventos: estado, orden y filtros (roadmap #27)
+## Tarea 1 — Duplicar evento (roadmap #28)
 
-**Prioridad Alta**, v2. Mismo orden decidido por OCM. Crea las piezas reutilizables (`periodo-eventos.ts`, `FiltroPeriodoComponent`) que después usa la lista de paneles (roadmap #29), y la columna de acciones con íconos donde vivirá el botón de duplicar (roadmap #28).
-
-**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 2.
-- Chip de estado con ícono (tokens en `docs/DESIGN.md` §10).
-- Salen las columnas "Sillas" y "Estado".
-- Acciones solo con botones de ícono.
-- Orden por nombre o fecha.
-- Filtros por estado y por mes o semana con flechas, guardados en la URL.
-- `listarEventos()` con `estadoEfectivo()`.
-
-**Rama:** `feature/lista-eventos-filtros`.
-
----
-
-## Tarea 2 — Duplicar evento (roadmap #28)
-
-**Prioridad Alta**, v2. Mismo orden decidido por OCM. **Arranca cuando la Tarea 1 esté fusionada:** el botón de duplicar (`content_copy`) vive en la columna de acciones con íconos que crea esa tarea, y la duración (roadmap #26, PR #79) ya está fusionada para que la copia la conserve.
+**Prioridad Alta**, v2. Mismo orden decidido por OCM. **Desbloqueada:** la lista de eventos (roadmap #27, PR #80) y la duración (roadmap #26, PR #79) ya están fusionadas. El botón de duplicar (`content_copy`) se agrega a la columna de acciones de `gestion-eventos.component.html`, y el ícono hay que sumarlo a la lista `icon_names` de `src/index.html` (`docs/DESIGN.md` §10); la copia conserva la duración.
 
 **Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 3.
 - `POST /api/eventos/:eventoId/duplicar`, exclusivo del administrador y sin payload: la copia se arma solo a partir del evento guardado.
@@ -176,14 +160,27 @@ tarea de este repositorio.
 
 ---
 
+## Tarea 2 — Lista de paneles con orden y filtro por periodo (roadmap #29)
+
+**Prioridad Media**, v2. Mismo orden decidido por OCM. **Desbloqueada** por el PR #80: reutiliza `shared/utilidades/periodo-eventos.ts` y `app-filtro-periodo`, sin reimplementar la lógica.
+
+**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 4.
+- Filtro Todos / Mes / Semana con flechas ‹ › en `/mis-eventos/panel` (`seleccion-panel.component`).
+- Orden por **fecha (por defecto)** o nombre, con botón para invertir el sentido. Es una lista de tarjetas, no una tabla, así que el orden usa un `mat-button-toggle-group` ("Fecha | Nombre") en vez de encabezados `MatSort`.
+- Orden y filtro guardados en los parámetros de la URL, igual que la lista de eventos. Sin filtro por estado.
+- Decisión abierta para el PR: en la lista de eventos el orden por defecto es la fecha más reciente primero; aquí hay que confirmar con OCM si el panel (donde se elige un evento cercano) debe abrir igual o con la fecha más próxima primero.
+
+**Rama:** `feature/lista-paneles-filtros`.
+
+---
+
 ## Backlog
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas) **completo y fusionado**. Tres hotfixes antes del paso a producción y segunda ronda de hotfixes **fusionados** (PR #41/#42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) fusionada (PR #46).** **Eventos con boletería externa (roadmap #25) fusionada (PR #47).** **Sincronización con Google Calendar (roadmap #22) fusionada y verificada también en producción por CLI (PR #48).** **Pago automático con Bold (roadmap #19) completo — PR #50 (backend), #51 (frontend) y #52 (fix de aforo) fusionados, validado de punta a punta en staging real por el usuario.** **Hotfix de slug único por función fusionado (PR #77, 30/09/2026)**, con los slugs repetidos de producción ya corregidos. WhatsApp (#20) sigue bloqueado por prerrequisito externo (ver "Pendientes que no son de código" abajo).
 
 **En cola, en este orden (`docs/plan-ajustes-eventos.md`, decidido por OCM el 30/09/2026):**
-1. Lista de paneles con orden y filtro por periodo (roadmap #29): reutiliza las piezas de la Tarea 1.
-2. Pruebas Playwright del flujo de compra con Bold (roadmap #30).
-3. Exportación de reportes en PDF (roadmap #21, resto). Antes era la Tarea 1; pasa detrás de los ajustes. Su nota de alcance sigue vigente: empezar con una investigación corta de librerías de PDF viables en Lambda antes de escribir código.
+1. Pruebas Playwright del flujo de compra con Bold (roadmap #30): va al final de los ajustes, sobre una interfaz ya estable.
+2. Exportación de reportes en PDF (roadmap #21, resto). Antes era la Tarea 1; pasa detrás de los ajustes. Su nota de alcance sigue vigente: empezar con una investigación corta de librerías de PDF viables en Lambda antes de escribir código.
 
 ---
 

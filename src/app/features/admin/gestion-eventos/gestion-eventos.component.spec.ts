@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of } from 'rxjs';
@@ -93,6 +93,47 @@ function configurarPrueba(opciones: {
   return { fixture, cargarEventosMock, dialogOpenMock, snackBarOpenMock };
 }
 
+/** Variante que navega a una URL con parámetros ANTES de crear el componente (el Router real los expone en el snapshot). */
+async function configurarPruebaConUrl(url: string, opciones: Parameters<typeof configurarPrueba>[0]) {
+  TestBed.configureTestingModule({
+    imports: [NoopAnimationsModule],
+    providers: [
+      provideRouter([{ path: '**', component: GestionEventosComponent }]),
+      {
+        provide: EventosService,
+        useValue: {
+          eventos: () => opciones.eventos ?? [],
+          error: () => false,
+          cargarEventos: vi.fn().mockResolvedValue(undefined),
+          eliminarEvento: vi.fn(),
+        },
+      },
+      { provide: ServicioAuth, useValue: { rol: () => opciones.rol ?? 'administrador' } },
+    ],
+  });
+  await TestBed.inject(Router).navigateByUrl(url);
+  const fixture = TestBed.createComponent(GestionEventosComponent);
+  fixture.detectChanges();
+  await fixture.whenStable();
+  return fixture;
+}
+
+const evento = (id: string, nombre: string, fechaHora: string, estado: Evento['estado'] = 'publicado'): Evento => ({
+  ...eventoEjemplo,
+  eventoId: id,
+  slug: id,
+  nombre,
+  fechaHora,
+  estado,
+});
+
+function nombresEnTabla(fixture: ComponentFixture<GestionEventosComponent>): string[] {
+  fixture.detectChanges();
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('tr.mat-mdc-row td:first-child'),
+  ).map((celda) => (celda.textContent ?? '').replace(/\s+/g, ' ').trim().replace(/^(draft|check_circle|group_off|history|cancel) /, ''));
+}
+
 describe('GestionEventosComponent', () => {
   it('carga los eventos al iniciar', () => {
     const { cargarEventosMock } = configurarPrueba({});
@@ -170,20 +211,188 @@ describe('GestionEventosComponent', () => {
   });
 
   describe('acciones exclusivas de administrador', () => {
-    it('con rol productor: no muestra "Crear evento" ni "Eliminar" en el DOM', () => {
+    it('con rol productor: no muestra "Crear evento" ni el botón Eliminar, pero sí Editar', () => {
       const { fixture } = configurarPrueba({ eventos: [eventoEjemplo], rol: 'productor' });
-      const texto = fixture.nativeElement.textContent as string;
+      const host = fixture.nativeElement as HTMLElement;
 
-      expect(texto).not.toContain('Crear evento');
-      expect(texto).not.toContain('Eliminar');
+      expect(host.textContent).not.toContain('Crear evento');
+      expect(host.querySelector('button[aria-label="Eliminar"]')).toBeNull();
+      expect(host.querySelector('a[aria-label="Editar"]')).not.toBeNull();
     });
 
-    it('con rol administrador: sí muestra "Crear evento" y "Eliminar" en el DOM', () => {
+    it('con rol administrador: sí muestra "Crear evento" y el botón Eliminar', () => {
       const { fixture } = configurarPrueba({ eventos: [eventoEjemplo], rol: 'administrador' });
-      const texto = fixture.nativeElement.textContent as string;
+      const host = fixture.nativeElement as HTMLElement;
 
-      expect(texto).toContain('Crear evento');
-      expect(texto).toContain('Eliminar');
+      expect(host.textContent).toContain('Crear evento');
+      expect(host.querySelector('button[aria-label="Eliminar"]')).not.toBeNull();
+    });
+  });
+  describe('columnas y acciones (roadmap #27)', () => {
+    it('ya no tiene las columnas Sillas ni Estado, y las acciones son botones de ícono', () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoEjemplo] });
+      const host = fixture.nativeElement as HTMLElement;
+      const encabezados = Array.from(host.querySelectorAll('th')).map((th) => (th.textContent ?? '').trim());
+
+      expect(encabezados).toEqual(['Nombre', 'Fecha (Bogotá)', '']);
+      expect(host.textContent).not.toContain('80 / 100');
+      expect(host.querySelector('a[aria-label="Editar"] mat-icon')?.textContent).toBe('edit');
+      expect(host.querySelector('button[aria-label="Eliminar"] mat-icon')?.textContent).toBe('delete');
+    });
+
+    it.each([
+      ['borrador', 'draft', 'Borrador'],
+      ['publicado', 'check_circle', 'Publicado'],
+      ['agotado', 'group_off', 'Agotado'],
+      ['finalizado', 'history', 'Finalizado'],
+      ['cancelado', 'cancel', 'Cancelado'],
+    ] as const)('el evento %s muestra el ícono %s con su etiqueta accesible', (estado, icono, etiqueta) => {
+      const { fixture } = configurarPrueba({ eventos: [evento('x', 'Evento X', '2026-10-01T18:00:00.000Z', estado)] });
+      const chip = (fixture.nativeElement as HTMLElement).querySelector('[role="img"]');
+
+      expect(chip?.getAttribute('aria-label')).toBe(`Estado: ${etiqueta}`);
+      expect(chip?.querySelector('mat-icon')?.textContent).toBe(icono);
+    });
+  });
+
+  describe('orden (roadmap #27)', () => {
+    const eventos = [
+      evento('a', 'Zorro', '2026-10-01T18:00:00.000Z'),
+      evento('b', 'Álbum', '2026-10-03T18:00:00.000Z'),
+      evento('c', 'Banda', '2026-10-02T18:00:00.000Z'),
+    ];
+
+    it('por defecto ordena por fecha, la más reciente primero', () => {
+      const { fixture } = configurarPrueba({ eventos });
+
+      expect(nombresEnTabla(fixture)).toEqual(['Álbum', 'Banda', 'Zorro']);
+    });
+
+    it('ordena por nombre ignorando tildes y cambia el sentido', () => {
+      const { fixture } = configurarPrueba({ eventos });
+      const componente = fixture.componentInstance;
+
+      componente['cambiarOrden']({ active: 'nombre', direction: 'asc' });
+      expect(nombresEnTabla(fixture)).toEqual(['Álbum', 'Banda', 'Zorro']);
+
+      componente['cambiarOrden']({ active: 'nombre', direction: 'desc' });
+      expect(nombresEnTabla(fixture)).toEqual(['Zorro', 'Banda', 'Álbum']);
+    });
+
+    it('ordena por fecha ascendente y un tercer clic (sin dirección) vuelve al orden por defecto', () => {
+      const { fixture } = configurarPrueba({ eventos });
+      const componente = fixture.componentInstance;
+
+      componente['cambiarOrden']({ active: 'fechaHora', direction: 'asc' });
+      expect(nombresEnTabla(fixture)).toEqual(['Zorro', 'Banda', 'Álbum']);
+
+      componente['cambiarOrden']({ active: 'fechaHora', direction: '' });
+      expect(componente['orden']()).toBe('fecha');
+      expect(componente['sentido']()).toBe('desc');
+    });
+  });
+
+  describe('filtros (roadmap #27)', () => {
+    const eventos = [
+      evento('a', 'Septiembre borrador', '2026-09-20T18:00:00.000Z', 'borrador'),
+      evento('b', 'Octubre publicado', '2026-10-05T18:00:00.000Z', 'publicado'),
+      evento('c', 'Octubre cancelado', '2026-10-20T18:00:00.000Z', 'cancelado'),
+      evento('d', 'Noviembre publicado', '2026-11-02T18:00:00.000Z', 'publicado'),
+    ];
+
+    it('filtra por estado con selección múltiple', () => {
+      const { fixture } = configurarPrueba({ eventos });
+      const componente = fixture.componentInstance;
+
+      componente['estadosFiltrados'].set(['borrador', 'cancelado']);
+
+      expect(nombresEnTabla(fixture)).toEqual(['Octubre cancelado', 'Septiembre borrador']);
+    });
+
+    it('filtra por mes', () => {
+      const { fixture } = configurarPrueba({ eventos });
+
+      fixture.componentInstance['periodo'].set({ tipo: 'mes', ancla: '2026-10-01' });
+
+      expect(nombresEnTabla(fixture)).toEqual(['Octubre cancelado', 'Octubre publicado']);
+    });
+
+    it('filtra por semana (lunes a domingo)', () => {
+      const { fixture } = configurarPrueba({ eventos });
+
+      fixture.componentInstance['periodo'].set({ tipo: 'semana', ancla: '2026-10-05' });
+
+      expect(nombresEnTabla(fixture)).toEqual(['Octubre publicado']);
+    });
+
+    it('combina estado y periodo, y avisa cuando nada coincide', () => {
+      const { fixture } = configurarPrueba({ eventos });
+      const componente = fixture.componentInstance;
+
+      componente['periodo'].set({ tipo: 'mes', ancla: '2026-11-01' });
+      componente['estadosFiltrados'].set(['borrador']);
+      fixture.detectChanges();
+
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Ningún evento coincide con los filtros.');
+    });
+
+    it('"Limpiar filtros" restablece periodo y estados', () => {
+      const { fixture } = configurarPrueba({ eventos });
+      const componente = fixture.componentInstance;
+      componente['periodo'].set({ tipo: 'mes', ancla: '2026-10-01' });
+      componente['estadosFiltrados'].set(['publicado']);
+
+      componente['limpiarFiltros']();
+
+      expect(componente['hayFiltros']()).toBe(false);
+      expect(nombresEnTabla(fixture)).toHaveLength(4);
+    });
+  });
+
+  describe('orden y filtros en la URL (roadmap #27)', () => {
+    const eventos = [
+      evento('a', 'Zorro', '2026-10-01T18:00:00.000Z', 'publicado'),
+      evento('b', 'Álbum', '2026-10-03T18:00:00.000Z', 'cancelado'),
+    ];
+
+    it('los restaura desde los parámetros de la URL al abrir la lista', async () => {
+      const fixture = await configurarPruebaConUrl(
+        '/?orden=nombre&sentido=asc&periodo=mes&ancla=2026-10-01&estados=publicado,cancelado',
+        { eventos },
+      );
+      const componente = fixture.componentInstance;
+
+      expect(componente['orden']()).toBe('nombre');
+      expect(componente['sentido']()).toBe('asc');
+      expect(componente['periodo']()).toEqual({ tipo: 'mes', ancla: '2026-10-01' });
+      expect(componente['estadosFiltrados']()).toEqual(['publicado', 'cancelado']);
+      expect(nombresEnTabla(fixture)).toEqual(['Álbum', 'Zorro']);
+    });
+
+    it('ignora valores inválidos en la URL en vez de romper', async () => {
+      const fixture = await configurarPruebaConUrl(
+        '/?orden=hackeo&sentido=arriba&periodo=mes&ancla=2026-13-99&estados=borrador,inventado',
+        { eventos },
+      );
+      const componente = fixture.componentInstance;
+
+      expect(componente['orden']()).toBe('fecha');
+      expect(componente['sentido']()).toBe('desc');
+      expect(componente['periodo']().tipo).toBe('todos');
+      expect(componente['estadosFiltrados']()).toEqual(['borrador']);
+    });
+
+    it('escribe en la URL solo lo que difiere del valor por defecto', async () => {
+      const fixture = await configurarPruebaConUrl('/', { eventos });
+      const router = TestBed.inject(Router);
+
+      expect(router.url).toBe('/');
+
+      fixture.componentInstance['estadosFiltrados'].set(['agotado']);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(router.url).toBe('/?estados=agotado');
     });
   });
 });

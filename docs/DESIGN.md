@@ -170,7 +170,7 @@ Disponibles en `public/` (copiados desde `~/Documents/LeTiende/letiende.co/babel
 
 ## 10. Indicadores de estado y botones de ícono
 
-Roadmap #27 (`docs/plan-ajustes-eventos.md` Tarea 2). Primer uso de íconos de interfaz en Ágora: se usan con `MatIconModule` sobre la fuente **Material Icons**, que ya carga `src/index.html` (no Material Symbols).
+Roadmap #27 (`docs/plan-ajustes-eventos.md` Tarea 2). Primer uso de íconos de interfaz en Ágora: `<mat-icon fontSet="material-symbols-outlined">` sobre un **subconjunto de Material Symbols Outlined** que carga `src/index.html` con el parámetro `icon_names` (solo los glifos usados, en orden alfabético; al agregar un ícono nuevo hay que sumarlo a esa lista). Se eligió Material Symbols y no la fuente Material Icons que ya cargaba el proyecto porque esta última no incluye `draft`.
 
 **Chip de estado del evento:** un círculo de `h-8 w-8 rounded-full` con el ícono centrado (`text-[18px]`), a la izquierda del nombre del evento. Lleva siempre `matTooltip` y `aria-label` con el nombre del estado, porque el color por sí solo no transmite información (accesibilidad).
 
@@ -182,6 +182,6 @@ Roadmap #27 (`docs/plan-ajustes-eventos.md` Tarea 2). Primer uso de íconos de i
 | Finalizado | `history` | `#F9A825` (amarillo) | `#230C00` (`primary`) | 9,48:1 |
 | Cancelado | `cancel` | `#C0392B` (`danger`) | `#FFFFFF` | 5,44:1 |
 
-Los contrastes se calcularon con la fórmula de luminancia relativa de WCAG 2.x (30/09/2026). Todos superan el 3:1 que WCAG exige para componentes gráficos no textuales. Los fondos gris, verde, azul y amarillo son colores **funcionales de estado**, no de marca: se declaran como tokens propios (`--color-estado-*` en el `@theme` de `src/styles.css`) y no se usan para nada más. El rojo reutiliza `danger`.
+Los contrastes se calcularon con la fórmula de luminancia relativa de WCAG 2.x (30/09/2026). Todos superan el 3:1 que WCAG exige para componentes gráficos no textuales. Los fondos gris, verde, azul y amarillo son colores **funcionales de estado**, no de marca: se declaran como tokens propios (`--color-estado-borrador`, `-publicado`, `-agotado` y `-finalizado` en el `@theme` de `src/styles.css`) y no se usan para nada más. El rojo reutiliza `danger`.
 
 **Botones de ícono en filas de tabla:** `mat-icon-button` con `aria-label` y `matTooltip` en español (Editar, Duplicar, Eliminar). Íconos: `edit`, `content_copy`, `delete`. Eliminar usa el color `danger`. El área táctil mínima de `mat-icon-button` (48 × 48 px) se conserva.

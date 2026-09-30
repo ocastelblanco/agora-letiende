@@ -167,6 +167,44 @@ describe('handler de /api/eventos', () => {
       ]);
     });
 
+    describe('estado efectivo (roadmap #27)', () => {
+      const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const enUnMes = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      it('devuelve "finalizado" para un evento publicado ya vencido aunque el estado persistido no se haya actualizado', async () => {
+        sendMock.mockResolvedValue({
+          Items: [{ eventoId: 'e1', estado: 'publicado', fechaHora: ayer, etapas: [] }],
+        });
+
+        const respuesta = await invocar('GET');
+
+        expect(JSON.parse(respuesta.body!)[0].estado).toBe('finalizado');
+      });
+
+      it('conserva el estado de un evento vigente y el de un borrador vencido', async () => {
+        sendMock.mockResolvedValue({
+          Items: [
+            { eventoId: 'e1', estado: 'agotado', fechaHora: enUnMes, etapas: [] },
+            { eventoId: 'e2', estado: 'borrador', fechaHora: ayer, etapas: [] },
+          ],
+        });
+
+        const cuerpo = JSON.parse((await invocar('GET')).body!);
+
+        expect(cuerpo.map((e: { estado: string }) => e.estado)).toEqual(['agotado', 'borrador']);
+      });
+
+      it('no escribe en DynamoDB al listar (solo el Scan)', async () => {
+        sendMock.mockResolvedValue({
+          Items: [{ eventoId: 'e1', estado: 'publicado', fechaHora: ayer, etapas: [] }],
+        });
+
+        await invocar('GET');
+
+        expect(sendMock).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('respeta administradoPorLeTiende: false persistido, sin sobrescribirlo', async () => {
       sendMock.mockResolvedValue({ Items: [{ eventoId: 'e2', administradoPorLeTiende: false }] });
 

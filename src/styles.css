@@ -16,6 +16,11 @@
   --color-neutral: #ffe7b3;
   --color-surface: #fff8f1;
   --color-danger: #c0392b;
+  /* Colores funcionales de estado de evento (DESIGN.md §10) — solo para el chip de estado. */
+  --color-estado-borrador: #6b7280;
+  --color-estado-publicado: #2e7d32;
+  --color-estado-agotado: #1565c0;
+  --color-estado-finalizado: #f9a825;
   --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
 }
 

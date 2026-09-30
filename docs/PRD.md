@@ -282,7 +282,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
 | Enlace (slug) único por función | **Alta** | ✅ Hotfix fusionado y datos de producción corregidos (PR #77, 30/09/2026) |
 | Duración de eventos | **Alta** | ✅ Fusionado; eventos existentes de producción rellenados a 3 h (roadmap #26, PR #79) |
-| Lista de eventos con estado, orden y filtros | **Alta** | 🟡 Planeado (roadmap #27) |
+| Lista de eventos con estado, orden y filtros | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #27, PR #80) |
 | Duplicar evento (varias funciones) | **Alta** | 🟡 Planeado (roadmap #28) |
 | Lista de paneles con orden y filtro por periodo | Media | 🟡 Planeado (roadmap #29) |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Planeado (roadmap #30) |
