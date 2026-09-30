@@ -669,6 +669,12 @@ resources:
                     - dynamodb:DeleteItem
                   Resource: !GetAtt AgoraEventos.Arn
                 - Effect: Allow
+                  # Hotfix slug único: crearEvento() verifica si el slug ya
+                  # existe (resolverSlugDisponible) — solo Query, solo slug-index.
+                  Action:
+                    - dynamodb:Query
+                  Resource: !Sub '${AgoraEventos.Arn}/index/slug-index'
+                - Effect: Allow
                   # GetItem, no Query/Scan: exigirRol() resuelve el permiso
                   # del propio solicitante (resolver-permisos.ts) contra
                   # agora-usuarios, sin acceso a ninguna otra acción de esa

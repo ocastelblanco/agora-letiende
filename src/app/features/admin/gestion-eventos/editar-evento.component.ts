@@ -661,7 +661,18 @@ export class EditarEventoComponent {
         });
 
         if (resultado.exito) {
-          this.snackBar.open('Evento creado correctamente.', 'Cerrar', { duration: 4000 });
+          // Hotfix slug único: si otra función ya usaba el slug, el backend
+          // le agrega un contador romano (`-ii`, `-iii`…) — se avisa para que
+          // el administrador sepa cuál es la URL real de esta función.
+          if (resultado.evento.slug !== valores.slug) {
+            this.snackBar.open(
+              `Evento creado. Otra función ya usaba ese slug; se asignó "${resultado.evento.slug}".`,
+              'Cerrar',
+              { duration: 8000 },
+            );
+          } else {
+            this.snackBar.open('Evento creado correctamente.', 'Cerrar', { duration: 4000 });
+          }
           // Transición directa a modo edición — no depende de que la
           // re-navegación de abajo dispare de vuelta el `effect()` del
           // constructor (ver el comentario de `modoCrear` más arriba).

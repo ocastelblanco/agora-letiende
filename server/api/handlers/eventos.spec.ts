@@ -175,6 +175,86 @@ describe('handler de /api/eventos', () => {
   });
 
   describe('POST /api/eventos', () => {
+    describe('slug único por función (hotfix 30/09/2026)', () => {
+      // Simula slug-index con un conjunto de slugs ya ocupados; cualquier
+      // otro comando (el PutCommand) responde vacío.
+      function simularSlugsOcupados(ocupados: string[]): void {
+        sendMock.mockImplementation(async (comando: { input: Record<string, unknown> }) => {
+          if (comando.input['IndexName'] === 'slug-index') {
+            const valores = comando.input['ExpressionAttributeValues'] as Record<string, string>;
+            return { Items: ocupados.includes(valores[':slug']) ? [{ eventoId: 'otro' }] : [] };
+          }
+          return {};
+        });
+      }
+
+      it('conserva el slug solicitado cuando está libre', async () => {
+        simularSlugsOcupados([]);
+
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, slug: 'show-magico-2026-09-30' },
+        });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).slug).toBe('show-magico-2026-09-30');
+      });
+
+      it('agrega -ii cuando el slug ya lo usa otra función del mismo día', async () => {
+        simularSlugsOcupados(['show-magico-2026-09-30']);
+
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, slug: 'show-magico-2026-09-30' },
+        });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).slug).toBe('show-magico-2026-09-30-ii');
+      });
+
+      it('salta al primer contador libre (-iv) y persiste ese slug', async () => {
+        simularSlugsOcupados([
+          'show-magico-2026-09-30',
+          'show-magico-2026-09-30-ii',
+          'show-magico-2026-09-30-iii',
+        ]);
+
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, slug: 'show-magico-2026-09-30' },
+        });
+
+        expect(JSON.parse(respuesta.body!).slug).toBe('show-magico-2026-09-30-iv');
+        const put = sendMock.mock.calls
+          .map(([comando]) => comando as { input: Record<string, unknown> })
+          .find((comando) => comando.input['Item'] !== undefined);
+        expect((put!.input['Item'] as Record<string, unknown>)['slug']).toBe('show-magico-2026-09-30-iv');
+      });
+
+      it('no encadena contadores: un slug con -ii ocupado pasa a -iii, nunca -ii-ii', async () => {
+        simularSlugsOcupados(['show-magico-2026-09-30', 'show-magico-2026-09-30-ii']);
+
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, slug: 'show-magico-2026-09-30-ii' },
+        });
+
+        expect(JSON.parse(respuesta.body!).slug).toBe('show-magico-2026-09-30-iii');
+      });
+
+      it('responde 409 sin escribir cuando no queda ningún contador libre', async () => {
+        sendMock.mockImplementation(async (comando: { input: Record<string, unknown> }) =>
+          comando.input['IndexName'] === 'slug-index' ? { Items: [{ eventoId: 'otro' }] } : {},
+        );
+
+        const respuesta = await invocar('POST', {
+          cuerpo: { ...eventoValido, slug: 'show-magico-2026-09-30' },
+        });
+
+        expect(respuesta.statusCode).toBe(409);
+        const huboEscritura = sendMock.mock.calls.some(
+          ([comando]) => (comando as { input: Record<string, unknown> }).input['Item'] !== undefined,
+        );
+        expect(huboEscritura).toBe(false);
+      });
+    });
+
     it('crea el evento con eventoId generado en el backend y aforo inicializado', async () => {
       sendMock.mockResolvedValue({});
 
@@ -329,7 +409,9 @@ describe('handler de /api/eventos', () => {
     });
 
     it('responde 409 si el eventoId colisiona (ConditionExpression falla)', async () => {
-      sendMock.mockRejectedValue(new ConditionalCheckFailedException());
+      sendMock
+        .mockResolvedValueOnce({ Items: [] }) // Query de slug-index (slug libre)
+        .mockRejectedValue(new ConditionalCheckFailedException());
 
       const respuesta = await invocar('POST', { cuerpo: eventoValido });
 
@@ -362,9 +444,9 @@ describe('handler de /api/eventos', () => {
           expect.objectContaining({ nombre: eventoValido.nombre, slug: eventoValido.slug }),
           [{ correo: 'productor@letiende.co', nombre: 'Productor' }],
         );
-        // PutCommand del evento + UpdateCommand que persiste googleCalendarEventId.
-        expect(sendMock).toHaveBeenCalledTimes(2);
-        const comandoUpdate = sendMock.mock.calls[1]?.[0];
+        // Query de slug-index + PutCommand del evento + UpdateCommand que persiste googleCalendarEventId.
+        expect(sendMock).toHaveBeenCalledTimes(3);
+        const comandoUpdate = sendMock.mock.calls[2]?.[0];
         expect(comandoUpdate.input).toMatchObject({
           UpdateExpression: 'SET googleCalendarEventId = :googleCalendarEventId',
           ExpressionAttributeValues: { ':googleCalendarEventId': 'gcal-1' },
@@ -380,8 +462,8 @@ describe('handler de /api/eventos', () => {
 
         expect(respuesta.statusCode).toBe(201);
         expect(JSON.parse(respuesta.body!).eventoId).toEqual(expect.any(String));
-        // Solo el PutCommand del evento — sin UpdateCommand adicional, porque no hubo éxito.
-        expect(sendMock).toHaveBeenCalledTimes(1);
+        // Query de slug-index + PutCommand del evento — sin UpdateCommand adicional, porque no hubo éxito.
+        expect(sendMock).toHaveBeenCalledTimes(2);
       });
 
       it('responde 201 y el evento queda igual persistido aunque la sincronización con Calendar lance una excepción inesperada', async () => {
@@ -405,6 +487,7 @@ describe('handler de /api/eventos', () => {
         credencialCalendarConfiguradaMock.mockReturnValue(true);
         crearEventoCalendarMock.mockResolvedValue({ exito: true, googleCalendarEventId: 'gcal-1' });
         sendMock
+          .mockResolvedValueOnce({ Items: [] }) // Query de slug-index (slug libre)
           .mockResolvedValueOnce({}) // PutCommand del evento
           .mockRejectedValueOnce(new ConditionalCheckFailedException()); // UpdateCommand de googleCalendarEventId
 

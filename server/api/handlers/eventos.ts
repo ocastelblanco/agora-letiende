@@ -81,6 +81,80 @@ function esErrorCondicionFallida(error: unknown): boolean {
   return error instanceof Error && error.name === 'ConditionalCheckFailedException';
 }
 
+// Hotfix (30/09/2026): el slug identifica al evento en la cartelera, la
+// compra (`buscarEventoPublicadoPorSlug`) y la venta en efectivo, que
+// resuelven con `Limit: 1` sobre `slug-index` — dos funciones del mismo
+// espectáculo el mismo día (mismo nombre + misma fecha) compartían slug y
+// la segunda quedaba inalcanzable (ver docs/MEMORY.md §7). Un slug ocupado
+// recibe un contador en números romanos en minúscula (`-ii`, `-iii`…),
+// compatible con `esSlugValido`.
+const MAXIMO_CONTADOR_SLUG = 50;
+// Solo se reconoce como contador un sufijo romano que sigue a la fecha
+// (`…-2026-09-30-ii`), para no mutilar un slug escrito a mano que termine
+// en letras romanas por casualidad.
+const CONTADOR_TRAS_FECHA = /(-\d{4}-\d{2}-\d{2})-[ivxlc]+$/;
+
+function aRomanoMinuscula(numero: number): string {
+  const valores: [number, string][] = [
+    [50, 'l'],
+    [40, 'xl'],
+    [10, 'x'],
+    [9, 'ix'],
+    [5, 'v'],
+    [4, 'iv'],
+    [1, 'i'],
+  ];
+  let restante = numero;
+  let romano = '';
+  for (const [valor, simbolo] of valores) {
+    while (restante >= valor) {
+      romano += simbolo;
+      restante -= valor;
+    }
+  }
+  return romano;
+}
+
+async function slugOcupado(slug: string): Promise<boolean> {
+  const resultado = await documentoDynamoDB.send(
+    new QueryCommand({
+      TableName: process.env['TABLA_EVENTOS'],
+      IndexName: 'slug-index',
+      KeyConditionExpression: '#slug = :slug',
+      ExpressionAttributeNames: { '#slug': 'slug' },
+      ExpressionAttributeValues: { ':slug': slug },
+      Limit: 1,
+    }),
+  );
+  return (resultado.Items?.length ?? 0) > 0;
+}
+
+/**
+ * Devuelve el slug solicitado si está libre, o el primero libre de
+ * `{base}-ii`, `{base}-iii`… (la base descarta un contador previo, para que
+ * duplicar `x-ii` produzca `x-iii` y no `x-ii-ii`). `null` si no hay ninguno
+ * libre dentro del límite. Limitación conocida: `slug-index` es un GSI de
+ * consistencia eventual y DynamoDB no ofrece unicidad sobre un GSI — dos
+ * creaciones simultáneas con el mismo slug podrían colisionar. Se acepta:
+ * solo el administrador crea eventos y la concurrencia real es mínima.
+ */
+async function resolverSlugDisponible(slugSolicitado: string): Promise<string | null> {
+  if (!(await slugOcupado(slugSolicitado))) {
+    return slugSolicitado;
+  }
+  const base = slugSolicitado.replace(CONTADOR_TRAS_FECHA, '$1');
+  for (let contador = 2; contador <= MAXIMO_CONTADOR_SLUG; contador++) {
+    const candidato = `${base}-${aRomanoMinuscula(contador)}`;
+    if (candidato.length > 120) {
+      return null;
+    }
+    if (!(await slugOcupado(candidato))) {
+      return candidato;
+    }
+  }
+  return null;
+}
+
 function leerCuerpo(evento: APIGatewayProxyEventV2): unknown {
   if (!evento.body) {
     return null;
@@ -556,11 +630,16 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     vinculoExterno = vinculo;
   }
 
+  const slug = await resolverSlugDisponible(datos['slug'] as string);
+  if (!slug) {
+    return respuestaJson(409, { mensaje: 'Ya existen demasiados eventos con ese slug, elige otro' });
+  }
+
   const ahora = new Date().toISOString();
   const eventoId = randomUUID();
   const item: Record<string, unknown> = {
     eventoId,
-    slug: datos['slug'],
+    slug,
     nombre: datos['nombre'],
     descripcion: datos['descripcion'],
     fechaHora: datos['fechaHora'],
