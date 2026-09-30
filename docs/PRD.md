@@ -95,6 +95,7 @@ El administrador define, para cada evento:
 - Imagen gráfica del evento (opcional) y logotipo para incluir en la boleta (opcional).
   - **Tamaño recomendado de la imagen del evento: 1600 × 800 px (proporción 2:1, el doble de ancho que de alto).** La cartelera y la página del evento la muestran siempre en esa proporción: una imagen con otra forma se recorta por los bordes para llenar el espacio, así que conviene dejar lo importante (títulos, rostros) hacia el centro. Una imagen más grande no mejora la calidad: el sistema la reduce a un máximo de 1600 px en su lado más largo y la convierte a WebP antes de subirla.
 - Fecha y hora.
+- Duración, en horas y minutos (por defecto, 3 horas). Define la hora de fin del evento en Google Calendar *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 1)*.
 - Cantidad de sillas disponibles.
 - Etapas de boletería (por defecto una sola), cada una con su precio y su fecha de cierre. El precio puede ser $0 para eventos gratuitos.
 - Máximo de boletas por compra.
@@ -102,6 +103,12 @@ El administrador define, para cada evento:
 - Plazo máximo para enviar el comprobante después de iniciada la compra (por defecto, 10 minutos).
 - Productor o productores a cargo (uno o varios, obligatorio al menos uno; el administrador puede incluirse a sí mismo) y portero o porteros asignados (opcional, se pueden agregar luego al editar). Ambos se eligen de la lista de usuarios ya existentes en Ágora con ese rol — no se digitan por correo a mano, ya que el acceso de venta en efectivo y validación en puerta queda limitado exactamente a quienes se asignen aquí *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
 - Enlaces a redes sociales (opcional).
+
+**Cada evento tiene su propio enlace (slug), que nunca se repite.** El sistema lo sugiere a partir del nombre y la fecha. Si otra función del mismo espectáculo ya ocupa ese enlace el mismo día, le agrega un número romano en minúscula: `show-magico-2026-09-30`, `show-magico-2026-09-30-ii`, `show-magico-2026-09-30-iii`… Mientras el evento está en borrador, el enlace se puede ajustar. Una vez publicado queda fijo, porque ya puede haber afiches y mensajes circulando con él *(hotfix del 30/09/2026, PR #77: antes, dos funciones del mismo día compartían enlace y solo una era alcanzable)*.
+
+**Duplicar evento.** Desde la lista de eventos, el administrador puede duplicar un evento para crear otra función del mismo espectáculo. La copia conserva el mismo nombre y todos los datos (imágenes, etapas, precios, medios de pago, productores, porteros, duración), queda en **borrador** con el aforo completo disponible y abre de inmediato en modo edición para ajustar la fecha y la hora *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 3)*.
+
+**Lista de eventos.** Muestra el estado de cada evento con un ícono de color junto al nombre (borrador, publicado, agotado, finalizado, cancelado). Permite ordenar por nombre o fecha, filtrar por estado y recorrer los eventos mes a mes o semana a semana. Las acciones de cada fila (editar, duplicar, eliminar) son botones de ícono *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 2)*.
 
 Al crear el evento, el sistema genera automáticamente un **código QR con el enlace del evento**, descargable en formato vectorial y de imagen, para imprimir en afiches y volantes.
 
@@ -197,6 +204,8 @@ El productor y el administrador ven, para cada evento a su cargo:
 - Datos de los clientes que compraron.
 - Durante el evento: cuántos asistentes han ingresado y cuántos faltan.
 
+La lista de paneles (la pantalla donde se elige el evento) se puede ordenar por fecha, que es el orden por defecto, o por nombre, y recorrer mes a mes o semana a semana, igual que la lista de eventos *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 4)*.
+
 Además pueden **descargar la lista completa de boletas** con: datos del cliente, fecha y hora de compra, medio de pago, valor unitario, etapa de boletería, fecha y hora de ingreso al evento, y valor total de la boletería.
 
 ### 5.7 Gestión de usuarios (v1)
@@ -271,6 +280,12 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
 | Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
+| Enlace (slug) único por función | **Alta** | ✅ Hotfix fusionado y datos de producción corregidos (PR #77, 30/09/2026) |
+| Duración de eventos | **Alta** | 🟡 Planeado (roadmap #26, `docs/plan-ajustes-eventos.md`) |
+| Lista de eventos con estado, orden y filtros | **Alta** | 🟡 Planeado (roadmap #27) |
+| Duplicar evento (varias funciones) | **Alta** | 🟡 Planeado (roadmap #28) |
+| Lista de paneles con orden y filtro por periodo | Media | 🟡 Planeado (roadmap #29) |
+| Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Planeado (roadmap #30) |
 
 ### v3 — Ideas no comprometidas
 
@@ -331,6 +346,9 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 - Contraste suficiente para leer la pantalla del celular **en la penumbra de la entrada de un teatro** y en la calle a plena luz.
 - Objetivos táctiles amplios: el portero opera con una sola mano, de pie y con prisa.
 - Navegación por teclado y etiquetas semánticas en los formularios administrativos.
+
+### Calidad
+- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código; otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecuta a demanda (`docs/plan-ajustes-eventos.md` Tarea 5).
 
 ### SEO
 - Cada evento debe tener su propia página indexable, con metadatos y vista previa enriquecida al compartirse por WhatsApp o redes sociales. El enlace compartido **es** el canal de difusión principal: si la vista previa se ve mal, la difusión se ve mal.

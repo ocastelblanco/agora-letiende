@@ -17,11 +17,11 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | **URL de producción** | ✅ `https://agora.letiende.co` — **en vivo** (roadmap #17 completo, PR #43, ADR-013). Verificado por CLI el 14/08/2026: certificado ACM `ISSUED`, `GET /api/salud` y `GET /` responden `200` con TLS válido a través del dominio, confirmado también en vivo por el usuario |
 | **URL de staging** | ✅ `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` — login con Google + `GET /api/usuarios/me` verificados de punta a punta (02/08/2026), Gestión de usuarios (PR #10), CRUD de eventos (PR #11), Cartelera pública (PR #12), el menú de navegación (PR #13), el QR del evento (PR #14), Motor de aforo (PR #15), Compra y reserva de sillas (PR #16), Carga de comprobante (PR #17), Aprobación del productor (PR #18), Emisión de boletas (PR #19) y Validación en puerta (PR #20) **todos validados en vivo por el usuario** — PR #20 incluyó un bug real reportado en el propio PR (portero aterrizaba en la cartelera pública tras el login, no en `/puerta`) y corregido en la misma rama antes de la validación final. Venta en efectivo (PR #21) **fusionada**. Panel de control básico (PR #22) **fusionado y validado en vivo por el usuario** — la propia validación manual (flujo real de compra por transferencia y en efectivo) encontró un bug real de datos (ver §7, `expiraEn`/TTL) corregido y consolidado en el mismo PR antes de fusionar. Exportación XLSX (PR #25) **fusionada** — el usuario confirmó la fusión (11/08/2026), iba a eliminar y recrear los eventos de prueba de staging antes de validar en vivo. Fix de `etapaId` (PR #26) **fusionado** — validado en vivo por el usuario ("todo funciona bien") antes de fusionar. Etapas de boletería con cierre automático (PR #28) **fusionado** — implementado y verificado dos veces (incluido el fix del bug real de dinero de `etapaVigente()` ordenando por `orden` en vez de `cierraEn`), sin desplegar a producción todavía |
 | **Rama principal** | `main` |
-| **Último commit en `main`** | merge del PR #51 (Bold, Sub-tarea 2: frontend, roadmap #19) — validado manualmente en staging real por el usuario con todos los escenarios de tarjeta (aprobado, rechazado, error, abandono). **Con esto, los tres PR de Bold (#50 backend, #51 frontend, #52 fix de aforo) quedan fusionados en `main` — roadmap #19 completo.** Ramas locales y remotas de los tres (`feature/bold-pagos-backend`, `feature/bold-pagos-frontend`, `fix/aforo-esperando-pago-bold`) limpiadas. Tarea activa siguiente: recalculada por el motor JIT en `TODO.md` — Exportación de reportes en PDF (roadmap #21, resto), único ítem de v2 sin bloqueo externo |
+| **Último commit en `main`** | merge del PR #77 (hotfix de slug único por función, 30/09/2026) |
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 26/08/2026 (continuación) — **Roadmap #19 (Pago automático con Bold) completo: PR #51 (frontend) fusionado, cerrando el ítem junto con PR #50 (backend) y PR #52 (fix de aforo).** Sub-tarea 2 (frontend) pasó por tres rondas de bugs/refinamientos reales en staging genuino (widget declarativo de Bold que nunca renderizaba → reescrito con la API oficial `window.BoldCheckout`; checkout embebido sin notificación de cierre → botón manual "¿Ya pagaste?"; confirmación de que el webhook de Bold es automático en producción → máquina de estados final con un único botón visible). Validando esto en staging surgió además un fix real de aforo (PR #52): `consultarEstadoCompra()`/`ESTADOS_QUE_RETIENEN_AFORO` no trataban `esperando_pago_bold` igual que `esperando_comprobante`, corregido, más `sillasReservadas` expuesto en el panel. El usuario completó la validación manual final en staging con tarjetas Visa/Mastercard/PSE de pruebas (aprobado, rechazado, error, abandono) — todo funcionó de punta a punta — y fusionó los 3 PR. Esta sesión: vuelta a `main`, limpieza de las 3 ramas de Bold (locales y remotas, ya sin rastro en GitHub porque se auto-eliminaron al fusionar), y recálculo del motor JIT — ver `docs/TODO.md` y §9 |
+| **Última sesión** | 30/09/2026 — Hotfix de slug único por función (PR #77, fusionado; 7 slugs de producción corregidos y resincronizados en Google Calendar, ADR-014) y plan de ajustes a eventos (`docs/plan-ajustes-eventos.md`, roadmap #26 a #30, ADR-015). Ver §9 |
 
 ---
 
@@ -95,7 +95,13 @@ Ninguno — **v1 completa, incluido Dominio personalizado (PR #43, 14/08/2026)**
 
   **Hallazgo 5 (PR #63, fusionado 03/09/2026) — incidente real de producción, reportado en vivo por el humano:** el diseño original de T-0013 redirigía `/` y `/evento/:slug` en una rama aparte, CROSS-DOMAIN a `letiende.co/cartelera/...`, para consolidar el SEO en un solo dominio — decisión explícita, correcta como diseño final, pero desplegada a producción ANTES de que el cutover real de `letiende.co` (T-14/T-15, todavía pendiente) hiciera que ese destino existiera: `letiende.co` en producción sigue sirviendo el sitio estático viejo (`E33QAN86FY24JZ`), sin ninguna ruta `/cartelera`. Como `agora.letiende.co` es hoy el único acceso público real (el contenedor nuevo aún no está en el dominio raíz), quedó roto — el visitante caía en `/eventos`, el fallback del sitio viejo. **Lección:** una redirección cross-domain diseñada para un estado futuro del sistema (el cutover) no debe desplegarse a producción antes de que ese estado exista, aunque el propio repositorio esté "listo" — el acoplamiento entre repositorios importa tanto como el código de cada uno. Corregido colapsando las dos ramas de `src/server.ts` en una sola: mientras el cutover no ocurra, toda ruta redirige mismo dominio con el prefijo, sin excepción; la rama cross-domain queda documentada en un comentario para restaurarse cuando T-14/T-15 esté hecho. Verificado en staging con `aws lambda invoke` directo contra `agora-letiende-staging-ssr` con un evento `APIGatewayProxyEventV2` simulado (`headers.host: 'agora.letiende.co'`) — necesario porque `curl` contra la URL cruda de `execute-api` no reenvía de forma confiable un `Host` suplantado al comportamiento real del Lambda — y, tras la fusión, con `curl` real en producción: `https://agora.letiende.co/` → 301 → `https://agora.letiende.co/cartelera/` → 200.
 - [ ] Notificaciones por WhatsApp — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo)
-- [ ] Exportación PDF (XLSX ya implementado y fusionado, PR #25) — Tarea 2 activa de `TODO.md`, único ítem de v2 sin bloqueo externo
+- [x] Hotfix: enlace (slug) único por función (30/09/2026, **PR #77, fusionado**): `crearEvento()` asigna contador romano (`-ii`, `-iii`…) a un slug ocupado; 7 eventos de producción renombrados por hora y resincronizados en Google Calendar. Ver §7, ADR-014 y §9
+- [ ] Duración de eventos (roadmap #26) — Tarea 1 activa de `TODO.md`, `docs/plan-ajustes-eventos.md`
+- [ ] Lista de eventos con estado, orden y filtros (roadmap #27) — Tarea 2 activa de `TODO.md`
+- [ ] Duplicar evento (roadmap #28) — en cola
+- [ ] Lista de paneles con orden y filtro por periodo (roadmap #29) — en cola
+- [ ] Pruebas E2E Playwright del flujo de compra con Bold (roadmap #30) — en cola, ADR-015
+- [ ] Exportación PDF (XLSX ya implementado y fusionado, PR #25) — en cola detrás de los ajustes de `docs/plan-ajustes-eventos.md` (antes era la Tarea 1)
 
 Ya no pendientes, resueltos antes de lo previsto: Etapas de boletería con cierre automático (roadmap #23, PR #28) y Otros medios de pago — Bre-B resultó ser un tipo de transferencia bancaria común, cubierto por el medio de pago `transferencia` ya existente desde v1, sin desarrollo adicional (decisión del 06/08/2026).
 
@@ -285,6 +291,41 @@ Se presentaron cuatro opciones al usuario (Angular Material, solo Tailwind sin s
 **Implementación:** `AWS::CertificateManager::Certificate` con `DomainValidationOptions[].HostedZoneId` explícito — CloudFormation crea el registro CNAME de validación en Route 53 automáticamente y espera a que el certificado quede `ISSUED` como parte del propio `serverless deploy`, sin ningún paso manual de copiar/pegar un CNAME. Las cuatro piezas (certificado, `DomainName`, `ApiMapping`, registro DNS) llevan `Condition: EsProduccion`; `NG_ALLOWED_HOSTS` usa `Fn::If` para agregar `agora.letiende.co` solo en production, conservando el hostname crudo de API Gateway en la lista (sin costo, útil para depurar). Verificado sintetizando la plantilla compilada con `npx serverless package` contra **ambos** stages antes de desplegar — `staging` no genera ninguno de los cuatro recursos (`Condition` evalúa `false`), `production` sí.
 
 **Consecuencias:** el certificado ACM tarda en validarse por DNS (típicamente minutos, sin garantía dura de tiempo) — el propio `serverless deploy --stage production` de CI queda esperando ese paso como parte de la actualización del stack, más lento que un deploy normal la primera vez que se crea. Revisión de costo real agendada a las 48 horas del despliegue, mismo criterio que cualquier infraestructura nueva (`CLAUDE.md` §5-bis).
+
+### ADR-014 — Slug único por función, con contador romano en minúscula
+
+**Fecha:** 30/09/2026 (hotfix, PR #77) · **Estado:** Aceptada
+
+**Decisión:** el slug de un evento es único en `agora-eventos`. `crearEvento()` consulta `slug-index` antes de escribir. Si el slug está ocupado, asigna el primer contador romano libre en minúscula tras la fecha (`show-magico-2026-09-30-ii`, `-iii`…). Un contador previo se reemplaza, nunca se encadena. Sin la palabra "copia": OCM la descartó para evitar slugs como `…-copia-copia-copia` si un administrador duplica sin cuidado. El slug es editable solo en `borrador` (roadmap #28) y queda fijo al publicar.
+
+**Contexto:** el formulario sugería `nombre + fecha` (sin hora) y el backend no verificaba unicidad. En producción, 11 eventos compartían 4 slugs. Como la página pública, la compra, la venta en efectivo y el panel (`/evento/:slug/panel`) resuelven con `Limit: 1` sobre `slug-index`, solo una función por slug era alcanzable, y un cliente podía comprar boletas de otra función del mismo día. Verificado: 0 compras afectadas.
+
+**Alternativas descartadas:**
+- **Números romanos en mayúscula (`-II`):** obligaban a cambiar `esSlugValido` y a normalizar mayúsculas y minúsculas en la búsqueda pública.
+- **Hora en el slug (`-1700`):** OCM prefirió el contador.
+
+**Consecuencias:**
+- Limitación aceptada: un GSI es de consistencia eventual y DynamoDB no garantiza unicidad sobre él, así que dos creaciones simultáneas con el mismo slug podrían colisionar. Solo el administrador crea eventos y la concurrencia real es mínima.
+- Corrección de datos aplicada el 30/09/2026 con escrituras condicionales (`slug = :viejo`): la función más temprana de cada día conservó el slug base.
+- Como un `UpdateItem` directo no dispara la sincronización, los 7 eventos renombrados se resincronizaron en Google Calendar con el mismo servicio de la Lambda (`actualizarEventoCalendar`), para que sus descripciones no quedaran con el enlace viejo.
+
+### ADR-015 — Pruebas E2E con Playwright en esquema híbrido
+
+**Fecha:** 30/09/2026 (planeación, roadmap #30) · **Estado:** Aceptada
+
+**Decisión:** dos suites de Playwright.
+- `simulado`: API y Bold simulados con `page.route` y un `window.BoldCheckout` de prueba. Corre en CI en cada PR, en Chromium de escritorio, Pixel e iPhone (WebKit).
+- `staging`: checkout sandbox real de Bold dentro del iframe, contra staging, con un evento temporal sembrado en `globalSetup` y limpiado en `globalTeardown`. Se lanza a demanda con `workflow_dispatch` y nunca bloquea un PR.
+
+**Contexto:** OCM quiere una muestra verificable de robustez para su perfil profesional, empezando por el flujo de compra con Bold, el que mueve dinero real.
+
+**Alternativas descartadas:**
+- **Solo staging real:** depende de la disponibilidad del sandbox de Bold y del HTML interno no documentado de su iframe. Demasiado frágil para bloquear PRs.
+- **Solo simulado:** nunca toca el checkout real.
+
+**Consecuencias:**
+- La suite real necesita credenciales IAM propias, limitadas a las tablas `agora-*-staging` (pendiente de OCM).
+- El correo del cliente de prueba es el simulador de SES (`success@simulator.amazonses.com`), para no escribirle nunca a una persona real.
 
 ---
 
@@ -1536,3 +1577,17 @@ Tras fusionar el PR #52, el usuario intentó fusionar el PR #51 y GitHub report�
 **Motor JIT recalculado** (comparando `PRD.md` §6 contra el estado real verificado): de los ítems de v2 (roadmap #19-23), con Bold (#19) completo, Google Calendar (#22) completo y Etapas de boletería (#23) completo, solo quedan dos sin resolver — WhatsApp (#20), bloqueado por el mismo prerrequisito externo de siempre (Verificación de Negocio de Meta, sin cambios), y Exportación de reportes en PDF (#21, resto — XLSX ya entregado en v1), el único ítem sin ningún bloqueo externo conocido. **Tarea 1 de `TODO.md` pasa a ser Exportación PDF. Tarea 2 queda en pausa deliberada por falta de un segundo candidato desbloqueado** — mismo criterio ya usado en la sesión del 25/08/2026 cuando ocurrió la misma situación (un solo ítem de v2 disponible tras cerrar Eventos con boletería externa), antes de que el usuario decidiera anular el orden normal y arrancar Bold de todas formas pese a su bloqueo. Si el usuario quiere anular el orden normal otra vez (por ejemplo, para adelantar WhatsApp pese al bloqueo, o traer algo de v3), es una decisión explícita suya, no algo que el motor JIT infiera solo.
 
 **Próxima tarea sugerida:** Exportación de reportes en PDF (roadmap #21) — sin sesión de planeación previa conocida todavía; `docs/tech-specs.md` §11 roadmap #21 y `CLAUDE.md` §2 dejan el motor de generación "por definir", así que la primera sesión de esa tarea probablemente empiece por investigar opciones (librería de PDF en Node/Lambda, patrón de autorización igual al de XLSX ya construido) antes de implementar.
+
+---
+
+**Sesión del 30/09/2026 — Hotfix de slug único y plan de ajustes a eventos**
+
+1. **Consulta puntual:** la URL del webhook de Bold en staging (ya anotada en `docs/tareas-a-realizar.md`), verificada contra el API Gateway real. OCM pidió no registrarla en el tracking.
+2. **Planeación** de cinco ajustes pedidos por OCM: duración de eventos, lista de eventos con estado/orden/filtros, duplicar evento, lista de paneles con orden y filtro por periodo, y pruebas Playwright del flujo de compra con Bold. Decisiones resueltas con `AskUserQuestion`: pruebas híbridas (ADR-015), slug editable en borrador, filtro de periodo con flechas, y copia completa al duplicar (imágenes copiadas en S3, fechas copiadas). Plan completo en `docs/plan-ajustes-eventos.md`.
+3. **Hallazgo en producción, detectado por OCM al planear el duplicado:** varias funciones del mismo día compartían slug (ver §7 y ADR-014). Hotfix en el **PR #77 (fusionado)**. Luego, con aprobación explícita de OCM:
+   - 7 eventos renombrados por hora con escrituras condicionales. Escaneo posterior: 0 slugs repetidos.
+   - Cada página `/api/eventos-publicos/{slug}` verificada con `curl`: responde su propia función. El borrador del 03/10 16:00 responde 404, como corresponde.
+   - Los 7 eventos resincronizados en Google Calendar: 7/7 `exito: true`, mismos `googleCalendarEventId`.
+4. **PR 0 (`docs/plan-ajustes-eventos`):** PRD §5.2/§5.6/§6/§8, tech-specs §4.3/§5.1/§10/§11 (#26 a #30), DESIGN §10 (chips de estado con contraste calculado), TODO (motor JIT reordenado por decisión de OCM) y este documento.
+
+**Próxima tarea sugerida:** Tarea 1 de `TODO.md`, Duración de eventos (roadmap #26).

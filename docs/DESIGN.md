@@ -165,3 +165,23 @@ Disponibles en `public/` (copiados desde `~/Documents/LeTiende/letiende.co/babel
 | `logo_blanco_sin_fondo.svg` | Logotipo Le Tiende para fondos oscuros (`primary`) |
 
 `src/index.html` referencia el favicon, el apple-touch-icon y `manifest.webmanifest`; `meta[name=theme-color]` está fijado a `#230C00` (`primary`).
+
+---
+
+## 10. Indicadores de estado y botones de ícono
+
+Roadmap #27 (`docs/plan-ajustes-eventos.md` Tarea 2). Primer uso de íconos de interfaz en Ágora: se usan con `MatIconModule` sobre la fuente **Material Icons**, que ya carga `src/index.html` (no Material Symbols).
+
+**Chip de estado del evento:** un círculo de `h-8 w-8 rounded-full` con el ícono centrado (`text-[18px]`), a la izquierda del nombre del evento. Lleva siempre `matTooltip` y `aria-label` con el nombre del estado, porque el color por sí solo no transmite información (accesibilidad).
+
+| Estado | Ícono | Fondo | Ícono sobre el fondo | Contraste (WCAG) |
+|---|---|---|---|---|
+| Borrador | `draft` | `#6B7280` (gris) | `#FFFFFF` | 4,83:1 |
+| Publicado | `check_circle` | `#2E7D32` (verde) | `#FFFFFF` | 5,13:1 |
+| Agotado | `group_off` | `#1565C0` (azul) | `#FFFFFF` | 5,75:1 |
+| Finalizado | `history` | `#F9A825` (amarillo) | `#230C00` (`primary`) | 9,48:1 |
+| Cancelado | `cancel` | `#C0392B` (`danger`) | `#FFFFFF` | 5,44:1 |
+
+Los contrastes se calcularon con la fórmula de luminancia relativa de WCAG 2.x (30/09/2026). Todos superan el 3:1 que WCAG exige para componentes gráficos no textuales. Los fondos gris, verde, azul y amarillo son colores **funcionales de estado**, no de marca: se declaran como tokens propios (`--color-estado-*` en el `@theme` de `src/styles.css`) y no se usan para nada más. El rojo reutiliza `danger`.
+
+**Botones de ícono en filas de tabla:** `mat-icon-button` con `aria-label` y `matTooltip` en español (Editar, Duplicar, Eliminar). Íconos: `edit`, `content_copy`, `delete`. Eliminar usa el color `danger`. El área táctil mínima de `mat-icon-button` (48 × 48 px) se conserva.
