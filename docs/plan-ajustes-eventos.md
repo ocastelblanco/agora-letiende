@@ -72,7 +72,7 @@ Por qué este orden: la duración es un campo que el duplicado ya debe copiar (1
   - Estado `borrador`.
   - Aforo reiniciado: `sillasDisponibles = sillasTotales` y `sillasReservadas = 0`.
   - `etapaId` nuevos.
-  - Sin `googleCalendarEventId` (Calendar la crea al guardar, como cualquier evento nuevo).
+  - Sin `googleCalendarEventId`. **Calendar no se sincroniza al duplicar** (decisión de implementación): la copia nace con la misma fecha y hora que el original, y crear su espejo dejaría dos entradas idénticas hasta que el administrador ajuste la fecha. La primera edición (`PUT`) lo crea.
   - Rastro de auditoría: `duplicadoDe` (id del original) y `creadoPor` (correo del administrador).
 - **Slug** (regla decidida con OCM, sin la palabra "copia"):
   - La copia parte del slug base del original, quitando un contador romano previo si lo tiene, y pasa por `resolverSlugDisponible()` (PR #77).
