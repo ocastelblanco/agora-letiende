@@ -181,6 +181,34 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.slug.disabled).toBe(true);
     });
 
+    it('guardar() avisa el slug con contador cuando el backend asignó uno distinto (hotfix slug único)', async () => {
+      const crearEventoMock = vi.fn().mockResolvedValue({
+        exito: true,
+        evento: { ...eventoExistente, slug: 'concierto-jazz-ii' },
+      });
+      const { fixture, snackBarOpenMock } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['formulario'].patchValue({
+        slug: 'concierto-jazz',
+        nombre: 'Concierto de jazz',
+        descripcion: 'Una noche de jazz',
+        fechaHora: '2026-09-14T20:00',
+        sillasTotales: 100,
+        productores: ['productor@letiende.co'],
+      });
+
+      await componente['guardar']();
+
+      expect(snackBarOpenMock).toHaveBeenCalledWith(
+        'Evento creado. Otra función ya usaba ese slug; se asignó "concierto-jazz-ii".',
+        'Cerrar',
+        { duration: 8000 },
+      );
+      expect(componente['formulario'].controls.slug.value).toBe('concierto-jazz-ii');
+    });
+
     it('sugiere el slug a partir del nombre y la fecha mientras el administrador no lo edite', async () => {
       const { fixture } = configurarPrueba({});
       await activarConId(fixture, 'nuevo');
