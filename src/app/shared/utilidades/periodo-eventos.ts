@@ -21,6 +21,16 @@ export interface Periodo {
   ancla: string;
 }
 
+export const TIPOS_PERIODO: readonly TipoPeriodo[] = ['todos', 'mes', 'semana'];
+
+/** Periodo leído de parámetros de URL, o `null` si el tipo o el ancla no son válidos (se ignoran, nunca rompen). */
+export function periodoDesdeParametros(tipo: string | null, ancla: string | null): Periodo | null {
+  if (tipo && (TIPOS_PERIODO as readonly string[]).includes(tipo) && esAnclaValida(ancla)) {
+    return { tipo: tipo as TipoPeriodo, ancla };
+  }
+  return null;
+}
+
 export type CampoOrden = 'nombre' | 'fecha';
 export type SentidoOrden = 'asc' | 'desc';
 
@@ -139,6 +149,35 @@ export function etiquetaPeriodo(periodo: Periodo): string {
 }
 
 const comparadorTexto = new Intl.Collator('es', { sensitivity: 'base' });
+
+/** Medianoche de hoy en Bogotá, en milisegundos UTC. */
+export function inicioDelDiaBogota(instanteMs: number): number {
+  return aFechaUtc(fechaBogotaDe(instanteMs)).getTime() + OFFSET_BOGOTA_MS;
+}
+
+/**
+ * Orden "el más próximo primero" (roadmap #29): primero los eventos de hoy en
+ * adelante, del más cercano al más lejano, y después los ya pasados, del más
+ * reciente al más antiguo. "Hoy" cuenta desde la medianoche de Bogotá: durante
+ * la función el evento en curso sigue arriba (es cuando se abre su panel para
+ * contar ingresos), no cae debajo de todos los próximos. El empate se
+ * desempata por nombre.
+ */
+export function ordenarPorProximidad<T extends { nombre: string; fechaHora: string }>(
+  eventos: readonly T[],
+  ahoraMs: number,
+): T[] {
+  const limite = inicioDelDiaBogota(ahoraMs);
+  const instante = (evento: T) => Date.parse(evento.fechaHora);
+  const desempate = (a: T, b: T) => comparadorTexto.compare(a.nombre, b.nombre);
+  const proximos = eventos
+    .filter((evento) => instante(evento) >= limite)
+    .sort((a, b) => instante(a) - instante(b) || desempate(a, b));
+  const pasados = eventos
+    .filter((evento) => instante(evento) < limite)
+    .sort((a, b) => instante(b) - instante(a) || desempate(a, b));
+  return [...proximos, ...pasados];
+}
 
 /**
  * Copia ordenada por nombre (sin distinguir tildes ni mayúsculas) o por fecha.
