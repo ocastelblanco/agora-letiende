@@ -145,23 +145,9 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Lista de paneles con orden y filtro por periodo (roadmap #29)
+## Tarea 1 — Pruebas Playwright del flujo de compra con Bold (roadmap #30)
 
-**Prioridad Media**, v2. Mismo orden decidido por OCM. **Desbloqueada** (PR #80 fusionado): reutiliza `shared/utilidades/periodo-eventos.ts` y `app-filtro-periodo`, sin reimplementar la lógica.
-
-**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 4.
-- Filtro Todos / Mes / Semana con flechas ‹ › en `/mis-eventos/panel` (`seleccion-panel.component`).
-- Orden por **fecha (por defecto)** o nombre, con botón para invertir el sentido. Es una lista de tarjetas, no una tabla, así que el orden usa un `mat-button-toggle-group` ("Fecha | Nombre") en vez de encabezados `MatSort`.
-- Orden y filtro guardados en los parámetros de la URL, igual que la lista de eventos. Sin filtro por estado.
-- Decisión abierta para el PR: en la lista de eventos el orden por defecto es la fecha más reciente primero; aquí hay que confirmar con OCM si el panel (donde se elige un evento cercano) debe abrir igual o con la fecha más próxima primero.
-
-**Rama:** `feature/lista-paneles-filtros`.
-
----
-
-## Tarea 2 — Pruebas Playwright del flujo de compra con Bold (roadmap #30)
-
-**Prioridad Media**, v2. Última de las cinco tareas pedidas por OCM el 30/09/2026 (`docs/plan-ajustes-eventos.md`): con la duración (#26), la lista de eventos (#27) y el duplicado (#28) fusionados, y la lista de paneles (#29) sin relación con el flujo de compra, la interfaz que prueba ya está estable.
+**Prioridad Media**, v2. Última de las cinco tareas pedidas por OCM el 30/09/2026 (`docs/plan-ajustes-eventos.md`): con la duración (#26), la lista de eventos (#27), el duplicado (#28) y la lista de paneles (#29) fusionados, la interfaz que prueba ya está estable.
 
 **Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 5 y ADR-015 (esquema híbrido).
 - Suite `simulado` (`e2e/simulado/`): API y Bold simulados; corre en CI en cada PR; Chromium de escritorio, Pixel e iPhone (WebKit).
@@ -174,12 +160,21 @@ tarea de este repositorio.
 
 ---
 
+## Tarea 2 — Exportación de reportes en PDF (roadmap #21, resto)
+
+**Prioridad Media**, v2 — calculada por el algoritmo normal del motor JIT: es el único ítem de v2 sin prerrequisito externo además de las pruebas E2E (WhatsApp, #20, sigue bloqueado por la Verificación de Negocio de Meta). La Exportación XLSX (roadmap #21) ya está implementada y fusionada desde v1; el PDF nunca se inició.
+
+**Alcance:** `docs/PRD.md` §6 (tabla de roadmap v2) lista "Exportación de reportes en XLSX y PDF". El motor de generación de PDF queda por definir (`CLAUDE.md` §2 lo deja explícitamente "por definir"). Ampliación prevista de `handlers/reportes.ts` (`docs/tech-specs.md` §11, endpoint `GET /api/eventos/:eventoId/reportes`, hoy responde `501` explícito para `?formato=pdf`), reutilizando el patrón ya probado de exportación XLSX (autorización por rol/pertenencia al evento, enlace de descarga prefirmado y de vida corta — datos personales, `CLAUDE.md` §5 sección Habeas Data).
+
+**Primer paso probable, no implementación directa:** al no haber una librería de PDF ni un diseño de layout decididos, la primera sesión empieza por una investigación corta (opciones de generación de PDF viables en Node 24/Lambda — tamaño de paquete, cold start, si hace falta un binario nativo tipo Chromium que complicaría el empaquetado — y qué columnas/formato debe llevar el reporte) antes de escribir código, mismo criterio que se usó para Google Calendar (`.omc/plans/google-calendar-sync.md` como formato de referencia).
+
+---
+
 ## Backlog
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas) **completo y fusionado**. Tres hotfixes antes del paso a producción y segunda ronda de hotfixes **fusionados** (PR #41/#42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) fusionada (PR #46).** **Eventos con boletería externa (roadmap #25) fusionada (PR #47).** **Sincronización con Google Calendar (roadmap #22) fusionada y verificada también en producción por CLI (PR #48).** **Pago automático con Bold (roadmap #19) completo — PR #50 (backend), #51 (frontend) y #52 (fix de aforo) fusionados, validado de punta a punta en staging real por el usuario.** **Hotfix de slug único por función fusionado (PR #77, 30/09/2026)**, con los slugs repetidos de producción ya corregidos. WhatsApp (#20) sigue bloqueado por prerrequisito externo (ver "Pendientes que no son de código" abajo).
 
-**En cola (`docs/plan-ajustes-eventos.md`, decidido por OCM el 30/09/2026):**
-1. Exportación de reportes en PDF (roadmap #21, resto). Antes era la Tarea 1; quedó detrás de los ajustes. Su nota de alcance sigue vigente: empezar con una investigación corta de librerías de PDF viables en Lambda antes de escribir código.
+**Ajustes de `docs/plan-ajustes-eventos.md` (decididos por OCM el 30/09/2026):** cuatro de las cinco tareas están fusionadas (duración #26, lista de eventos #27, duplicar #28, lista de paneles #29); queda la de Playwright (#30), activa como Tarea 1.
 
 ---
 
