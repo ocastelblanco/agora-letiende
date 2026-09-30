@@ -5,10 +5,13 @@ import {
   estaEnPeriodo,
   etiquetaPeriodo,
   fechaBogotaDe,
+  inicioDelDiaBogota,
   moverPeriodo,
   normalizarAncla,
   ordenarEventos,
+  ordenarPorProximidad,
   periodoDe,
+  periodoDesdeParametros,
   rangoDelPeriodo,
 } from './periodo-eventos';
 
@@ -110,6 +113,61 @@ describe('periodo-eventos', () => {
       const copia = [...eventos];
       expect(ordenarEventos(eventos, 'fecha', 'asc')[0].nombre).toBe('zorro');
       expect(eventos).toEqual(copia);
+    });
+  });
+  it('periodoDesdeParametros acepta tipos y anclas válidos e ignora el resto', () => {
+    expect(periodoDesdeParametros('mes', '2026-10-01')).toEqual({ tipo: 'mes', ancla: '2026-10-01' });
+    expect(periodoDesdeParametros('semana', '2026-09-28')).toEqual({ tipo: 'semana', ancla: '2026-09-28' });
+    expect(periodoDesdeParametros('año', '2026-10-01')).toBeNull();
+    expect(periodoDesdeParametros('mes', '2026-13-01')).toBeNull();
+    expect(periodoDesdeParametros(null, null)).toBeNull();
+  });
+
+  it('inicioDelDiaBogota es la medianoche de Bogotá (05:00 UTC), no la de UTC', () => {
+    // 2026-10-02T03:00Z sigue siendo 1 de octubre a las 22:00 en Bogotá
+    expect(inicioDelDiaBogota(Date.parse('2026-10-02T03:00:00.000Z'))).toBe(Date.parse('2026-10-01T05:00:00.000Z'));
+    expect(inicioDelDiaBogota(Date.parse('2026-10-02T15:00:00.000Z'))).toBe(Date.parse('2026-10-02T05:00:00.000Z'));
+  });
+
+  describe('ordenarPorProximidad', () => {
+    // "Ahora" = 2 de octubre a las 10:00 en Bogotá
+    const ahora = Date.parse('2026-10-02T15:00:00.000Z');
+    const eventos = [
+      { nombre: 'Pasado lejano', fechaHora: '2026-09-20T18:00:00.000Z' },
+      { nombre: 'Futuro lejano', fechaHora: '2026-10-20T18:00:00.000Z' },
+      { nombre: 'Ayer', fechaHora: '2026-10-02T03:00:00.000Z' },
+      { nombre: 'Hoy', fechaHora: '2026-10-02T18:00:00.000Z' },
+      { nombre: 'Mañana', fechaHora: '2026-10-03T18:00:00.000Z' },
+    ];
+
+    it('pone primero hoy y lo que viene, del más cercano al más lejano, y después lo pasado, del más reciente al más antiguo', () => {
+      expect(ordenarPorProximidad(eventos, ahora).map((e) => e.nombre)).toEqual([
+        'Hoy',
+        'Mañana',
+        'Futuro lejano',
+        'Ayer',
+        'Pasado lejano',
+      ]);
+    });
+
+    it('un evento de hoy que ya empezó sigue arriba de los próximos (es el que se abre durante la función)', () => {
+      const enCurso = [
+        { nombre: 'Mañana', fechaHora: '2026-10-03T18:00:00.000Z' },
+        { nombre: 'En curso', fechaHora: '2026-10-02T14:00:00.000Z' }, // 09:00 en Bogotá, ya empezó
+      ];
+
+      expect(ordenarPorProximidad(enCurso, ahora)[0].nombre).toBe('En curso');
+    });
+
+    it('desempata por nombre y no muta la entrada', () => {
+      const iguales = [
+        { nombre: 'Zeta', fechaHora: '2026-10-03T18:00:00.000Z' },
+        { nombre: 'Álef', fechaHora: '2026-10-03T18:00:00.000Z' },
+      ];
+      const copia = [...iguales];
+
+      expect(ordenarPorProximidad(iguales, ahora).map((e) => e.nombre)).toEqual(['Álef', 'Zeta']);
+      expect(iguales).toEqual(copia);
     });
   });
 });

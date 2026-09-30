@@ -16,14 +16,13 @@ import { ConfirmarDialogComponent } from '../../../shared/dialogos/confirmar-dia
 import { FiltroPeriodoComponent } from '../../../shared/filtros/filtro-periodo.component';
 import { paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
 import {
-  esAnclaValida,
   estaEnPeriodo,
   ordenarEventos,
   periodoDe,
+  periodoDesdeParametros,
   type CampoOrden,
   type Periodo,
   type SentidoOrden,
-  type TipoPeriodo,
 } from '../../../shared/utilidades/periodo-eventos';
 
 /** Presentación de cada estado: chip circular con ícono (DESIGN.md §10). Clases completas para que Tailwind las detecte. */
@@ -35,7 +34,6 @@ const ESTADOS: { valor: EstadoEvento; etiqueta: string; icono: string; clases: s
   { valor: 'cancelado', etiqueta: 'Cancelado', icono: 'cancel', clases: 'bg-danger text-white' },
 ];
 
-const TIPOS_PERIODO: readonly TipoPeriodo[] = ['todos', 'mes', 'semana'];
 const ORDEN_POR_DEFECTO: CampoOrden = 'fecha';
 const SENTIDO_POR_DEFECTO: SentidoOrden = 'desc';
 
@@ -157,10 +155,9 @@ export class GestionEventosComponent implements OnInit {
     if (sentido === 'asc' || sentido === 'desc') {
       this.sentido.set(sentido);
     }
-    const tipo = parametros.get('periodo') as TipoPeriodo | null;
-    const ancla = parametros.get('ancla');
-    if (tipo && TIPOS_PERIODO.includes(tipo) && esAnclaValida(ancla)) {
-      this.periodo.set({ tipo, ancla });
+    const periodo = periodoDesdeParametros(parametros.get('periodo'), parametros.get('ancla'));
+    if (periodo) {
+      this.periodo.set(periodo);
     }
     const estados = (parametros.get('estados') ?? '')
       .split(',')

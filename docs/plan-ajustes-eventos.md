@@ -92,6 +92,7 @@ Por qué este orden: la duración es un campo que el duplicado ya debe copiar (1
 ## Tarea 4 — Lista de paneles (`/mis-eventos/panel`)
 
 - Mismo control de periodo de la Tarea 2 (Todos / Mes / Semana con flechas ‹ ›) y ordenador por **fecha (por defecto)** o nombre, con sentido ascendente o descendente.
+- **Orden por defecto: "la fecha más próxima primero"** (decisión de OCM, 30/09/2026; distinto del de la lista de eventos, que abre con la más reciente primero). Como esta lista incluye eventos ya pasados, se implementó en dos tramos: hoy y lo que viene (del más cercano al más lejano) y después lo pasado (del más reciente al más antiguo). "Hoy" cuenta desde la medianoche de Bogotá, para que el evento en curso siga arriba durante la función. El botón de sentido en fecha alterna con "fecha más lejana primero".
 - La lista es de tarjetas, no una tabla, así que el orden usa un `mat-button-toggle-group` ("Fecha | Nombre") más un botón de sentido, en vez de encabezados `MatSort`.
 - Reutiliza `periodo-eventos.ts` y `FiltroPeriodoComponent`, sin reimplementar la lógica.
 - Filtros y orden en los *query params* de la URL, igual que la Tarea 2.
