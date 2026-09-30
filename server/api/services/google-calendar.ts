@@ -2,6 +2,7 @@ import { JWT } from 'google-auth-library';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { documentoDynamoDB } from './dynamodb';
+import { duracionMinutosDe } from '../lib/duracion-evento';
 
 /**
  * Sincronización con Google Calendar (roadmap #22, `.omc/plans/google-calendar-sync.md`
@@ -36,6 +37,8 @@ export interface EventoParaCalendar {
   nombre: string;
   slug: string;
   fechaHora: string;
+  /** Roadmap #26 — ausente en un evento anterior al campo: se asume la duración por defecto. */
+  duracionMinutos?: number;
   administradoPorLeTiende: boolean;
   vinculoExterno?: VinculoExternoParaCalendar;
   etapas: EtapaParaCalendar[];
@@ -58,7 +61,6 @@ const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
 // 25/08/2026).
 const CALENDAR_ID = 'letiende.co@gmail.com';
 const UBICACION_FIJA = 'Cra. 24 #37-44, Teusaquillo, Bogotá, Cundinamarca, Colombia';
-const DURACION_EVENTO_MS = 3 * 60 * 60 * 1000;
 const ESCOPO_CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
 
 // v2 (roadmap #25) — mismo criterio de prefijos que
@@ -141,7 +143,9 @@ function construirPayload(
   evento: EventoParaCalendar,
   productoresResueltos: ProductorResuelto[],
 ): Record<string, unknown> {
-  const fin = new Date(Date.parse(evento.fechaHora) + DURACION_EVENTO_MS).toISOString();
+  const fin = new Date(
+    Date.parse(evento.fechaHora) + duracionMinutosDe(evento.duracionMinutos) * 60 * 1000,
+  ).toISOString();
 
   return {
     summary: evento.nombre,

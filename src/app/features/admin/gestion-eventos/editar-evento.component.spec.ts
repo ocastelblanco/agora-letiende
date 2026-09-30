@@ -29,6 +29,7 @@ const eventoExistente: Evento = {
   nombre: 'Concierto de jazz',
   descripcion: 'Una noche de jazz',
   fechaHora: '2026-09-15T01:00:00.000Z',
+  duracionMinutos: 180,
   administradoPorLeTiende: true,
   sillasTotales: 100,
   sillasDisponibles: 100,
@@ -179,6 +180,74 @@ describe('EditarEventoComponent', () => {
       expect(componente['modoCrear']()).toBe(false);
       expect(componente['eventoId']()).toBe('e1');
       expect(componente['formulario'].controls.slug.disabled).toBe(true);
+    });
+
+    describe('duración del evento (roadmap #26)', () => {
+      it('arranca en 3 h 0 min y envía duracionMinutos: 180 al crear', async () => {
+        const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
+        const { fixture } = configurarPrueba({ crearEventoMock });
+        await activarConId(fixture, 'nuevo');
+        const componente = fixture.componentInstance;
+
+        expect(componente['formulario'].controls.duracion.getRawValue()).toEqual({ horas: 3, minutos: 0 });
+
+        componente['formulario'].patchValue({
+          slug: 'concierto-jazz',
+          nombre: 'Concierto de jazz',
+          descripcion: 'Una noche de jazz',
+          fechaHora: '2026-09-14T20:00',
+          sillasTotales: 100,
+          productores: ['productor@letiende.co'],
+        });
+        await componente['guardar']();
+
+        expect(crearEventoMock.mock.calls[0][0].duracionMinutos).toBe(180);
+      });
+
+      it('convierte horas y minutos elegidos (2 h 15 min) a 135 minutos', async () => {
+        const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });
+        const { fixture } = configurarPrueba({ crearEventoMock });
+        await activarConId(fixture, 'nuevo');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].patchValue({
+          slug: 'concierto-jazz',
+          nombre: 'Concierto de jazz',
+          descripcion: 'Una noche de jazz',
+          fechaHora: '2026-09-14T20:00',
+          duracion: { horas: 2, minutos: 15 },
+          sillasTotales: 100,
+          productores: ['productor@letiende.co'],
+        });
+        await componente['guardar']();
+
+        expect(crearEventoMock.mock.calls[0][0].duracionMinutos).toBe(135);
+      });
+
+      it.each([
+        { horas: 0, minutos: 10 },
+        { horas: 24, minutos: 5 },
+        { horas: 0, minutos: 0 },
+      ])('marca el formulario inválido para una duración fuera de rango (%j)', async (duracion) => {
+        const crearEventoMock = vi.fn();
+        const { fixture } = configurarPrueba({ crearEventoMock });
+        await activarConId(fixture, 'nuevo');
+        const componente = fixture.componentInstance;
+
+        componente['formulario'].controls.duracion.setValue(duracion);
+
+        expect(componente['formulario'].controls.duracion.errors).toEqual({ duracionInvalida: true });
+      });
+
+      it('precarga la duración del evento (150 min → 2 h 30 min)', async () => {
+        const { fixture } = configurarPrueba({ eventos: [{ ...eventoExistente, duracionMinutos: 150 }] });
+        await activarConId(fixture, 'e1');
+
+        expect(fixture.componentInstance['formulario'].controls.duracion.getRawValue()).toEqual({
+          horas: 2,
+          minutos: 30,
+        });
+      });
     });
 
     it('guardar() avisa el slug con contador cuando el backend asignó uno distinto (hotfix slug único)', async () => {

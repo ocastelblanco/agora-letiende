@@ -19,6 +19,11 @@ import { clienteS3 } from '../services/s3';
 import { generarQrPng, generarQrSvg } from '../services/qr';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { haFinalizadoPorVigencia } from '../lib/vigencia-evento';
+import {
+  DURACION_POR_DEFECTO_MINUTOS,
+  duracionMinutosDe,
+  esDuracionMinutosValida,
+} from '../lib/duracion-evento';
 import type { PermisosUsuario } from '../lib/resolver-permisos';
 import { respuestaJson } from '../lib/http';
 import {
@@ -400,7 +405,12 @@ async function listarEventos(permisos: PermisosUsuario): Promise<APIGatewayProxy
     // tarea no tiene el atributo en DynamoDB. Se normaliza aquí a `true` (el
     // valor por defecto) para que la respuesta siempre cumpla el contrato de
     // `Evento.administradoPorLeTiende: boolean` (no opcional).
-    .map((item) => ({ ...item, administradoPorLeTiende: item['administradoPorLeTiende'] !== false }));
+    .map((item) => ({
+      ...item,
+      administradoPorLeTiende: item['administradoPorLeTiende'] !== false,
+      // Roadmap #26 — un evento anterior al campo se devuelve con la duración por defecto.
+      duracionMinutos: duracionMinutosDe(item['duracionMinutos']),
+    }));
   return respuestaJson(200, visibles);
 }
 
@@ -476,6 +486,7 @@ async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Prom
       nombre: String(item['nombre']),
       slug: String(item['slug']),
       fechaHora: String(item['fechaHora']),
+      duracionMinutos: duracionMinutosDe(item['duracionMinutos']),
       administradoPorLeTiende,
       vinculoExterno:
         typeof item['vinculoExterno'] === 'object' && item['vinculoExterno'] !== null
@@ -562,6 +573,12 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
       mensaje: 'slug, nombre, descripcion y fechaHora son obligatorios y deben ser válidos',
     });
   }
+  // Roadmap #26 — opcional al crear (clientes anteriores no lo envían): 180 por defecto.
+  if (datos['duracionMinutos'] !== undefined && !esDuracionMinutosValida(datos['duracionMinutos'])) {
+    return respuestaJson(400, { mensaje: 'duracionMinutos debe ser un entero entre 15 y 1440' });
+  }
+  const duracionMinutos =
+    datos['duracionMinutos'] === undefined ? DURACION_POR_DEFECTO_MINUTOS : datos['duracionMinutos'];
 
   let sillasTotales: number = SILLAS_TOTALES_NEUTRO;
   let maxBoletasPorCompra: number = MAX_BOLETAS_POR_COMPRA_NEUTRO;
@@ -643,6 +660,7 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     nombre: datos['nombre'],
     descripcion: datos['descripcion'],
     fechaHora: datos['fechaHora'],
+    duracionMinutos,
     administradoPorLeTiende,
     sillasTotales,
     // Regla obligatoria (TODO.md Tarea 1, CLAUDE.md §5 A08): el aforo se
@@ -844,6 +862,12 @@ async function actualizarEvento(
       return respuestaJson(400, { mensaje: 'fechaHora inválida' });
     }
     agregar('fechaHora', '#fechaHora', datos['fechaHora']);
+  }
+  if (datos['duracionMinutos'] !== undefined) {
+    if (!esDuracionMinutosValida(datos['duracionMinutos'])) {
+      return respuestaJson(400, { mensaje: 'duracionMinutos debe ser un entero entre 15 y 1440' });
+    }
+    agregar('duracionMinutos', '#duracionMinutos', datos['duracionMinutos']);
   }
   if (!desactivaBoleteria && datos['maxBoletasPorCompra'] !== undefined) {
     if (!esEnteroPositivo(datos['maxBoletasPorCompra'])) {

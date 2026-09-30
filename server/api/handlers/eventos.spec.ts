@@ -162,7 +162,9 @@ describe('handler de /api/eventos', () => {
       expect(respuesta.statusCode).toBe(200);
       // v2 (roadmap #25) — administradoPorLeTiende se normaliza a `true`
       // cuando el ítem persistido no tiene el atributo (retrocompatibilidad).
-      expect(JSON.parse(respuesta.body!)).toEqual([{ eventoId: 'e1', administradoPorLeTiende: true }]);
+      expect(JSON.parse(respuesta.body!)).toEqual([
+        { eventoId: 'e1', administradoPorLeTiende: true, duracionMinutos: 180 },
+      ]);
     });
 
     it('respeta administradoPorLeTiende: false persistido, sin sobrescribirlo', async () => {
@@ -170,11 +172,65 @@ describe('handler de /api/eventos', () => {
 
       const respuesta = await invocar('GET');
 
-      expect(JSON.parse(respuesta.body!)).toEqual([{ eventoId: 'e2', administradoPorLeTiende: false }]);
+      expect(JSON.parse(respuesta.body!)).toEqual([
+        { eventoId: 'e2', administradoPorLeTiende: false, duracionMinutos: 180 },
+      ]);
     });
   });
 
   describe('POST /api/eventos', () => {
+    describe('duracionMinutos (roadmap #26)', () => {
+      function itemEscrito(): Record<string, unknown> {
+        const put = sendMock.mock.calls
+          .map(([comando]) => comando as { input: Record<string, unknown> })
+          .find((comando) => comando.input['Item'] !== undefined);
+        return put!.input['Item'] as Record<string, unknown>;
+      }
+
+      beforeEach(() => {
+        sendMock.mockResolvedValue({});
+      });
+
+      it('usa 180 minutos cuando el cliente no envía duracionMinutos', async () => {
+        const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(JSON.parse(respuesta.body!).duracionMinutos).toBe(180);
+        expect(itemEscrito()['duracionMinutos']).toBe(180);
+      });
+
+      it('persiste la duración enviada (135 min)', async () => {
+        const respuesta = await invocar('POST', { cuerpo: { ...eventoValido, duracionMinutos: 135 } });
+
+        expect(respuesta.statusCode).toBe(201);
+        expect(itemEscrito()['duracionMinutos']).toBe(135);
+      });
+
+      it.each([0, 14, 1441, 90.5, '180', null])(
+        'rechaza duracionMinutos inválido (%j) con 400 y sin escribir',
+        async (invalido) => {
+          const respuesta = await invocar('POST', {
+            cuerpo: { ...eventoValido, duracionMinutos: invalido },
+          });
+
+          expect(respuesta.statusCode).toBe(400);
+          expect(sendMock).not.toHaveBeenCalled();
+        },
+      );
+
+      it('envía duracionMinutos a Google Calendar', async () => {
+        credencialCalendarConfiguradaMock.mockReturnValue(true);
+        crearEventoCalendarMock.mockResolvedValue({ exito: false });
+
+        await invocar('POST', { cuerpo: { ...eventoValido, duracionMinutos: 120 } });
+
+        expect(crearEventoCalendarMock).toHaveBeenCalledWith(
+          expect.objectContaining({ duracionMinutos: 120 }),
+          expect.anything(),
+        );
+      });
+    });
+
     describe('slug único por función (hotfix 30/09/2026)', () => {
       // Simula slug-index con un conjunto de slugs ya ocupados; cualquier
       // otro comando (el PutCommand) responde vacío.
@@ -668,6 +724,35 @@ describe('handler de /api/eventos', () => {
   });
 
   describe('PUT /api/eventos/:eventoId', () => {
+    describe('duracionMinutos (roadmap #26)', () => {
+      it('el administrador actualiza la duración con SET parametrizado', async () => {
+        sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1', duracionMinutos: 150 } });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { duracionMinutos: 150 } });
+
+        expect(respuesta.statusCode).toBe(200);
+        const comando = sendMock.mock.calls[0]?.[0] as { input: Record<string, Record<string, unknown>> };
+        expect(comando.input['ExpressionAttributeNames']).toMatchObject({ '#duracionMinutos': 'duracionMinutos' });
+        expect(Object.values(comando.input['ExpressionAttributeValues'])).toContain(150);
+      });
+
+      it('rechaza una duración fuera de rango con 400, sin escribir', async () => {
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { duracionMinutos: 10 } });
+
+        expect(respuesta.statusCode).toBe(400);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('un productor no puede editar la duración: 403, sin escribir', async () => {
+        exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosProductor });
+
+        const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { duracionMinutos: 150 } });
+
+        expect(respuesta.statusCode).toBe(403);
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+    });
+
     it('actualiza el evento y responde 200', async () => {
       sendMock.mockResolvedValue({ Attributes: { eventoId: 'e1', nombre: 'Nuevo nombre' } });
 
