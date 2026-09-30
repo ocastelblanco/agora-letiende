@@ -249,3 +249,5 @@ Specs definition,30/09/2026 12:03,30/09/2026 12:37,0:34:00,AI,Opus 5.5,"Planea d
 Incident response,30/09/2026 12:37,30/09/2026 12:50,0:13:00,AI,Opus 5.5,"Hotfix: slug único por función con contador romano (-ii) en crearEvento, IAM Query slug-index y aviso en formulario",Claude Code,cli,high
 Incident response,30/09/2026 12:57,30/09/2026 13:01,0:04:00,AI,Opus 5.5,"Corrige 7 slugs repetidos en producción y resincroniza Google Calendar; limpia rama del PR #77",Claude Code,cli,medium
 Documentation,30/09/2026 13:01,30/09/2026 13:08,0:07:00,AI,Opus 5.5,"PR 0: plan de ajustes a eventos en PRD, tech-specs, DESIGN, TODO y MEMORY",Claude Code,cli,high
+Backend,30/09/2026 13:12,30/09/2026 13:45,0:33:00,AI,Sonnet 5.5,"Duración de eventos (roadmap #26): campo duracionMinutos, formulario, fin en Calendar, script de relleno y PR #79",Claude Code,cli,medium
+Cloud infraestructure,30/09/2026 13:40,30/09/2026 13:44,0:04:00,AI,Sonnet 5.5,"Rellena duracionMinutos=180 en 18 eventos de producción (simulacro, escritura y verificación) con aprobación de OCM",Claude Code,cli,low
