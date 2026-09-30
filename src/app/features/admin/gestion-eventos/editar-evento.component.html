@@ -101,6 +101,11 @@
             <p class="mt-1 text-xs text-primary/60">
               Se sugiere solo a partir del nombre y la fecha — puedes editarlo.
             </p>
+          } @else if (slugEditable()) {
+            <p class="mt-1 text-xs text-primary/60">
+              Puedes cambiarlo mientras el evento esté en borrador; al publicarlo queda fijo. Si otra función ya usa
+              ese enlace, se le agrega un número (-ii, -iii…).
+            </p>
           }
         </div>
 

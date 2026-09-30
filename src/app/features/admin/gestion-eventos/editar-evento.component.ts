@@ -8,7 +8,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { merge } from 'rxjs';
 import { ServicioAuth } from '../../../core/auth/servicio-auth';
 import { EventosService } from '../../../core/api/eventos.service';
 import { UsuariosService } from '../../../core/api/usuarios.service';
@@ -282,6 +281,22 @@ export class EditarEventoComponent {
    */
   private slugTocadoManualmente = false;
 
+  /** `true` mientras `precargarFormulario()` llena el formulario: sus `patchValue` no deben disparar la sugerencia de slug. */
+  private precargando = false;
+
+  /** Estado y slug tal como están guardados (roadmap #28): deciden si el slug se puede editar y si cambió. */
+  protected readonly estadoPersistido = signal<Evento['estado'] | null>(null);
+  private readonly slugPersistido = signal<string | null>(null);
+
+  /**
+   * Roadmap #28 — en edición, el slug se puede ajustar solo mientras el evento
+   * está en `borrador` (todavía no hay QR ni enlaces circulando) y solo lo
+   * hace el administrador. Al publicarlo queda fijo.
+   */
+  protected readonly slugEditable = computed(
+    () => !this.modoCrear() && !this.esProductor() && this.estadoPersistido() === 'borrador',
+  );
+
   protected agregarEtapa(): void {
     this.etapas.push(this.crearGrupoEtapa());
   }
@@ -417,12 +432,12 @@ export class EditarEventoComponent {
     this.formulario.controls.slug.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
       this.slugTocadoManualmente = true;
     });
-    merge(
-      this.formulario.controls.nombre.valueChanges,
-      this.formulario.controls.fechaHora.valueChanges,
-    )
+    this.formulario.controls.nombre.valueChanges
       .pipe(takeUntilDestroyed())
-      .subscribe(() => this.actualizarSlugAutomatico());
+      .subscribe(() => this.actualizarSlugAutomatico('nombre'));
+    this.formulario.controls.fechaHora.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.actualizarSlugAutomatico('fecha'));
 
     // v2 (roadmap #25) — arranca deshabilitado: el valor por defecto de
     // `administradoPorLeTiende` es `true` (ver docstring de
@@ -442,11 +457,15 @@ export class EditarEventoComponent {
   /**
    * Regenera `slug` a partir de `nombre` + la fecha (ej. "Noche de engaños
    * y karaoke" + 21/08/2026 → "noche-de-enganos-y-karaoke-2026-08-21").
-   * Solo mientras se crea (nunca en edición, donde `slug` ya está
-   * deshabilitado) y solo si el administrador no lo editó él mismo todavía.
+   * Mientras se crea, al cambiar el nombre o la fecha. En edición (roadmap
+   * #28) solo al cambiar la **fecha** de un evento en borrador — p. ej. al
+   * mover una copia a otro día — nunca por un cambio de nombre, para no
+   * pisar un slug que ya circuló en borradores anteriores. En ambos casos,
+   * solo si el administrador no lo editó él mismo todavía.
    */
-  private actualizarSlugAutomatico(): void {
-    if (!this.modoCrear() || this.slugTocadoManualmente) {
+  private actualizarSlugAutomatico(origen: 'nombre' | 'fecha'): void {
+    const puedeSugerir = this.modoCrear() || (origen === 'fecha' && this.slugEditable());
+    if (!puedeSugerir || this.precargando || this.slugTocadoManualmente) {
       return;
     }
 
@@ -457,9 +476,21 @@ export class EditarEventoComponent {
 
     const fechaHora = this.formulario.controls.fechaHora.value;
     const fecha = fechaHora.includes('T') ? fechaHora.split('T')[0] : '';
+    if (!this.modoCrear() && !fecha) {
+      return;
+    }
     const base = slugificar(nombre);
     const slug = fecha ? `${base}-${fecha}` : base;
     this.formulario.controls.slug.setValue(slug, { emitEvent: false });
+  }
+
+  /** Habilita o deshabilita el control según `slugEditable()` (estado guardado, no el del formulario). */
+  private sincronizarEdicionSlug(): void {
+    if (this.slugEditable()) {
+      this.formulario.controls.slug.enable({ emitEvent: false });
+    } else {
+      this.formulario.controls.slug.disable({ emitEvent: false });
+    }
   }
 
   private reiniciarFormularioVacio(): void {
@@ -522,6 +553,7 @@ export class EditarEventoComponent {
     const administradoPorLeTiende = evento.administradoPorLeTiende ?? true;
     const vinculo = evento.vinculoExterno;
 
+    this.precargando = true;
     this.formulario.patchValue({
       slug: evento.slug,
       nombre: evento.nombre,
@@ -539,17 +571,25 @@ export class EditarEventoComponent {
       porteros: evento.porteros,
       estado: evento.estado,
     });
+    this.precargando = false;
+    // patchValue() emitió slug.valueChanges y marcó el slug como tocado a
+    // mano; en edición de un borrador hay que deshacerlo para que un cambio
+    // de fecha pueda volver a sugerirlo.
+    this.slugTocadoManualmente = false;
+    this.estadoPersistido.set(evento.estado);
+    this.slugPersistido.set(evento.slug);
     // No depende únicamente de que patchValue() dispare de vuelta la
     // suscripción a `administradoPorLeTiende.valueChanges` (mismo criterio
     // que el resto de este componente, ver docstring de la clase sobre la
     // "segunda capa" sin depender de la reactividad del formulario).
     this.sincronizarBoleteriaExterna(administradoPorLeTiende);
 
-    // `slug` no se edita tras crear (es la URL pública) — `sillasTotales`
-    // SÍ es editable en edición para un `administrador` (ver docstring de
-    // la clase); para un `productor` se deshabilita más abajo, junto con el
+    // `slug` es la URL pública: solo se edita mientras el evento está en
+    // `borrador` (roadmap #28); al publicarlo queda fijo. `sillasTotales` SÍ
+    // es editable en edición para un `administrador` (ver docstring de la
+    // clase); para un `productor` se deshabilita más abajo, junto con el
     // resto de campos fuera de su alcance (TODO.md Tarea 1, T6).
-    this.formulario.controls.slug.disable();
+    this.sincronizarEdicionSlug();
 
     // v2 (roadmap #24) — las etapas se cargan ANTES que mediosPago, a
     // propósito: `sincronizarDisponibilidadBold()` reacciona a cada cambio
@@ -736,6 +776,11 @@ export class EditarEventoComponent {
               plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
             }
           : {
+              // Roadmap #28 — solo se envía si cambió y el evento sigue en
+              // borrador; el backend lo hace único y responde el slug final.
+              ...(this.slugEditable() && valores.slug !== this.slugPersistido()
+                ? { slug: valores.slug }
+                : {}),
               nombre: valores.nombre,
               descripcion: valores.descripcion,
               fechaHora: desdeInputBogota(valores.fechaHora),
@@ -756,7 +801,22 @@ export class EditarEventoComponent {
       );
 
       if (resultado.exito) {
-        this.snackBar.open('Evento actualizado correctamente.', 'Cerrar', { duration: 4000 });
+        // Roadmap #28 — el backend puede haber ajustado el slug (contador si
+        // otra función ya lo usaba) y el estado guardado pudo cambiar (al
+        // publicar, el slug queda fijo): se reflejan en el formulario.
+        const slugPedido = this.formulario.controls.slug.value;
+        const slugFinal = resultado.evento.slug ?? slugPedido;
+        this.formulario.controls.slug.setValue(slugFinal, { emitEvent: false });
+        this.slugPersistido.set(slugFinal);
+        this.estadoPersistido.set(resultado.evento.estado);
+        this.sincronizarEdicionSlug();
+        this.snackBar.open(
+          slugFinal !== slugPedido
+            ? `Evento actualizado. Otra función ya usaba ese slug; se asignó "${slugFinal}".`
+            : 'Evento actualizado correctamente.',
+          'Cerrar',
+          { duration: slugFinal !== slugPedido ? 8000 : 4000 },
+        );
         // Sincroniza los etapaId con la respuesta del servidor (ALL_NEW):
         // toda etapa nueva (etapaId vacío en el payload) recibe aquí el
         // etapaId real que le asignó normalizarEtapas() en el backend. Sin

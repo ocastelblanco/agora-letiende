@@ -50,6 +50,7 @@ function configurarPrueba(opciones: {
   eventos?: Evento[];
   error?: boolean;
   eliminarEventoMock?: ReturnType<typeof vi.fn>;
+  duplicarEventoMock?: ReturnType<typeof vi.fn>;
   dialogAfterClosed?: unknown;
   rol?: Rol | null;
 }) {
@@ -66,6 +67,7 @@ function configurarPrueba(opciones: {
           error: () => opciones.error ?? false,
           cargarEventos: cargarEventosMock,
           eliminarEvento: opciones.eliminarEventoMock ?? vi.fn(),
+          duplicarEvento: opciones.duplicarEventoMock ?? vi.fn(),
         },
       },
       {
@@ -85,12 +87,13 @@ function configurarPrueba(opciones: {
   const snackBarOpenMock = vi
     .spyOn(TestBed.inject(MatSnackBar), 'open')
     .mockImplementation(() => ({}) as never);
+  const navigateMock = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
 
   const fixture: ComponentFixture<GestionEventosComponent> =
     TestBed.createComponent(GestionEventosComponent);
   fixture.detectChanges();
 
-  return { fixture, cargarEventosMock, dialogOpenMock, snackBarOpenMock };
+  return { fixture, cargarEventosMock, dialogOpenMock, snackBarOpenMock, navigateMock };
 }
 
 /** Variante que navega a una URL con parámetros ANTES de crear el componente (el Router real los expone en el snapshot). */
@@ -228,6 +231,54 @@ describe('GestionEventosComponent', () => {
       expect(host.querySelector('button[aria-label="Eliminar"]')).not.toBeNull();
     });
   });
+  describe('duplicar (roadmap #28)', () => {
+    const copia = { ...eventoEjemplo, eventoId: 'e2', slug: 'concierto-jazz-ii', estado: 'borrador' as const };
+
+    it('duplica el evento y abre la copia en modo edición', async () => {
+      const duplicarEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: copia });
+      const { fixture, navigateMock } = configurarPrueba({ eventos: [eventoEjemplo], duplicarEventoMock });
+
+      await fixture.componentInstance['duplicar'](eventoEjemplo);
+
+      expect(duplicarEventoMock).toHaveBeenCalledWith('e1');
+      expect(navigateMock).toHaveBeenCalledWith(['/mis-eventos/eventos', 'e2']);
+    });
+
+    it('si falla, muestra el mensaje del backend y no navega', async () => {
+      const duplicarEventoMock = vi.fn().mockResolvedValue({ exito: false, error: 'No existe un evento con ese eventoId' });
+      const { fixture, navigateMock, snackBarOpenMock } = configurarPrueba({ eventos: [eventoEjemplo], duplicarEventoMock });
+
+      await fixture.componentInstance['duplicar'](eventoEjemplo);
+
+      expect(snackBarOpenMock).toHaveBeenCalledWith('No existe un evento con ese eventoId', 'Cerrar', { duration: 6000 });
+      expect(navigateMock).not.toHaveBeenCalledWith(['/mis-eventos/eventos', expect.anything()]);
+    });
+
+    it('un doble toque antes de repintar crea una sola copia (guarda síncrona)', async () => {
+      let resolver!: (valor: unknown) => void;
+      const duplicarEventoMock = vi.fn().mockReturnValue(new Promise((r) => (resolver = r)));
+      const { fixture } = configurarPrueba({ eventos: [eventoEjemplo], duplicarEventoMock });
+      const componente = fixture.componentInstance;
+
+      const primera = componente['duplicar'](eventoEjemplo);
+      const segunda = componente['duplicar'](eventoEjemplo);
+      resolver({ exito: true, evento: copia });
+      await Promise.all([primera, segunda]);
+
+      expect(duplicarEventoMock).toHaveBeenCalledTimes(1);
+      expect(componente['duplicando']()).toBe(false);
+    });
+
+    it('el botón Duplicar es solo para administrador', () => {
+      const admin = configurarPrueba({ eventos: [eventoEjemplo], rol: 'administrador' });
+      expect((admin.fixture.nativeElement as HTMLElement).querySelector('button[aria-label="Duplicar"] mat-icon')?.textContent).toBe('content_copy');
+      TestBed.resetTestingModule();
+
+      const productor = configurarPrueba({ eventos: [eventoEjemplo], rol: 'productor' });
+      expect((productor.fixture.nativeElement as HTMLElement).querySelector('button[aria-label="Duplicar"]')).toBeNull();
+    });
+  });
+
   describe('columnas y acciones (roadmap #27)', () => {
     it('ya no tiene las columnas Sillas ni Estado, y las acciones son botones de ícono', () => {
       const { fixture } = configurarPrueba({ eventos: [eventoEjemplo] });

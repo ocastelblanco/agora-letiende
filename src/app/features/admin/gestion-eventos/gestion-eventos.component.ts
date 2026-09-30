@@ -86,6 +86,7 @@ export class GestionEventosComponent implements OnInit {
   protected readonly eventos = this.eventosService.eventos;
 
   protected readonly eliminandoEventoId = signal<string | null>(null);
+  protected readonly duplicando = signal(false);
 
   // Orden y filtros (roadmap #27): viven en la URL para sobrevivir a la ida y
   // vuelta a la edición de un evento. Por defecto, la fecha más reciente primero.
@@ -182,6 +183,29 @@ export class GestionEventosComponent implements OnInit {
         estados: estados.length > 0 ? estados.join(',') : null,
       },
     });
+  }
+
+  /**
+   * Duplica un evento (roadmap #28) y abre la copia en modo edición. La guarda
+   * síncrona va ANTES de `duplicando.set(true)`: `[disabled]` no se aplica al
+   * DOM hasta el siguiente ciclo de detección de cambios, y un doble toque
+   * real puede llegar antes (CLAUDE.md §7) — sin ella se crearían dos copias.
+   */
+  protected async duplicar(evento: Evento): Promise<void> {
+    if (this.duplicando()) {
+      return;
+    }
+    this.duplicando.set(true);
+    try {
+      const resultado = await this.eventosService.duplicarEvento(evento.eventoId);
+      if (resultado.exito) {
+        await this.router.navigate(['/mis-eventos/eventos', resultado.evento.eventoId]);
+      } else {
+        this.snackBar.open(resultado.error, 'Cerrar', { duration: 6000 });
+      }
+    } finally {
+      this.duplicando.set(false);
+    }
   }
 
   protected async eliminar(evento: Evento): Promise<void> {

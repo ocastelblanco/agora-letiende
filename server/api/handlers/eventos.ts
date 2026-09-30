@@ -12,7 +12,12 @@ import {
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  CopyObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
@@ -120,7 +125,7 @@ function aRomanoMinuscula(numero: number): string {
   return romano;
 }
 
-async function slugOcupado(slug: string): Promise<boolean> {
+async function slugOcupado(slug: string, excluirEventoId?: string): Promise<boolean> {
   const resultado = await documentoDynamoDB.send(
     new QueryCommand({
       TableName: process.env['TABLA_EVENTOS'],
@@ -128,10 +133,12 @@ async function slugOcupado(slug: string): Promise<boolean> {
       KeyConditionExpression: '#slug = :slug',
       ExpressionAttributeNames: { '#slug': 'slug' },
       ExpressionAttributeValues: { ':slug': slug },
-      Limit: 1,
+      // Con exclusión (edición de un evento) hace falta ver más de un ítem:
+      // el propio evento podría ser el primero que devuelva el índice.
+      Limit: excluirEventoId ? 5 : 1,
     }),
   );
-  return (resultado.Items?.length ?? 0) > 0;
+  return (resultado.Items ?? []).some((item) => item['eventoId'] !== excluirEventoId);
 }
 
 /**
@@ -143,8 +150,11 @@ async function slugOcupado(slug: string): Promise<boolean> {
  * creaciones simultáneas con el mismo slug podrían colisionar. Se acepta:
  * solo el administrador crea eventos y la concurrencia real es mínima.
  */
-async function resolverSlugDisponible(slugSolicitado: string): Promise<string | null> {
-  if (!(await slugOcupado(slugSolicitado))) {
+async function resolverSlugDisponible(
+  slugSolicitado: string,
+  excluirEventoId?: string,
+): Promise<string | null> {
+  if (!(await slugOcupado(slugSolicitado, excluirEventoId))) {
     return slugSolicitado;
   }
   const base = slugSolicitado.replace(CONTADOR_TRAS_FECHA, '$1');
@@ -153,7 +163,7 @@ async function resolverSlugDisponible(slugSolicitado: string): Promise<string | 
     if (candidato.length > 120) {
       return null;
     }
-    if (!(await slugOcupado(candidato))) {
+    if (!(await slugOcupado(candidato, excluirEventoId))) {
       return candidato;
     }
   }
@@ -812,6 +822,8 @@ async function actualizarEvento(
   // `attribute_exists(eventoId)` de siempre — hoy solo las agrega el bloque
   // de `sillasTotales` (guarda optimista + aforo nunca negativo).
   const condicionesExtra: string[] = [];
+  // Roadmap #28 — el cambio de slug agrega su propia guarda (`estado = borrador`); se distingue para dar el mensaje correcto si falla.
+  let cambiaSlug = false;
 
   const agregar = (campo: string, marcador: string, valor: unknown): void => {
     asignaciones.push(`${marcador} = :${campo}`);
@@ -876,6 +888,36 @@ async function actualizarEvento(
       return respuestaJson(400, { mensaje: 'fechaHora inválida' });
     }
     agregar('fechaHora', '#fechaHora', datos['fechaHora']);
+  }
+  if (datos['slug'] !== undefined) {
+    // Roadmap #28 — el slug se puede ajustar solo mientras el evento está en
+    // `borrador` (todavía no hay QR ni enlaces circulando). Solo
+    // `administrador` llega hasta aquí: `slug` no está en
+    // CAMPOS_EDITABLES_PRODUCTOR, así que un productor recibe 403 arriba.
+    if (!esSlugValido(datos['slug'])) {
+      return respuestaJson(400, { mensaje: 'slug inválido' });
+    }
+    const eventoParaSlug = await leerEventoActual();
+    if (!eventoParaSlug) {
+      return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+    }
+    if (datos['slug'] !== eventoParaSlug['slug']) {
+      if (eventoParaSlug['estado'] !== 'borrador') {
+        return respuestaJson(409, {
+          mensaje: 'El slug solo se puede cambiar mientras el evento está en borrador',
+        });
+      }
+      const slugDisponible = await resolverSlugDisponible(datos['slug'], eventoId);
+      if (!slugDisponible) {
+        return respuestaJson(409, { mensaje: 'Ya existen demasiados eventos con ese slug, elige otro' });
+      }
+      agregar('slug', '#slug', slugDisponible);
+      // Guarda contra una publicación concurrente entre la lectura y esta escritura.
+      condicionesExtra.push('#estado = :estadoBorradorSlug');
+      nombresAtributos['#estado'] = 'estado';
+      valoresExpresion[':estadoBorradorSlug'] = 'borrador';
+      cambiaSlug = true;
+    }
   }
   if (datos['duracionMinutos'] !== undefined) {
     if (!esDuracionMinutosValida(datos['duracionMinutos'])) {
@@ -1183,6 +1225,11 @@ async function actualizarEvento(
       // delta dejaría `sillasDisponibles` en negativo) — 409, no 404, para
       // que el administrador sepa que debe reintentar, no que el evento
       // desapareció.
+      if (cambiaSlug) {
+        return respuestaJson(409, {
+          mensaje: 'El evento dejó de estar en borrador mientras editabas — el slug ya no se puede cambiar',
+        });
+      }
       if (condicionesExtra.length > 0) {
         return respuestaJson(409, {
           mensaje: 'El aforo del evento cambió mientras editabas — intenta de nuevo',
@@ -1264,6 +1311,156 @@ async function generarUrlCargaActivo(
   );
 
   return respuestaJson(200, { url, key });
+}
+
+/**
+ * Copia un activo (imagen/logotipo) del evento original al prefijo del nuevo
+ * con `CopyObject` — la copia es independiente: borrar el original (que borra
+ * todo `eventos/{id}/`) no rompe las imágenes de la copia. `key` se valida
+ * contra el prefijo del evento original antes de copiarla (A08: nunca se copia
+ * una key arbitraria que viniera en un ítem alterado). Los metadatos
+ * (`Content-Type`, `Cache-Control`) se conservan (`MetadataDirective: COPY`,
+ * el valor por defecto de S3).
+ */
+async function copiarActivo(
+  key: unknown,
+  tipo: 'imagen' | 'logotipo',
+  eventoOrigenId: string,
+  eventoDestinoId: string,
+): Promise<string | undefined> {
+  if (typeof key !== 'string' || !key.startsWith(`eventos/${eventoOrigenId}/`)) {
+    return undefined;
+  }
+  const extension = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : 'webp';
+  const nuevaKey = `eventos/${eventoDestinoId}/${tipo}-${randomUUID()}.${extension}`;
+  await clienteS3.send(
+    new CopyObjectCommand({
+      Bucket: process.env['BUCKET_ACTIVOS'],
+      CopySource: `${process.env['BUCKET_ACTIVOS']}/${key}`,
+      Key: nuevaKey,
+    }),
+  );
+  return nuevaKey;
+}
+
+/**
+ * `POST /api/eventos/:eventoId/duplicar` (roadmap #28, exclusivo de
+ * `administrador`, el despacho de `handler` ya lo garantiza) — crea otra
+ * función del mismo espectáculo a partir del evento guardado. Sin payload: la
+ * copia se arma SOLO con lo que ya está en DynamoDB, nunca con datos del
+ * cliente (CLAUDE.md §5, A08). Lista blanca explícita de campos: un atributo
+ * desconocido del original no se arrastra a la copia.
+ *
+ * Qué conserva: nombre (es otra función del mismo espectáculo), descripción,
+ * fecha/hora, duración, boletería, etapas (con `etapaId` nuevos), medios de
+ * pago, productores, porteros, vínculo externo e imágenes (copiadas en S3).
+ * Qué reinicia: estado `borrador`, aforo completo disponible y sin reservas,
+ * sin `googleCalendarEventId`. Qué agrega: `duplicadoDe` y `creadoPor`
+ * (auditoría, A09).
+ *
+ * Google Calendar NO se sincroniza aquí: la copia nace con la misma fecha y
+ * hora que el original, así que crear su espejo ahora dejaría dos entradas
+ * idénticas hasta que el administrador ajuste la fecha. La primera edición
+ * (`PUT`) la crea (`sincronizarConGoogleCalendar` crea el espejo de un evento
+ * sin `googleCalendarEventId`).
+ */
+async function duplicarEvento(
+  eventoOrigenId: string | undefined,
+  permisos: PermisosUsuario,
+): Promise<APIGatewayProxyResultV2> {
+  if (!eventoOrigenId) {
+    return respuestaJson(400, { mensaje: 'Falta el eventoId en la ruta' });
+  }
+
+  const original = (
+    await documentoDynamoDB.send(
+      new GetCommand({ TableName: process.env['TABLA_EVENTOS'], Key: { eventoId: eventoOrigenId } }),
+    )
+  ).Item;
+  if (!original) {
+    return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+  }
+
+  // Parte del slug del original: como la copia nace con su misma fecha, el
+  // resolver le asigna el siguiente contador libre (`-ii`, `-iii`…).
+  const slug = await resolverSlugDisponible(String(original['slug']));
+  if (!slug) {
+    return respuestaJson(409, { mensaje: 'Ya existen demasiados eventos con ese slug' });
+  }
+
+  const eventoId = randomUUID();
+  const ahora = new Date().toISOString();
+  const sillasTotales = typeof original['sillasTotales'] === 'number' ? original['sillasTotales'] : 0;
+  const etapasOriginales = Array.isArray(original['etapas'])
+    ? (original['etapas'] as Record<string, unknown>[])
+    : [];
+
+  const item: Record<string, unknown> = {
+    eventoId,
+    slug,
+    nombre: original['nombre'],
+    descripcion: original['descripcion'],
+    fechaHora: original['fechaHora'],
+    duracionMinutos: duracionMinutosDe(original['duracionMinutos']),
+    administradoPorLeTiende: original['administradoPorLeTiende'] !== false,
+    sillasTotales,
+    sillasDisponibles: sillasTotales,
+    sillasReservadas: 0,
+    etapas: etapasOriginales.map((etapa) => ({ ...etapa, etapaId: randomUUID() })),
+    maxBoletasPorCompra: original['maxBoletasPorCompra'],
+    mediosPago: original['mediosPago'] ?? [],
+    plazoComprobanteMinutos: original['plazoComprobanteMinutos'],
+    productores: original['productores'] ?? [],
+    porteros: original['porteros'] ?? [],
+    estado: 'borrador' as EstadoEvento,
+    duplicadoDe: eventoOrigenId,
+    creadoPor: permisos.email,
+    creadoEn: ahora,
+    actualizadoEn: ahora,
+  };
+  if (original['vinculoExterno']) {
+    item['vinculoExterno'] = original['vinculoExterno'];
+  }
+
+  const keysCopiadas: string[] = [];
+  try {
+    const imagenKey = await copiarActivo(original['imagenKey'], 'imagen', eventoOrigenId, eventoId);
+    if (imagenKey) {
+      keysCopiadas.push(imagenKey);
+      item['imagenKey'] = imagenKey;
+    }
+    const logotipoKey = await copiarActivo(original['logotipoKey'], 'logotipo', eventoOrigenId, eventoId);
+    if (logotipoKey) {
+      keysCopiadas.push(logotipoKey);
+      item['logotipoKey'] = logotipoKey;
+    }
+
+    await documentoDynamoDB.send(
+      new PutCommand({
+        TableName: process.env['TABLA_EVENTOS'],
+        Item: item,
+        ConditionExpression: 'attribute_not_exists(eventoId)',
+      }),
+    );
+  } catch (error) {
+    // Sin evento no deben quedar imágenes huérfanas. Best-effort: el error
+    // que se propaga es el original, no el de la limpieza.
+    if (keysCopiadas.length > 0) {
+      try {
+        await clienteS3.send(
+          new DeleteObjectsCommand({
+            Bucket: process.env['BUCKET_ACTIVOS'],
+            Delete: { Objects: keysCopiadas.map((Key) => ({ Key })) },
+          }),
+        );
+      } catch {
+        // Best-effort — ver comentario de arriba.
+      }
+    }
+    throw error;
+  }
+
+  return respuestaJson(201, item);
 }
 
 /**
@@ -1407,6 +1604,7 @@ async function generarQrEvento(
 /**
  * `GET/POST /api/eventos`, `PUT/DELETE /api/eventos/:eventoId`,
  * `POST /api/eventos/:eventoId/activos/url-carga`,
+ * `POST /api/eventos/:eventoId/duplicar`,
  * `GET /api/eventos/:eventoId/qr` — CRUD de `agora-eventos` (tech-specs.md
  * §5.1, TODO.md Tarea 1). `administrador` y `productor` pasan el gate del
  * rol; `portero` sigue completamente bloqueado. Crear y eliminar eventos
@@ -1426,6 +1624,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (
   const eventoId = evento.pathParameters?.['eventoId'];
   const esCargaDeActivo = (evento.rawPath ?? '').endsWith('/activos/url-carga');
   const esQr = (evento.rawPath ?? '').endsWith('/qr');
+  const esDuplicar = (evento.rawPath ?? '').endsWith('/duplicar');
 
   try {
     if (esCargaDeActivo && evento.requestContext.http.method === 'POST') {
@@ -1444,6 +1643,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (
       permisos.rol !== 'administrador'
     ) {
       return respuestaJson(403, { mensaje: 'No autorizado' });
+    }
+
+    if (esDuplicar && evento.requestContext.http.method === 'POST') {
+      return await duplicarEvento(eventoId, permisos);
     }
 
     switch (evento.requestContext.http.method) {

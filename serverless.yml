@@ -191,6 +191,9 @@ functions:
           path: /api/eventos/{eventoId}/activos/url-carga
           method: post
       - httpApi:
+          path: /api/eventos/{eventoId}/duplicar
+          method: post
+      - httpApi:
           path: /api/eventos/{eventoId}/qr
           method: get
 
@@ -699,6 +702,13 @@ resources:
                   Action:
                     - s3:PutObject
                     - s3:DeleteObject
+                  Resource: !Sub '${BucketActivos.Arn}/eventos/*'
+                - Effect: Allow
+                  # Roadmap #28 (duplicar evento): CopyObject necesita leer el
+                  # objeto de origen. Mismo prefijo que el resto de la política,
+                  # nunca el bucket completo.
+                  Action:
+                    - s3:GetObject
                   Resource: !Sub '${BucketActivos.Arn}/eventos/*'
                 - Effect: Allow
                   Action:

@@ -761,6 +761,319 @@ describe('handler de /api/eventos', () => {
     });
   });
 
+  describe('POST /api/eventos/:eventoId/duplicar (roadmap #28)', () => {
+    const original = {
+      eventoId: 'orig',
+      slug: 'show-magico-2026-09-30',
+      nombre: 'Show mágico',
+      descripcion: 'Magia para toda la familia',
+      fechaHora: '2026-10-01T00:00:00.000Z',
+      duracionMinutos: 120,
+      administradoPorLeTiende: true,
+      sillasTotales: 100,
+      sillasDisponibles: 12,
+      sillasReservadas: 3,
+      etapas: [
+        { etapaId: 'et-viejo', nombre: 'Preventa', precio: 45000, cierraEn: '2026-09-29T00:00:00.000Z', orden: 1 },
+      ],
+      maxBoletasPorCompra: 4,
+      mediosPago: ['efectivo', 'bold'],
+      plazoComprobanteMinutos: 15,
+      productores: ['productor@letiende.co'],
+      porteros: ['portero@letiende.co'],
+      estado: 'publicado',
+      googleCalendarEventId: 'gcal-orig',
+      imagenKey: 'eventos/orig/imagen-aaa.webp',
+      logotipoKey: 'eventos/orig/logotipo-bbb.png',
+      atributoDesconocido: 'no debe copiarse',
+      creadoEn: '2026-09-01T00:00:00.000Z',
+      actualizadoEn: '2026-09-02T00:00:00.000Z',
+    };
+
+    // Simula GetItem del original, slug-index con slugs ocupados, y cualquier escritura.
+    function simular(opciones: { item?: Record<string, unknown> | undefined; ocupados?: string[]; falloPut?: boolean } = {}) {
+      const item = 'item' in opciones ? opciones.item : original;
+      sendMock.mockImplementation(async (comando: { input: Record<string, unknown>; constructor: { name: string } }) => {
+        if (comando.constructor.name === 'GetCommand') {
+          return { Item: item };
+        }
+        if (comando.input['IndexName'] === 'slug-index') {
+          const valores = comando.input['ExpressionAttributeValues'] as Record<string, string>;
+          const ocupados = opciones.ocupados ?? ['show-magico-2026-09-30'];
+          return { Items: ocupados.includes(valores[':slug']) ? [{ eventoId: 'otro' }] : [] };
+        }
+        if (comando.input['Item'] !== undefined && opciones.falloPut) {
+          throw new Error('DynamoDB no disponible');
+        }
+        return {};
+      });
+    }
+
+    function itemEscrito(): Record<string, unknown> {
+      const put = sendMock.mock.calls
+        .map(([comando]) => comando as { input: Record<string, unknown> })
+        .find((comando) => comando.input['Item'] !== undefined);
+      return put!.input['Item'] as Record<string, unknown>;
+    }
+
+    const duplicar = () => invocar('POST', { rawPath: '/api/eventos/orig/duplicar', eventoId: 'orig' });
+
+    it('un productor recibe 403 sin tocar DynamoDB', async () => {
+      exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosProductor });
+
+      const respuesta = await duplicar();
+
+      expect(respuesta.statusCode).toBe(403);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 404 cuando el evento original no existe, sin escribir', async () => {
+      simular({ item: undefined });
+
+      const respuesta = await duplicar();
+
+      expect(respuesta.statusCode).toBe(404);
+      expect(clienteS3SendMock).not.toHaveBeenCalled();
+    });
+
+    it('crea una copia en borrador con el mismo nombre, aforo completo y datos del original', async () => {
+      simular();
+
+      const respuesta = await duplicar();
+
+      expect(respuesta.statusCode).toBe(201);
+      const copia = JSON.parse(respuesta.body!);
+      expect(copia.eventoId).not.toBe('orig');
+      expect(copia).toMatchObject({
+        nombre: 'Show mágico',
+        descripcion: 'Magia para toda la familia',
+        fechaHora: '2026-10-01T00:00:00.000Z',
+        duracionMinutos: 120,
+        estado: 'borrador',
+        sillasTotales: 100,
+        sillasDisponibles: 100,
+        sillasReservadas: 0,
+        maxBoletasPorCompra: 4,
+        mediosPago: ['efectivo', 'bold'],
+        plazoComprobanteMinutos: 15,
+        productores: ['productor@letiende.co'],
+        porteros: ['portero@letiende.co'],
+        duplicadoDe: 'orig',
+        creadoPor: 'admin@letiende.co',
+      });
+      expect(itemEscrito()['eventoId']).toBe(copia.eventoId);
+    });
+
+    it('no arrastra el espejo de Calendar, el estado ni atributos desconocidos del original', async () => {
+      simular();
+
+      const copia = JSON.parse((await duplicar()).body!);
+
+      expect(copia.googleCalendarEventId).toBeUndefined();
+      expect(copia.atributoDesconocido).toBeUndefined();
+      expect(copia.creadoEn).not.toBe('2026-09-01T00:00:00.000Z');
+    });
+
+    it('genera etapaId nuevos y conserva nombre, precio y cierre de cada etapa', async () => {
+      simular();
+
+      const copia = JSON.parse((await duplicar()).body!);
+
+      expect(copia.etapas).toHaveLength(1);
+      expect(copia.etapas[0].etapaId).not.toBe('et-viejo');
+      expect(copia.etapas[0]).toMatchObject({ nombre: 'Preventa', precio: 45000, orden: 1 });
+    });
+
+    it('no crea el espejo en Google Calendar al duplicar (la primera edición lo crea)', async () => {
+      credencialCalendarConfiguradaMock.mockReturnValue(true);
+      simular();
+
+      await duplicar();
+
+      expect(crearEventoCalendarMock).not.toHaveBeenCalled();
+      expect(actualizarEventoCalendarMock).not.toHaveBeenCalled();
+    });
+
+    it('asigna el siguiente contador libre del slug (la copia nace con la misma fecha)', async () => {
+      simular({ ocupados: ['show-magico-2026-09-30'] });
+      expect(JSON.parse((await duplicar()).body!).slug).toBe('show-magico-2026-09-30-ii');
+    });
+
+    it('duplicar una copia produce -iii, nunca -ii-ii', async () => {
+      simular({
+        item: { ...original, slug: 'show-magico-2026-09-30-ii' },
+        ocupados: ['show-magico-2026-09-30', 'show-magico-2026-09-30-ii'],
+      });
+
+      expect(JSON.parse((await duplicar()).body!).slug).toBe('show-magico-2026-09-30-iii');
+    });
+
+    it('copia la portada y el logotipo al prefijo del evento nuevo, con UUID propio', async () => {
+      simular();
+      clienteS3SendMock.mockResolvedValue({});
+
+      const copia = JSON.parse((await duplicar()).body!);
+
+      const copias = clienteS3SendMock.mock.calls.map(([c]) => c.input);
+      expect(copias).toHaveLength(2);
+      expect(copias[0]).toMatchObject({ CopySource: expect.stringMatching(/\/eventos\/orig\/imagen-aaa\.webp$/) });
+      expect(copia.imagenKey).toMatch(new RegExp(`^eventos/${copia.eventoId}/imagen-[0-9a-f-]+\\.webp$`));
+      expect(copia.logotipoKey).toMatch(new RegExp(`^eventos/${copia.eventoId}/logotipo-[0-9a-f-]+\\.png$`));
+      expect(copia.imagenKey).not.toContain('orig/');
+    });
+
+    it('ignora una key de imagen que no pertenece al evento original (no la copia)', async () => {
+      simular({ item: { ...original, imagenKey: 'eventos/otro-evento/imagen-x.webp', logotipoKey: undefined } });
+
+      const copia = JSON.parse((await duplicar()).body!);
+
+      expect(clienteS3SendMock).not.toHaveBeenCalled();
+      expect(copia.imagenKey).toBeUndefined();
+    });
+
+    it('si falla la escritura del evento, borra las imágenes ya copiadas y responde 500', async () => {
+      simular({ falloPut: true });
+      clienteS3SendMock.mockResolvedValue({});
+
+      const respuesta = await duplicar();
+
+      expect(respuesta.statusCode).toBe(500);
+      const borrados = clienteS3SendMock.mock.calls.map(([c]) => c).filter((c) => c.input.Delete);
+      expect(borrados).toHaveLength(1);
+      expect(borrados[0].input.Delete.Objects).toHaveLength(2);
+    });
+
+    it('un evento anterior al campo duración se duplica con 180 minutos', async () => {
+      const { duracionMinutos: _omitida, ...sinDuracion } = original;
+      simular({ item: sinDuracion });
+
+      expect(JSON.parse((await duplicar()).body!).duracionMinutos).toBe(180);
+    });
+
+    it('conserva vinculoExterno y administradoPorLeTiende: false de un evento con boletería externa', async () => {
+      simular({
+        item: {
+          ...original,
+          administradoPorLeTiende: false,
+          sillasTotales: 0,
+          etapas: [],
+          vinculoExterno: { tipo: 'whatsapp', valor: '573001234567' },
+        },
+      });
+
+      const copia = JSON.parse((await duplicar()).body!);
+
+      expect(copia.administradoPorLeTiende).toBe(false);
+      expect(copia.vinculoExterno).toEqual({ tipo: 'whatsapp', valor: '573001234567' });
+    });
+  });
+
+  describe('PUT /api/eventos/:eventoId — slug editable en borrador (roadmap #28)', () => {
+    type Comando = { input: Record<string, unknown>; constructor: { name: string } };
+
+    function simular(opciones: { estado: string; slugActual?: string; ocupados?: { slug: string; eventoId: string }[] }) {
+      sendMock.mockImplementation(async (comando: Comando) => {
+        if (comando.constructor.name === 'GetCommand') {
+          return { Item: { eventoId: 'e1', slug: opciones.slugActual ?? 'show-2026-09-30', estado: opciones.estado } };
+        }
+        if (comando.input['IndexName'] === 'slug-index') {
+          const valores = comando.input['ExpressionAttributeValues'] as Record<string, string>;
+          return { Items: (opciones.ocupados ?? []).filter((o) => o.slug === valores[':slug']) };
+        }
+        return { Attributes: { eventoId: 'e1', slug: 'resuelto' } };
+      });
+    }
+
+    const actualizacion = () =>
+      sendMock.mock.calls.map(([c]) => c as Comando).find((c) => c.input['UpdateExpression'] !== undefined);
+
+    it('cambia el slug de un evento en borrador, con guarda de estado en la condición', async () => {
+      simular({ estado: 'borrador' });
+
+      const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'show-2026-10-01' } });
+
+      expect(respuesta.statusCode).toBe(200);
+      const update = actualizacion()!;
+      expect(update.input['ExpressionAttributeValues']).toMatchObject({
+        ':slug': 'show-2026-10-01',
+        ':estadoBorradorSlug': 'borrador',
+      });
+      expect(update.input['ConditionExpression']).toContain('#estado = :estadoBorradorSlug');
+    });
+
+    it('rechaza cambiar el slug de un evento ya publicado con 409, sin escribir', async () => {
+      simular({ estado: 'publicado' });
+
+      const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'otro-slug' } });
+
+      expect(respuesta.statusCode).toBe(409);
+      expect(actualizacion()).toBeUndefined();
+    });
+
+    it('un slug igual al actual no es un cambio: no exige borrador ni agrega guarda', async () => {
+      simular({ estado: 'publicado', slugActual: 'show-2026-09-30' });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { slug: 'show-2026-09-30', nombre: 'Nuevo nombre' },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+      const update = actualizacion()!;
+      expect(String(update.input['UpdateExpression'])).not.toContain('#slug');
+      expect(update.input['ConditionExpression']).toBe('attribute_exists(eventoId)');
+    });
+
+    it('si el slug pedido lo usa otro evento, asigna el siguiente contador libre', async () => {
+      simular({ estado: 'borrador', ocupados: [{ slug: 'show-2026-10-01', eventoId: 'otro' }] });
+
+      await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'show-2026-10-01' } });
+
+      expect(actualizacion()!.input['ExpressionAttributeValues']).toMatchObject({ ':slug': 'show-2026-10-01-ii' });
+    });
+
+    it('el propio evento no cuenta como ocupante de su slug', async () => {
+      simular({ estado: 'borrador', slugActual: 'show-2026-09-30-ii', ocupados: [{ slug: 'show-2026-10-01', eventoId: 'e1' }] });
+
+      await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'show-2026-10-01' } });
+
+      expect(actualizacion()!.input['ExpressionAttributeValues']).toMatchObject({ ':slug': 'show-2026-10-01' });
+    });
+
+    it('rechaza un slug con formato inválido con 400', async () => {
+      const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'Slug Inválido!' } });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('un productor no puede enviar slug: 403, sin tocar DynamoDB', async () => {
+      exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosProductor });
+
+      const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'otro' } });
+
+      expect(respuesta.statusCode).toBe(403);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('si el evento se publicó entre la lectura y la escritura, responde 409 con el mensaje del slug', async () => {
+      sendMock.mockImplementation(async (comando: Comando) => {
+        if (comando.constructor.name === 'GetCommand') {
+          return { Item: { eventoId: 'e1', slug: 'show-2026-09-30', estado: 'borrador' } };
+        }
+        if (comando.input['IndexName'] === 'slug-index') {
+          return { Items: [] };
+        }
+        throw new ConditionalCheckFailedException();
+      });
+
+      const respuesta = await invocar('PUT', { eventoId: 'e1', cuerpo: { slug: 'show-2026-10-01' } });
+
+      expect(respuesta.statusCode).toBe(409);
+      expect(JSON.parse(respuesta.body!).mensaje).toContain('borrador');
+    });
+  });
+
   describe('PUT /api/eventos/:eventoId', () => {
     describe('duracionMinutos (roadmap #26)', () => {
       it('el administrador actualiza la duración con SET parametrizado', async () => {
