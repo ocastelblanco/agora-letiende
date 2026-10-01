@@ -1,0 +1,65 @@
+name: Pruebas E2E (Playwright)
+
+# Roadmap #30, ADR-015. Workflow aparte de deploy.yml a propósito: aquél despliega
+# a staging/producción con sus propias reglas de concurrencia, y las pruebas E2E
+# no deben alargar ni bloquear ese despliegue.
+#
+# Hoy solo corre la suite `simulado` (API y Bold simulados, hermética: no usa
+# secretos ni toca AWS). La suite `staging` contra el checkout sandbox real de
+# Bold llega en un PR posterior, como `workflow_dispatch` manual.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  simulado:
+    name: Suite simulada (escritorio, Android, iOS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias (reproducible, package-lock.json)
+        run: npm ci
+
+      - name: Instalar los navegadores de Playwright (Chromium y WebKit)
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Pruebas E2E simuladas
+        run: npm run e2e
+        env:
+          CI: 'true'
+
+      - name: Subir reporte HTML de Playwright
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-playwright
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Subir trazas, videos y capturas de las pruebas que fallaron
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-playwright
+          path: test-results/
+          retention-days: 14
