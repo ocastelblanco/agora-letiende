@@ -702,6 +702,62 @@ describe('GET /api/compras/:compraId/estado', () => {
     expect(cuerpo.estado).toBe('esperando_pago_bold');
   });
 
+  it('devuelve la configuración de Bold mientras la compra espera el pago y la reserva sigue vigente (roadmap #32)', async () => {
+    sendMock.mockResolvedValueOnce({
+      Item: {
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold',
+        cantidad: 2,
+        montoTotal: 90000,
+        expiraEn: Math.floor(AHORA.getTime() / 1000) + 600,
+        cliente: { nombre: 'Ana', telefono: '300', correo: 'ana@correo.com' },
+      },
+    });
+
+    const respuesta = await invocar('GET', { rawPath: '/api/compras/compra-1/estado', compraId: 'compra-1' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.bold).toEqual({
+      llaveIdentidad: expect.any(String),
+      firma: expect.any(String),
+      moneda: 'COP',
+    });
+    expect(cuerpo.bold.firma).not.toBe('');
+    expect(cuerpo.cliente).toBeUndefined();
+  });
+
+  it('no devuelve la configuración de Bold si la reserva ya venció', async () => {
+    sendMock.mockResolvedValueOnce({
+      Item: {
+        compraId: 'compra-1',
+        estado: 'esperando_pago_bold',
+        cantidad: 1,
+        montoTotal: 45000,
+        expiraEn: Math.floor(AHORA.getTime() / 1000) - 60,
+      },
+    });
+
+    const respuesta = await invocar('GET', { rawPath: '/api/compras/compra-1/estado', compraId: 'compra-1' });
+
+    expect(JSON.parse(respuesta.body ?? '{}').bold).toBeUndefined();
+  });
+
+  it('no devuelve la configuración de Bold para una compra con otro estado', async () => {
+    sendMock.mockResolvedValueOnce({
+      Item: {
+        compraId: 'compra-1',
+        estado: 'esperando_comprobante',
+        cantidad: 1,
+        montoTotal: 45000,
+        expiraEn: Math.floor(AHORA.getTime() / 1000) + 600,
+      },
+    });
+
+    const respuesta = await invocar('GET', { rawPath: '/api/compras/compra-1/estado', compraId: 'compra-1' });
+
+    expect(JSON.parse(respuesta.body ?? '{}').bold).toBeUndefined();
+  });
+
   it('responde 404 si la compra no existe', async () => {
     sendMock.mockResolvedValueOnce({});
 

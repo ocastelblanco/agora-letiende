@@ -40,6 +40,12 @@
         } @else if (compra.estado === 'esperando_pago_bold') {
           <div class="rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
             <h2 class="mb-2 text-lg font-semibold text-primary">Confirma tu pago</h2>
+            @if (pagoRechazado()) {
+              <p class="mb-4 rounded-xl bg-danger/10 p-3 text-sm text-danger" role="alert">
+                Tu pago fue rechazado y no se te cobró. Tus boletas siguen reservadas: puedes
+                intentarlo de nuevo con otro medio de pago antes de que venza la reserva.
+              </p>
+            }
             <p class="mb-4 text-sm text-primary">
               A continuación se abre el checkout seguro de Bold. Cuando termines, vuelve a esta
               página — te enviaremos las boletas a tu correo apenas se confirme el pago.

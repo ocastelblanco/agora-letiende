@@ -99,15 +99,9 @@ test.describe('Compra con Bold contra staging', () => {
     expect(await leerBoletas(evento.eventoId)).toHaveLength(boletasAntes);
   });
 
-  // BUG CONOCIDO, encontrado por esta suite (01/10/2026): al volver de un pago rechazado, Bold
-  // redirige a la página con `?bold-order-id=...`; `recuperarEstadoTrasBold()` recupera la compra
-  // por `GET /api/compras/:id/estado`, que NO devuelve la configuración de Bold (`bold`), así que
-  // `iniciarCheckoutBold()` no crea el checkout y la pantalla queda en "Confirma tu pago" SIN
-  // ningún botón: el cliente no puede pagar de nuevo, verificar ni reintentar. `test.fail()` hace
-  // que la suite siga en verde mientras el bug exista y avise cuando alguien lo corrija
-  // ("se esperaba que fallara pero pasó"): en ese momento hay que quitar esta marca.
+  // Regresión del bug que encontró esta suite (01/10/2026, roadmap #32): `GET /api/compras/:id/estado`
+  // no devolvía la configuración de Bold y la pantalla quedaba sin ningún botón tras un rechazo.
   test('tras un rechazo, el cliente tiene una forma de seguir (pagar de nuevo, verificar o reintentar)', async ({ page }) => {
-    test.fail(true, 'Bug conocido: tras volver de un pago rechazado la pantalla queda sin ningún botón (docs/MEMORY.md §7)');
     const compra = await pagarYSerRechazado(page);
 
     const caminos = compra.botonPagarConBold.or(compra.botonVerificar).or(compra.botonReabrir).or(compra.botonIntentarDeNuevo);
