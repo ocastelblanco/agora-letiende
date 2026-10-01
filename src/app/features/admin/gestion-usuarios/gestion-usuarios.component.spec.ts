@@ -138,6 +138,23 @@ describe('GestionUsuariosComponent', () => {
     expect(componente['esPropiaFila'](otroUsuario)).toBe(false);
   });
 
+  it('guardar() con un doble toque antes de repintar crea el usuario una sola vez (guarda síncrona)', async () => {
+    let resolverCreacion!: (valor: unknown) => void;
+    const crearUsuarioMock = vi.fn().mockReturnValue(new Promise((resolver) => (resolverCreacion = resolver)));
+    const { fixture } = configurarPrueba({ crearUsuarioMock });
+    const componente = fixture.componentInstance;
+    componente['agregar']();
+    componente['formulario'].setValue({ email: 'nuevo@letiende.co', nombre: 'Nuevo', rol: 'portero' });
+
+    const primera = componente['guardar']();
+    const segunda = componente['guardar']();
+    resolverCreacion({ exito: true });
+    await Promise.all([primera, segunda]);
+
+    expect(crearUsuarioMock).toHaveBeenCalledTimes(1);
+    expect(componente['guardando']()).toBe(false);
+  });
+
   it('guardar() crea un usuario nuevo cuando no se está editando', async () => {
     const crearUsuarioMock = vi.fn().mockResolvedValue({ exito: true });
     const { fixture, snackBarOpenMock } = configurarPrueba({ crearUsuarioMock });

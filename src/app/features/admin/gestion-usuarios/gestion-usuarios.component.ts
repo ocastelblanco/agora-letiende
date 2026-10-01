@@ -121,6 +121,13 @@ export class GestionUsuariosComponent implements OnInit {
   }
 
   protected async guardar(): Promise<void> {
+    // Guarda síncrona, ANTES de `guardando.set(true)` (CLAUDE.md §7): el `[disabled]`
+    // del botón no llega al DOM hasta el siguiente ciclo de detección de
+    // cambios, y un doble toque real puede disparar este método dos veces
+    // antes — el segundo intento de crear el mismo usuario falla con un error que oculta el éxito del primero.
+    if (this.guardando()) {
+      return;
+    }
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;

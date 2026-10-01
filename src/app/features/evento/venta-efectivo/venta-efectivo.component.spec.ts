@@ -153,6 +153,25 @@ describe('VentaEfectivoComponent', () => {
     expect(crearVentaMock).not.toHaveBeenCalled();
   });
 
+  it('un doble toque antes de repintar registra una sola venta (guarda síncrona)', async () => {
+    let resolverVenta!: (valor: unknown) => void;
+    const crearVentaMock = vi.fn().mockReturnValue(new Promise((resolver) => (resolverVenta = resolver)));
+    const { fixture } = configurarPrueba({ crearVentaMock });
+    await activarConSlug(fixture, 'concierto-jazz');
+    llenarFormularioValido(fixture.componentInstance);
+
+    const primera = fixture.componentInstance['registrarVenta']();
+    const segunda = fixture.componentInstance['registrarVenta']();
+    resolverVenta({
+      exito: true,
+      venta: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+    });
+    await Promise.all([primera, segunda]);
+
+    expect(crearVentaMock).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['enviando']()).toBe(false);
+  });
+
   it('envía slug, cantidad, cliente y autorizacionDatos — nunca un precio o total', async () => {
     const crearVentaMock = vi.fn().mockResolvedValue({
       exito: true,

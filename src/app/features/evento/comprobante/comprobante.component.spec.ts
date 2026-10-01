@@ -67,6 +67,22 @@ describe('ComprobanteComponent', () => {
     expect(fixture.componentInstance['archivoSeleccionado']()?.type).toBe('application/pdf');
   });
 
+  it('un doble toque antes de repintar sube el comprobante una sola vez (guarda síncrona)', async () => {
+    let resolverSubida!: (valor: unknown) => void;
+    const subirComprobanteMock = vi.fn().mockReturnValue(new Promise((resolver) => (resolverSubida = resolver)));
+    const { fixture } = configurarPrueba({ subirComprobanteMock });
+    activarConToken(fixture, 'token-abc');
+    simularSeleccionDeArchivo(fixture.componentInstance, archivoDePrueba());
+
+    const primera = fixture.componentInstance['subir']();
+    const segunda = fixture.componentInstance['subir']();
+    resolverSubida({ exito: true });
+    await Promise.all([primera, segunda]);
+
+    expect(subirComprobanteMock).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['enviando']()).toBe(false);
+  });
+
   it('sube el comprobante con el token de la ruta y muestra la confirmación', async () => {
     const subirComprobanteMock = vi.fn().mockResolvedValue({ exito: true });
     const { fixture } = configurarPrueba({ subirComprobanteMock });
