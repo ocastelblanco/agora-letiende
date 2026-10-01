@@ -35,7 +35,7 @@ jobs:
     container:
       # Imagen oficial de Playwright con navegadores y librerías del sistema ya instalados.
       # DEBE coincidir con la versión de `@playwright/test` (la guarda de abajo falla con un
-      # mensaje claro si no; el contexto `env` no existe en `container`, por eso va literal).
+      # mensaje claro si no; el contexto `env` no existe en `container`, por eso va literal en cada job).
       # Reemplaza `playwright install --with-deps`, que bajaba decenas de paquetes con apt de
       # un espejo de Ubuntu que un día fue lentísimo y agotó los 20 minutos del job sin correr
       # una sola prueba (01/10/2026, PR #89).
@@ -55,16 +55,17 @@ jobs:
         run: npm ci
         timeout-minutes: 5
 
-      - name: Verificar que la imagen de Playwright coincide con @playwright/test
-        env:
-          IMAGEN_PLAYWRIGHT: ${{ job.container.image }}
+      - name: Verificar que la imagen trae los navegadores de esta versión de Playwright
         run: |
-          instalada=$(node -p "require('./node_modules/@playwright/test/package.json').version")
-          esperada="${IMAGEN_PLAYWRIGHT##*:v}"; esperada="${esperada%%-*}"
-          if [ "$instalada" != "$esperada" ]; then
-            echo "::error::@playwright/test es $instalada pero la imagen es $esperada: actualiza la imagen en los dos jobs de e2e.yml"
-            exit 1
-          fi
+          node -e "
+            const fs = require('fs');
+            const pw = require('@playwright/test');
+            const faltan = [pw.chromium, pw.webkit].filter((n) => !fs.existsSync(n.executablePath())).map((n) => n.name());
+            if (faltan.length) {
+              console.error('::error::La imagen no trae ' + faltan.join(', ') + ' para @playwright/test ' + require('@playwright/test/package.json').version + ': actualiza la imagen en los dos jobs de e2e.yml');
+              process.exit(1);
+            }
+          "
 
       - name: Pruebas E2E simuladas
         run: npm run e2e
@@ -96,7 +97,7 @@ jobs:
     container:
       # Imagen oficial de Playwright con navegadores y librerías del sistema ya instalados.
       # DEBE coincidir con la versión de `@playwright/test` (la guarda de abajo falla con un
-      # mensaje claro si no; el contexto `env` no existe en `container`, por eso va literal).
+      # mensaje claro si no; el contexto `env` no existe en `container`, por eso va literal en cada job).
       # Reemplaza `playwright install --with-deps`, que bajaba decenas de paquetes con apt de
       # un espejo de Ubuntu que un día fue lentísimo y agotó los 20 minutos del job sin correr
       # una sola prueba (01/10/2026, PR #89).
@@ -122,16 +123,17 @@ jobs:
         run: npm ci
         timeout-minutes: 5
 
-      - name: Verificar que la imagen de Playwright coincide con @playwright/test
-        env:
-          IMAGEN_PLAYWRIGHT: ${{ job.container.image }}
+      - name: Verificar que la imagen trae los navegadores de esta versión de Playwright
         run: |
-          instalada=$(node -p "require('./node_modules/@playwright/test/package.json').version")
-          esperada="${IMAGEN_PLAYWRIGHT##*:v}"; esperada="${esperada%%-*}"
-          if [ "$instalada" != "$esperada" ]; then
-            echo "::error::@playwright/test es $instalada pero la imagen es $esperada: actualiza la imagen en los dos jobs de e2e.yml"
-            exit 1
-          fi
+          node -e "
+            const fs = require('fs');
+            const pw = require('@playwright/test');
+            const faltan = [pw.chromium, pw.webkit].filter((n) => !fs.existsSync(n.executablePath())).map((n) => n.name());
+            if (faltan.length) {
+              console.error('::error::La imagen no trae ' + faltan.join(', ') + ' para @playwright/test ' + require('@playwright/test/package.json').version + ': actualiza la imagen en los dos jobs de e2e.yml');
+              process.exit(1);
+            }
+          "
 
       - name: Pruebas E2E reales contra staging
         run: npm run e2e:staging
