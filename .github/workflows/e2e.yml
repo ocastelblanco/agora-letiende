@@ -31,7 +31,16 @@ jobs:
     name: Suite simulada (escritorio, Android, iOS)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    container:
+      # Imagen oficial de Playwright con navegadores y librerías del sistema ya instalados.
+      # DEBE coincidir con la versión de `@playwright/test` (la guarda de abajo falla con un
+      # mensaje claro si no; el contexto `env` no existe en `container`, por eso va literal).
+      # Reemplaza `playwright install --with-deps`, que bajaba decenas de paquetes con apt de
+      # un espejo de Ubuntu que un día fue lentísimo y agotó los 20 minutos del job sin correr
+      # una sola prueba (01/10/2026, PR #89).
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
@@ -44,12 +53,22 @@ jobs:
 
       - name: Instalar dependencias (reproducible, package-lock.json)
         run: npm ci
+        timeout-minutes: 5
 
-      - name: Instalar los navegadores de Playwright (Chromium y WebKit)
-        run: npx playwright install --with-deps chromium webkit
+      - name: Verificar que la imagen de Playwright coincide con @playwright/test
+        env:
+          IMAGEN_PLAYWRIGHT: ${{ job.container.image }}
+        run: |
+          instalada=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          esperada="${IMAGEN_PLAYWRIGHT##*:v}"; esperada="${esperada%%-*}"
+          if [ "$instalada" != "$esperada" ]; then
+            echo "::error::@playwright/test es $instalada pero la imagen es $esperada: actualiza la imagen en los dos jobs de e2e.yml"
+            exit 1
+          fi
 
       - name: Pruebas E2E simuladas
         run: npm run e2e
+        timeout-minutes: 10
         env:
           CI: 'true'
 
@@ -73,7 +92,16 @@ jobs:
     name: Suite real contra staging (checkout sandbox de Bold)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    container:
+      # Imagen oficial de Playwright con navegadores y librerías del sistema ya instalados.
+      # DEBE coincidir con la versión de `@playwright/test` (la guarda de abajo falla con un
+      # mensaje claro si no; el contexto `env` no existe en `container`, por eso va literal).
+      # Reemplaza `playwright install --with-deps`, que bajaba decenas de paquetes con apt de
+      # un espejo de Ubuntu que un día fue lentísimo y agotó los 20 minutos del job sin correr
+      # una sola prueba (01/10/2026, PR #89).
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
     # Los secretos del usuario IAM de CI viven en el environment `staging` (no son globales).
     environment: staging
     concurrency:
@@ -92,12 +120,22 @@ jobs:
 
       - name: Instalar dependencias (reproducible, package-lock.json)
         run: npm ci
+        timeout-minutes: 5
 
-      - name: Instalar Chromium de Playwright
-        run: npx playwright install --with-deps chromium
+      - name: Verificar que la imagen de Playwright coincide con @playwright/test
+        env:
+          IMAGEN_PLAYWRIGHT: ${{ job.container.image }}
+        run: |
+          instalada=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          esperada="${IMAGEN_PLAYWRIGHT##*:v}"; esperada="${esperada%%-*}"
+          if [ "$instalada" != "$esperada" ]; then
+            echo "::error::@playwright/test es $instalada pero la imagen es $esperada: actualiza la imagen en los dos jobs de e2e.yml"
+            exit 1
+          fi
 
       - name: Pruebas E2E reales contra staging
         run: npm run e2e:staging
+        timeout-minutes: 10
         env:
           CI: 'true'
           # Usuario IAM propio de las pruebas: solo las tablas agora-eventos/compras/boletas de
