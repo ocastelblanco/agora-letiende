@@ -224,6 +224,30 @@ describe('GestionUsuariosComponent', () => {
     expect(eliminarUsuarioMock).not.toHaveBeenCalled();
   });
 
+  it('eliminar() ignora un segundo clic: abre un solo diálogo y borra una sola vez', async () => {
+    const eliminarUsuarioMock = vi.fn().mockResolvedValue({ exito: true });
+    const { fixture, dialogOpenMock } = configurarPrueba({
+      eliminarUsuarioMock,
+      dialogAfterClosed: true,
+    });
+    const componente = fixture.componentInstance;
+
+    await Promise.all([componente['eliminar'](otroUsuario), componente['eliminar'](otroUsuario)]);
+
+    expect(dialogOpenMock).toHaveBeenCalledTimes(1);
+    expect(eliminarUsuarioMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('eliminar() vuelve a funcionar después de cancelar el diálogo', async () => {
+    const { fixture, dialogOpenMock } = configurarPrueba({ dialogAfterClosed: undefined });
+    const componente = fixture.componentInstance;
+
+    await componente['eliminar'](otroUsuario);
+    await componente['eliminar'](otroUsuario);
+
+    expect(dialogOpenMock).toHaveBeenCalledTimes(2);
+  });
+
   it('eliminar() llama a la API cuando el diálogo se confirma', async () => {
     const eliminarUsuarioMock = vi.fn().mockResolvedValue({ exito: true });
     const { fixture, snackBarOpenMock } = configurarPrueba({
