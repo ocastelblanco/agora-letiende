@@ -145,18 +145,17 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Pruebas Playwright del flujo de compra con Bold (roadmap #30)
+## Tarea 1 — Hotfix: guarda síncrona contra doble toque en acciones de un solo uso
 
-**Prioridad Media**, v2. Última de las cinco tareas pedidas por OCM el 30/09/2026 (`docs/plan-ajustes-eventos.md`): con la duración (#26), la lista de eventos (#27), el duplicado (#28) y la lista de paneles (#29) fusionados, la interfaz que prueba ya está estable.
+**Prioridad Alta**, derivada del hallazgo de las pruebas E2E (PR #83, 30/09/2026) — **propuesta del agente, pendiente de confirmar con OCM** (puede reordenarla o cambiarla por otra tarea). La prueba de doble toque de Playwright demostró que `comprar()` enviaba dos compras y reservaba sillas dos veces; ya se corrigió ahí. Una auditoría con `grep` encontró que otras acciones de un solo uso con consecuencia real tienen el mismo defecto (`[disabled]` solo se aplica al DOM en el siguiente ciclo de detección de cambios, `CLAUDE.md` §7) y no tienen el `if (this.enviando()) return;` síncrono antes de `set(true)`:
 
-**Alcance:** detalle completo en `docs/plan-ajustes-eventos.md` Tarea 5 y ADR-015 (esquema híbrido).
-- Suite `simulado` (`e2e/simulado/`): API y Bold simulados; corre en CI en cada PR; Chromium de escritorio, Pixel e iPhone (WebKit).
-- Suite `staging` (`e2e/staging/`): checkout sandbox real de Bold; a demanda con `workflow_dispatch`; evento temporal sembrado en `globalSetup` y limpiado en `globalTeardown`.
-- Reporte HTML, trazas y video como *artifacts* de CI; badge y sección en el README; comandos `npm run e2e` y `npm run e2e:staging` en `CLAUDE.md` §3.
-- **Pendientes de OCM antes de la suite real** (`docs/tareas-a-realizar.md`): credenciales IAM propias para CI, limitadas a las tablas `agora-*-staging`, y confirmar las tarjetas de prueba vigentes del sandbox de Bold.
-- Empezar por el plan de la tarea: es la primera vez que el repositorio incorpora un framework de pruebas E2E, conviene confirmar con OCM la estructura de carpetas y el flujo de CI antes de escribir código.
+- `features/evento/venta-efectivo/venta-efectivo.component.ts` (línea ~117): un doble toque podría **vender dos veces** — la más delicada.
+- `features/evento/comprobante/comprobante.component.ts` (~56): confirmar la carga del comprobante.
+- `features/admin/gestion-eventos/editar-evento.component.ts` (`guardando`, ~712) y `features/admin/gestion-usuarios/gestion-usuarios.component.ts` (`guardando`, ~132): guardar dos veces (menos grave: son ediciones idempotentes, pero la creación de un evento o usuario podría duplicarse).
 
-**Rama:** `feature/pruebas-playwright-bold`.
+**Alcance:** agregar la guarda a cada una, con una prueba unitaria por componente que llame el método dos veces seguidas sobre una promesa pendiente (patrón de `gestion-eventos.component.spec.ts` y `comprar.component.spec.ts`). Antes de tocar el backend, verificar si `ventas-efectivo.ts` ya deduplica por su lado (no se revisó).
+
+**Rama:** `hotfix/guardas-doble-toque`.
 
 ---
 
@@ -174,13 +173,15 @@ tarea de este repositorio.
 
 Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. Exportación XLSX (roadmap #21), fix de `etapaId` y Etapas de boletería con cierre automático (roadmap #23) **fusionados** (PR #25/#26/#28). `docs/plan-pre-produccion.md` (8 tareas técnicas) **completo y fusionado**. Tres hotfixes antes del paso a producción y segunda ronda de hotfixes **fusionados** (PR #41/#42). **Dominio personalizado `agora.letiende.co` fusionado y verificado en vivo (PR #43, ADR-013)** — roadmap #17 completo. **Boletería opcional (roadmap #24) fusionada (PR #46).** **Eventos con boletería externa (roadmap #25) fusionada (PR #47).** **Sincronización con Google Calendar (roadmap #22) fusionada y verificada también en producción por CLI (PR #48).** **Pago automático con Bold (roadmap #19) completo — PR #50 (backend), #51 (frontend) y #52 (fix de aforo) fusionados, validado de punta a punta en staging real por el usuario.** **Hotfix de slug único por función fusionado (PR #77, 30/09/2026)**, con los slugs repetidos de producción ya corregidos. WhatsApp (#20) sigue bloqueado por prerrequisito externo (ver "Pendientes que no son de código" abajo).
 
-**Ajustes de `docs/plan-ajustes-eventos.md` (decididos por OCM el 30/09/2026):** cuatro de las cinco tareas están fusionadas (duración #26, lista de eventos #27, duplicar #28, lista de paneles #29); queda la de Playwright (#30), activa como Tarea 1.
+**Ajustes de `docs/plan-ajustes-eventos.md` (decididos por OCM el 30/09/2026):** cumplidos. Duración (#26), lista de eventos (#27), duplicar (#28), lista de paneles (#29) y la suite simulada de Playwright (#30, PR #83) están fusionados. Queda la suite de Playwright contra el sandbox real de Bold (**PR B de #30**), que no ocupa un slot porque depende de OCM — ver "Pendientes que no son de código".
 
 ---
 
 ## Pendientes que no son de código
 
 No ocupan slots del motor JIT porque no dependen del desarrollo. **El paso a paso completo está en `docs/tareas-a-realizar.md`** (documento de trabajo personal de OCM, fuera de control de versiones porque puede contener secretos).
+
+**Playwright PR B — suite contra el sandbox real de Bold (roadmap #30, ADR-015).** La suite simulada ya corre en cada PR; la real (`e2e/staging/`, a demanda con `workflow_dispatch`) está bloqueada por dos cosas que solo OCM puede dar: (1) **credenciales IAM propias para CI**, limitadas a las tablas `agora-*-staging` (sin reutilizar las de despliegue, `CLAUDE.md` §5 A05), y (2) **las tarjetas de prueba vigentes del sandbox de Bold**. Cuando estén, se retoma como tarea normal (plan en `docs/plan-ajustes-eventos.md` Tarea 5).
 
 Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 

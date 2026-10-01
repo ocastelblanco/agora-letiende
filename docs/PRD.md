@@ -285,7 +285,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Lista de eventos con estado, orden y filtros | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #27, PR #80) |
 | Duplicar evento (varias funciones) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #28, PR #81) |
 | Lista de paneles con orden y filtro por periodo | Media | ✅ Fusionado y validado en vivo en staging (roadmap #29, PR #82) |
-| Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Planeado (roadmap #30) |
+| Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Suite simulada fusionada y corriendo en cada PR (roadmap #30, PR #83) · suite contra el sandbox real de Bold pendiente de credenciales IAM de CI y tarjetas de prueba |
 
 ### v3 — Ideas no comprometidas
 
@@ -348,7 +348,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 - Navegación por teclado y etiquetas semánticas en los formularios administrativos.
 
 ### Calidad
-- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código; otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecuta a demanda (`docs/plan-ajustes-eventos.md` Tarea 5).
+- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código, en Chromium de escritorio, Android y iOS (WebKit); otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecutará a demanda (todavía pendiente, `docs/plan-ajustes-eventos.md` Tarea 5).
 
 ### SEO
 - Cada evento debe tener su propia página indexable, con metadatos y vista previa enriquecida al compartirse por WhatsApp o redes sociales. El enlace compartido **es** el canal de difusión principal: si la vista previa se ve mal, la difusión se ve mal.

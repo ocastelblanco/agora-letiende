@@ -100,7 +100,7 @@ Por qué este orden: la duración es un campo que el duplicado ya debe copiar (1
 
 ## Tarea 5 — Pruebas Playwright del flujo de compra con Bold
 
-Esquema **híbrido**, decidido con OCM (ADR-015):
+Esquema **híbrido**, decidido con OCM (ADR-015). **Entregada en dos PR** (decisión de OCM, 30/09/2026): el PR A (#83) con la suite simulada, sin depender de nadie; el PR B con la suite real, cuando OCM aporte las credenciales IAM de CI y las tarjetas de prueba. Detalles de la suite simulada ya implementada: se prueba contra `ng serve` (la ruta de compra se renderiza solo en el cliente), los archivos terminan en `.e2e.ts`, y el correo del cliente es `ana.prueba@example.com` (dominio reservado, RFC 2606) porque nada sale de la prueba.
 
 - **Suite simulada** (`e2e/simulado/`):
   - Corre en CI en cada PR.
@@ -114,7 +114,7 @@ Esquema **híbrido**, decidido con OCM (ADR-015):
   - Verifica las boletas emitidas y el aforo.
   - El correo del cliente es `success@simulator.amazonses.com` (simulador de SES), para no escribirle nunca a una persona real.
 - **Evidencia para el portafolio:** reporte HTML, trazas y video guardados como *artifacts* de GitHub Actions, más un badge y una sección en el README.
-- **Comandos nuevos** (se agregan a `CLAUDE.md` §3 con esta tarea, no antes): `npm run e2e` y `npm run e2e:staging`.
+- **Comandos nuevos** (`CLAUDE.md` §3): `npm run e2e` (agregado en el PR A) y `npm run e2e:staging` (llegará con el PR B).
 - **Riesgo aceptado:** el HTML interno del iframe de Bold no está documentado, así que la suite real es frágil por naturaleza y por eso no bloquea PRs.
 - **Pendientes que no son de código** (en `docs/tareas-a-realizar.md`):
   - Credenciales IAM propias para CI, limitadas a las tablas `agora-*-staging` (sin reutilizar las de despliegue).

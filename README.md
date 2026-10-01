@@ -11,6 +11,7 @@
 [![Serverless](https://img.shields.io/badge/IaC-Serverless_Framework_4-FD5750?style=flat-square&logo=serverless&logoColor=white)](https://serverless.com)
 [![Firebase](https://img.shields.io/badge/Auth-Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com)
 [![SLIM](https://img.shields.io/badge/Best%20Practices%20from-SLIM-blue?style=flat-square)](https://nasa-ammos.github.io/slim/)
+[![E2E](https://img.shields.io/github/actions/workflow/status/ocastelblanco/agora-letiende/e2e.yml?branch=main&label=E2E%20(Playwright)&style=flat-square)](https://github.com/ocastelblanco/agora-letiende/actions/workflows/e2e.yml)
 [![Español](https://img.shields.io/badge/leer_en-Español-FFE7B3?style=flat-square)](./README.es.md)
 
 </div>
@@ -104,6 +105,18 @@ npm run serve:ssr
 npm run test           # frontend unit tests
 npm run test:api       # backend unit tests (Lambdas in server/)
 ```
+
+### End-to-end tests (Playwright)
+
+The Bold purchase flow — the one that moves real money — has automated browser tests that run on every pull request, in desktop Chromium, Android (Pixel 7) and iOS (iPhone 14, WebKit):
+
+```bash
+npx playwright install chromium webkit   # one time: download the browsers
+npm run e2e                              # starts `ng serve` by itself and runs the suite
+npx playwright show-report               # open the HTML report
+```
+
+The suite in `e2e/simulado/` replaces the Ágora API and the Bold library with fakes, so it needs no network, secrets or AWS access. It covers approved, rejected and expired payments, closing the checkout without paying (verify / reopen without creating a second reservation), a double tap on "Buy", the guarantee that the client never sends a price or total, validation errors, a sold-out race, and mobile layout. A real-sandbox suite against Bold's own checkout is planned (see [`docs/plan-ajustes-eventos.md`](docs/plan-ajustes-eventos.md)). These tests already caught a real bug: a double tap on "Buy" created two seat reservations.
 
 ## Security and Cost
 

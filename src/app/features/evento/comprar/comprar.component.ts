@@ -454,6 +454,14 @@ export class ComprarComponent {
   }
 
   protected async comprar(): Promise<void> {
+    // Guarda síncrona, ANTES de `enviando.set(true)` (CLAUDE.md §7): el
+    // `[disabled]` del botón no llega al DOM hasta el siguiente ciclo de
+    // detección de cambios, y un doble toque real (muy común en el celular)
+    // puede disparar el envío dos veces antes — dos reservas de sillas para la
+    // misma compra. Detectado por la prueba E2E de doble toque (roadmap #30).
+    if (this.enviando()) {
+      return;
+    }
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;

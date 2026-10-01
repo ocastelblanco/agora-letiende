@@ -11,6 +11,7 @@
 [![Serverless](https://img.shields.io/badge/IaC-Serverless_Framework_4-FD5750?style=flat-square&logo=serverless&logoColor=white)](https://serverless.com)
 [![Firebase](https://img.shields.io/badge/Auth-Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com)
 [![SLIM](https://img.shields.io/badge/Best%20Practices%20from-SLIM-blue?style=flat-square)](https://nasa-ammos.github.io/slim/)
+[![E2E](https://img.shields.io/github/actions/workflow/status/ocastelblanco/agora-letiende/e2e.yml?branch=main&label=E2E%20(Playwright)&style=flat-square)](https://github.com/ocastelblanco/agora-letiende/actions/workflows/e2e.yml)
 [![English](https://img.shields.io/badge/read_in-English-FFE7B3?style=flat-square)](./README.md)
 
 </div>
@@ -104,6 +105,18 @@ npm run serve:ssr
 npm run test           # pruebas unitarias del frontend
 npm run test:api       # pruebas unitarias del backend (Lambdas en server/)
 ```
+
+### Pruebas de punta a punta (Playwright)
+
+El flujo de compra con Bold —el que mueve dinero real— tiene pruebas automáticas en navegador que corren en cada pull request, en Chromium de escritorio, Android (Pixel 7) y iOS (iPhone 14, WebKit):
+
+```bash
+npx playwright install chromium webkit   # una vez: descarga los navegadores
+npm run e2e                              # levanta `ng serve` solo y corre la suite
+npx playwright show-report               # abre el reporte HTML
+```
+
+La suite de `e2e/simulado/` reemplaza la API de Ágora y la librería de Bold por simulaciones, así que no necesita red, secretos ni acceso a AWS. Cubre pago aprobado, rechazado y expirado, cierre del checkout sin pagar (verificar / reabrir sin crear una segunda reserva), doble toque en "Comprar", la garantía de que el cliente nunca envía precio ni total, errores de validación, una carrera por sillas agotadas y el diseño en celular. Está planeada una suite contra el sandbox real de Bold (ver [`docs/plan-ajustes-eventos.md`](docs/plan-ajustes-eventos.md)). Estas pruebas ya encontraron un bug real: un doble toque en "Comprar" creaba dos reservas de sillas.
 
 ## Seguridad y costos
 

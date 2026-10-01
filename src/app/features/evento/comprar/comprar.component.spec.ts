@@ -199,6 +199,25 @@ describe('ComprarComponent', () => {
     expect(crearCompraMock).not.toHaveBeenCalled();
   });
 
+  it('un doble toque antes de repintar envía una sola compra (guarda síncrona)', async () => {
+    let resolverCompra!: (valor: unknown) => void;
+    const crearCompraMock = vi.fn().mockReturnValue(new Promise((resolver) => (resolverCompra = resolver)));
+    const { fixture } = configurarPrueba({ crearCompraMock });
+    await activarConSlug(fixture, 'concierto-jazz');
+    llenarFormularioValido(fixture.componentInstance);
+
+    const primera = fixture.componentInstance['comprar']();
+    const segunda = fixture.componentInstance['comprar']();
+    resolverCompra({
+      exito: true,
+      compra: { compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 1, montoTotal: 45000, expiraEn: '2026-08-08T00:10:00.000Z' },
+    });
+    await Promise.all([primera, segunda]);
+
+    expect(crearCompraMock).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['enviando']()).toBe(false);
+  });
+
   it('envía slug, cantidad, cliente y autorizacionDatos — nunca un precio o total', async () => {
     const crearCompraMock = vi.fn().mockResolvedValue({
       exito: true,
