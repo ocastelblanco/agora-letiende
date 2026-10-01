@@ -56,6 +56,7 @@ custom:
     compras: agora-compras-${sls:stage}
     boletas: agora-boletas-${sls:stage}
     auditoria: agora-auditoria-${sls:stage}
+    idempotencia: agora-idempotencia-${sls:stage}
   nombresBuckets:
     comprobantes: agora-comprobantes-${sls:stage}
     activos: agora-activos-${sls:stage}
@@ -273,6 +274,7 @@ functions:
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_IDEMPOTENCIA: ${self:custom.nombresTablas.idempotencia}
       # v2 (roadmap #24) — necesarias desde que crearAdquisicionSinEtapas()
       # emite boletas directamente (evento sin etapas: sin comprobante ni
       # aprobación). Mismo gotcha ya sufrido con SES_REMITENTE/
@@ -429,6 +431,7 @@ functions:
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
       TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
+      TABLA_IDEMPOTENCIA: ${self:custom.nombresTablas.idempotencia}
       TABLA_USUARIOS: ${self:custom.nombresTablas.usuarios}
       TABLA_BOLETAS: ${self:custom.nombresTablas.boletas}
       SES_REMITENTE: ${env:SES_REMITENTE, ''}
@@ -850,6 +853,20 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         Policies:
+          # Roadmap #32 parte 1: reclamar/consultar/completar/liberar la
+          # clave de idempotencia (services/idempotencia.ts). Solo esta
+          # tabla, sin Query/Scan ni índices.
+          - PolicyName: agora-compras-idempotencia-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                  Resource: !GetAtt AgoraIdempotencia.Arn
           # Mínimo privilegio (CLAUDE.md §5, A05): compras.ts nunca usa
           # exigirRol (endpoint público), así que sin acceso a
           # agora-usuarios. Sobre agora-eventos: Query (resolver el slug por
@@ -1227,6 +1244,20 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         Policies:
+          # Roadmap #32 parte 1: reclamar/consultar/completar/liberar la
+          # clave de idempotencia (services/idempotencia.ts). Solo esta
+          # tabla, sin Query/Scan ni índices.
+          - PolicyName: agora-ventas-efectivo-idempotencia-dynamodb-${sls:stage}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                  Resource: !GetAtt AgoraIdempotencia.Arn
           # GetItem sobre agora-usuarios: exigirRol('portero') resuelve el
           # rol del solicitante — mismo patrón exacto que
           # aprobaciones.ts/boletas.ts, sin Query/Scan.
@@ -1594,6 +1625,24 @@ resources:
             KeyType: RANGE
         # Append-only (CLAUDE.md §5, A09): ningún código actualiza ni borra
         # ítems de esta tabla, nunca al corregir un error.
+
+    # Claves de idempotencia de POST /api/compras y POST /api/ventas-efectivo
+    # (roadmap #32 parte 1). PAY_PER_REQUEST (CLAUDE.md §5-bis); los ítems
+    # expiran solos por TTL a las 24 h, así que la tabla no crece.
+    AgoraIdempotencia:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.nombresTablas.idempotencia}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: idempotenciaId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: idempotenciaId
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: expiraEn
+          Enabled: true
 
     # --- Buckets S3 (tech-specs.md §5, §7.1; CLAUDE.md §5 A02) ---
     BucketComprobantes:

@@ -1,6 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { GeneradorClaveIdempotencia } from './clave-idempotencia';
 
 export interface DatosCliente {
   nombre: string;
@@ -67,6 +68,7 @@ export type ResultadoConsultarEstadoCompra =
 @Injectable({ providedIn: 'root' })
 export class ComprasService {
   private readonly http = inject(HttpClient);
+  private readonly claveCompra = new GeneradorClaveIdempotencia();
 
   private mensajeError(error: unknown, mensajePorDefecto: string): string {
     return error instanceof HttpErrorResponse && typeof error.error?.mensaje === 'string'
@@ -77,7 +79,12 @@ export class ComprasService {
   /** Llama `POST /api/compras`. */
   async crearCompra(datos: DatosNuevaCompra): Promise<ResultadoCrearCompra> {
     try {
-      const compra = await firstValueFrom(this.http.post<CompraCreada>('/api/compras', datos));
+      const compra = await firstValueFrom(
+        this.http.post<CompraCreada>('/api/compras', datos, {
+          headers: { 'Idempotency-Key': this.claveCompra.obtener(datos) },
+        }),
+      );
+      this.claveCompra.renovar();
       return { exito: true, compra };
     } catch (error) {
       return {

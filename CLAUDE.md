@@ -58,7 +58,7 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 - **Iniciar servidor de desarrollo local:** `npm run start` (o `ng serve`)
 - **Ejecutar pruebas unitarias (frontend):** `npm run test`
 - **Ejecutar pruebas unitarias (backend):** `npm run test:api`
-- **Ejecutar pruebas E2E (Playwright, suite simulada del flujo de compra con Bold):** `npm run e2e` — levanta `ng serve` solo; la primera vez hace falta `npx playwright install chromium webkit`. Corren en CI en cada PR (`.github/workflows/e2e.yml`). Ver `docs/plan-ajustes-eventos.md` Tarea 5 y ADR-015.
+- **Ejecutar pruebas E2E (Playwright, suite simulada del flujo de compra con Bold):** `npm run e2e` — levanta `ng serve` solo; la primera vez hace falta `npx playwright install chromium webkit`. Corren en CI en cada PR (`.github/workflows/e2e.yml`). En CI usan la imagen oficial de Playwright (sin `apt`); al subir la versión de `@playwright/test`, actualiza la etiqueta de la imagen en los dos jobs. Ver `docs/plan-ajustes-eventos.md` Tarea 5 y ADR-015.
 - **Ejecutar pruebas E2E reales contra staging (checkout sandbox de Bold, a demanda):** `npm run e2e:staging` — necesita credenciales de AWS con permisos sobre las tablas `agora-eventos/compras/boletas-staging` (siembra y borra un evento temporal). En CI: Actions → "Pruebas E2E (Playwright)" → *Run workflow*. Nunca bloquea un PR.
 - **Compilar producción (Build SSR):** `npm run build -- --configuration=production`
 - **Compilar TypeScript de las Lambdas:** `npm run build:api`

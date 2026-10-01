@@ -42,6 +42,25 @@ describe('VentasEfectivoService', () => {
       httpMock.expectNone('/api/ventas-efectivo');
     });
 
+    it('envía una Idempotency-Key y la reutiliza si el intento anterior falló', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+
+      const primera = servicio.crearVenta(datosValidos);
+      await Promise.resolve();
+      const peticion1 = httpMock.expectOne('/api/ventas-efectivo');
+      const clave = peticion1.request.headers.get('Idempotency-Key');
+      expect(clave).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      peticion1.flush({ mensaje: 'Error interno' }, { status: 500, statusText: 'Error' });
+      await primera;
+
+      const reintento = servicio.crearVenta(datosValidos);
+      await Promise.resolve();
+      const peticion2 = httpMock.expectOne('/api/ventas-efectivo');
+      expect(peticion2.request.headers.get('Idempotency-Key')).toBe(clave);
+      peticion2.flush({ compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 });
+      await reintento;
+    });
+
     it('llama POST /api/ventas-efectivo con Authorization', async () => {
       const { httpMock, servicio } = configurarPrueba('token-valido');
 

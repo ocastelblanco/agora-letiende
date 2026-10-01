@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ServicioAuth } from '../auth/servicio-auth';
+import { GeneradorClaveIdempotencia } from './clave-idempotencia';
 
 export interface DatosClienteEfectivo {
   nombre: string;
@@ -40,6 +41,7 @@ export type ResultadoCrearVentaEfectivo =
 export class VentasEfectivoService {
   private readonly http = inject(HttpClient);
   private readonly servicioAuth = inject(ServicioAuth);
+  private readonly claveVenta = new GeneradorClaveIdempotencia();
 
   private mensajeError(error: unknown, mensajePorDefecto: string): string {
     return error instanceof HttpErrorResponse && typeof error.error?.mensaje === 'string'
@@ -57,9 +59,10 @@ export class VentasEfectivoService {
     try {
       const venta = await firstValueFrom(
         this.http.post<VentaEfectivoRegistrada>('/api/ventas-efectivo', datos, {
-          headers: { Authorization: `Bearer ${idToken}` },
+          headers: { Authorization: `Bearer ${idToken}`, 'Idempotency-Key': this.claveVenta.obtener(datos) },
         }),
       );
+      this.claveVenta.renovar();
       return { exito: true, venta };
     } catch (error) {
       return {
