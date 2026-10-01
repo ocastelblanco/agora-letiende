@@ -285,6 +285,8 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Lista de eventos con estado, orden y filtros | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #27, PR #80) |
 | Duplicar evento (varias funciones) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #28, PR #81) |
 | Lista de paneles con orden y filtro por periodo | Media | ✅ Fusionado y validado en vivo en staging (roadmap #29, PR #82) |
+| Protección contra doble toque en acciones de un solo uso (compra, venta en efectivo, comprobante, guardado de eventos y usuarios) | **Alta** | ✅ Fusionado (roadmap #31, PR #83 y #84) — encontrado por las pruebas E2E |
+| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | 🟡 Planeado (roadmap #32, después de la segunda fase de Playwright) |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Suite simulada fusionada y corriendo en cada PR (roadmap #30, PR #83) · suite contra el sandbox real de Bold pendiente de credenciales IAM de CI y tarjetas de prueba |
 
 ### v3 — Ideas no comprometidas

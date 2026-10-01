@@ -145,27 +145,26 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Hotfix: guarda síncrona contra doble toque en acciones de un solo uso
-
-**Prioridad Alta**, derivada del hallazgo de las pruebas E2E (PR #83, 30/09/2026) — **propuesta del agente, pendiente de confirmar con OCM** (puede reordenarla o cambiarla por otra tarea). La prueba de doble toque de Playwright demostró que `comprar()` enviaba dos compras y reservaba sillas dos veces; ya se corrigió ahí. Una auditoría con `grep` encontró que otras acciones de un solo uso con consecuencia real tienen el mismo defecto (`[disabled]` solo se aplica al DOM en el siguiente ciclo de detección de cambios, `CLAUDE.md` §7) y no tienen el `if (this.enviando()) return;` síncrono antes de `set(true)`:
-
-- `features/evento/venta-efectivo/venta-efectivo.component.ts` (línea ~117): un doble toque podría **vender dos veces** — la más delicada.
-- `features/evento/comprobante/comprobante.component.ts` (~56): confirmar la carga del comprobante.
-- `features/admin/gestion-eventos/editar-evento.component.ts` (`guardando`, ~712) y `features/admin/gestion-usuarios/gestion-usuarios.component.ts` (`guardando`, ~132): guardar dos veces (menos grave: son ediciones idempotentes, pero la creación de un evento o usuario podría duplicarse).
-
-**Alcance:** agregar la guarda a cada una, con una prueba unitaria por componente que llame el método dos veces seguidas sobre una promesa pendiente (patrón de `gestion-eventos.component.spec.ts` y `comprar.component.spec.ts`). Antes de tocar el backend, verificar si `ventas-efectivo.ts` ya deduplica por su lado (no se revisó).
-
-**Rama:** `hotfix/guardas-doble-toque`.
-
----
-
-## Tarea 2 — Exportación de reportes en PDF (roadmap #21, resto)
+## Tarea 1 — Exportación de reportes en PDF (roadmap #21, resto)
 
 **Prioridad Media**, v2 — calculada por el algoritmo normal del motor JIT: es el único ítem de v2 sin prerrequisito externo además de las pruebas E2E (WhatsApp, #20, sigue bloqueado por la Verificación de Negocio de Meta). La Exportación XLSX (roadmap #21) ya está implementada y fusionada desde v1; el PDF nunca se inició.
 
 **Alcance:** `docs/PRD.md` §6 (tabla de roadmap v2) lista "Exportación de reportes en XLSX y PDF". El motor de generación de PDF queda por definir (`CLAUDE.md` §2 lo deja explícitamente "por definir"). Ampliación prevista de `handlers/reportes.ts` (`docs/tech-specs.md` §11, endpoint `GET /api/eventos/:eventoId/reportes`, hoy responde `501` explícito para `?formato=pdf`), reutilizando el patrón ya probado de exportación XLSX (autorización por rol/pertenencia al evento, enlace de descarga prefirmado y de vida corta — datos personales, `CLAUDE.md` §5 sección Habeas Data).
 
 **Primer paso probable, no implementación directa:** al no haber una librería de PDF ni un diseño de layout decididos, la primera sesión empieza por una investigación corta (opciones de generación de PDF viables en Node 24/Lambda — tamaño de paquete, cold start, si hace falta un binario nativo tipo Chromium que complicaría el empaquetado — y qué columnas/formato debe llevar el reporte) antes de escribir código, mismo criterio que se usó para Google Calendar (`.omc/plans/google-calendar-sync.md` como formato de referencia).
+
+---
+
+## Tarea 2 — Endurecimiento: idempotencia en el backend y protección de "eliminar con confirmación" (roadmap #32)
+
+**Prioridad Media**, derivada de dos temas que el hotfix de guardas contra doble toque (PR #84) dejó fuera a propósito. **Orden decidido por OCM (30/09/2026): va después de la segunda fase de Playwright** (PR B, suite contra el sandbox real de Bold). Como el PR B está bloqueado por dos cosas de OCM (credenciales IAM de CI y tarjetas de prueba de Bold, ver "Pendientes que no son de código"), esta es la siguiente tarea **desbloqueada** que ocupa el slot; si el PR B se desbloquea antes, OCM decide si se intercala.
+
+**Alcance, dos partes independientes** (conviene un PR por parte, empezando por la más sensible):
+
+1. **Idempotencia en el backend de las operaciones con consecuencia real.** Hoy `POST /api/compras` (`handlers/compras.ts`) y `POST /api/ventas-efectivo` (`handlers/ventas-efectivo.ts`) no tienen ninguna clave de idempotencia: cada petición es una operación nueva. La guarda síncrona del cliente cubre el doble toque, pero no un reenvío por otra vía (reintento automático de la red, segunda pestaña, un cliente que reintenta tras un timeout). Diseño a decidir antes de implementar (arrancar con una planeación corta, como Google Calendar): una clave por intento enviada en un encabezado (`Idempotency-Key`, UUID v4 generado en el cliente al abrir el formulario y renovado tras un éxito o un rechazo definitivo), guardada con **escritura condicional** (`attribute_not_exists`) junto con la respuesta ya calculada para devolverla idéntica ante un reintento, con TTL de limpieza; qué hace una clave repetida con un cuerpo distinto (409); y cómo convive con la reserva de aforo de `aforo.ts`. Restricciones: `PAY_PER_REQUEST`, sin recursos nuevos de costo fijo (`CLAUDE.md` §5-bis), sin datos personales en logs, y el precio sigue calculándose siempre en el backend (A08). Incluye pruebas de concurrencia simulada (dos peticiones con la misma clave → una sola reserva/venta) y, para la compra con Bold, una prueba E2E del reenvío.
+2. **"Eliminar con confirmación" sin protección contra doble clic.** `eliminar()` en `gestion-eventos.component.ts` y `gestion-usuarios.component.ts` abre `ConfirmarDialogComponent` antes de actuar; un doble clic abre **dos** diálogos y, si se confirman ambos, el segundo borrado responde "no existe". Es poco grave (no hay dinero ni datos en juego), pero deja una interfaz confusa. Alcance: guarda síncrona antes de abrir el diálogo (`if (this.eliminandoId() || this.dialogoAbierto) return;`), con una prueba unitaria por componente; revisar de paso si hay otras acciones destructivas que abran un diálogo (hoy solo esos dos componentes importan el diálogo).
+
+**Ramas sugeridas:** `feature/idempotencia-backend` y `fix/eliminar-doble-clic`.
 
 ---
 
@@ -181,7 +180,7 @@ Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. 
 
 No ocupan slots del motor JIT porque no dependen del desarrollo. **El paso a paso completo está en `docs/tareas-a-realizar.md`** (documento de trabajo personal de OCM, fuera de control de versiones porque puede contener secretos).
 
-**Playwright PR B — suite contra el sandbox real de Bold (roadmap #30, ADR-015).** La suite simulada ya corre en cada PR; la real (`e2e/staging/`, a demanda con `workflow_dispatch`) está bloqueada por dos cosas que solo OCM puede dar: (1) **credenciales IAM propias para CI**, limitadas a las tablas `agora-*-staging` (sin reutilizar las de despliegue, `CLAUDE.md` §5 A05), y (2) **las tarjetas de prueba vigentes del sandbox de Bold**. Cuando estén, se retoma como tarea normal (plan en `docs/plan-ajustes-eventos.md` Tarea 5).
+**Playwright PR B — suite contra el sandbox real de Bold (roadmap #30, ADR-015).** La suite simulada ya corre en cada PR; la real (`e2e/staging/`, a demanda con `workflow_dispatch`) está bloqueada por dos cosas que solo OCM puede dar: (1) **credenciales IAM propias para CI**, limitadas a las tablas `agora-*-staging` (sin reutilizar las de despliegue, `CLAUDE.md` §5 A05), y (2) **las tarjetas de prueba vigentes del sandbox de Bold**. Cuando estén, se retoma como tarea normal (plan en `docs/plan-ajustes-eventos.md` Tarea 5). **Orden decidido por OCM:** PDF (#21) → Playwright PR B → endurecimiento (#32); mientras el PR B siga bloqueado, el endurecimiento ocupa su lugar.
 
 Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 
