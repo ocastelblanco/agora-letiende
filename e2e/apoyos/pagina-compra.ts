@@ -28,7 +28,8 @@ export class PaginaCompra {
   }
 
   async abrir(slug = SLUG_EVENTO): Promise<void> {
-    await this.page.goto(`/evento/${slug}/comprar`);
+    // Ruta relativa (sin "/" inicial): la suite contra staging cuelga la app de "/cartelera/" (baseHref).
+    await this.page.goto(`evento/${slug}/comprar`);
   }
 
   async llenarDatos(cantidad = 2, cliente = CLIENTE_PRUEBA): Promise<void> {

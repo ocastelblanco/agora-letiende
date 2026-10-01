@@ -4,13 +4,17 @@ name: Pruebas E2E (Playwright)
 # a staging/producción con sus propias reglas de concurrencia, y las pruebas E2E
 # no deben alargar ni bloquear ese despliegue.
 #
-# Hoy solo corre la suite `simulado` (API y Bold simulados, hermética: no usa
-# secretos ni toca AWS). La suite `staging` contra el checkout sandbox real de
-# Bold llega en un PR posterior, como `workflow_dispatch` manual.
+# Dos suites que no se mezclan:
+# - `simulado` (en cada PR): API y Bold simulados, hermética, sin secretos ni AWS.
+# - `staging` (a mano, `workflow_dispatch`): flujo real contra staging con el checkout
+#   sandbox de Bold, un evento temporal sembrado y borrado en DynamoDB y el webhook
+#   real. Nunca bloquea un PR (ADR-015). Se lanza desde la pestaña Actions →
+#   "Pruebas E2E (Playwright)" → Run workflow.
 
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,6 +29,7 @@ env:
 jobs:
   simulado:
     name: Suite simulada (escritorio, Android, iOS)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -63,3 +68,57 @@ jobs:
           name: resultados-playwright
           path: test-results/
           retention-days: 14
+
+  staging:
+    name: Suite real contra staging (checkout sandbox de Bold)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Los secretos del usuario IAM de CI viven en el environment `staging` (no son globales).
+    environment: staging
+    concurrency:
+      # Una sola corrida real a la vez: comparten la configuración del webhook del sandbox de Bold.
+      group: e2e-staging
+      cancel-in-progress: false
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias (reproducible, package-lock.json)
+        run: npm ci
+
+      - name: Instalar Chromium de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas E2E reales contra staging
+        run: npm run e2e:staging
+        env:
+          CI: 'true'
+          # Usuario IAM propio de las pruebas: solo las tablas agora-eventos/compras/boletas de
+          # staging (`docs/tareas-a-realizar.md`). Nunca las credenciales de despliegue.
+          AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+
+      - name: Subir reporte HTML de Playwright
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-playwright-staging
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Subir trazas, videos y capturas de las pruebas que fallaron
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-playwright-staging
+          path: test-results/
+          retention-days: 14
+

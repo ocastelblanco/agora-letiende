@@ -286,8 +286,9 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Duplicar evento (varias funciones) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #28, PR #81) |
 | Lista de paneles con orden y filtro por periodo | Media | ✅ Fusionado y validado en vivo en staging (roadmap #29, PR #82) |
 | Protección contra doble toque en acciones de un solo uso (compra, venta en efectivo, comprobante, guardado de eventos y usuarios) | **Alta** | ✅ Fusionado (roadmap #31, PR #83 y #84) — encontrado por las pruebas E2E |
-| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | 🟡 Planeado (roadmap #32, justo después de la segunda fase de Playwright) |
-| Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Suite simulada fusionada y corriendo en cada PR (roadmap #30, PR #83) · suite contra el sandbox real de Bold pendiente de credenciales IAM de CI y tarjetas de prueba |
+| Pantalla sin salida tras un pago rechazado con Bold (el cliente queda sin ningún botón para continuar) | **Alta** | 🟡 Bug real, encontrado por las pruebas E2E reales (PR #85); primera parte del endurecimiento (roadmap #32), a corregir lo antes posible |
+| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | 🟡 Planeado (roadmap #32, tras la pantalla sin salida) |
+| Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | ✅ Suite simulada corriendo en cada PR (roadmap #30, PR #83) y suite real contra el sandbox de Bold, a demanda (PR #85) |
 
 ### v3 — Ideas no comprometidas
 
@@ -350,7 +351,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 - Navegación por teclado y etiquetas semánticas en los formularios administrativos.
 
 ### Calidad
-- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código, en Chromium de escritorio, Android y iOS (WebKit); otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecutará a demanda (todavía pendiente, `docs/plan-ajustes-eventos.md` Tarea 5).
+- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código, en Chromium de escritorio, Android y iOS (WebKit); otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecuta a demanda (`docs/plan-ajustes-eventos.md` Tarea 5).
 
 ### SEO
 - Cada evento debe tener su propia página indexable, con metadatos y vista previa enriquecida al compartirse por WhatsApp o redes sociales. El enlace compartido **es** el canal de difusión principal: si la vista previa se ve mal, la difusión se ve mal.
