@@ -441,6 +441,7 @@ AgoraUsuarios:
 | `agora-compras` | `compraId` (PK) | GSI `eventoId-creadaEn-index`; GSI `tokenAprobacionHash-index` | **TTL en `expiraEn`**, con Streams activados |
 | `agora-boletas` | `boletaId` (PK) | GSI `eventoId-estado-index`; GSI `compraId-index` | `boletaId` es el contenido del QR |
 | `agora-auditoria` | `entidadId` (PK), `ocurridoEn` (SK) | — | Append-only. Nunca se actualiza ni se borra |
+| `agora-idempotencia` | `idempotenciaId` (PK, SHA-256 de `operación\|actor\|clave`) | — | Claves de `Idempotency-Key` de `POST /api/compras` y `POST /api/ventas-efectivo`. TTL `expiraEn` a 24 h. Guarda solo la respuesta 2xx (sin datos personales) |
 
 ### 5.3 Funciones Lambda
 

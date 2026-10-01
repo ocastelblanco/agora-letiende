@@ -84,6 +84,7 @@ function crearPeticion(
     rawPath?: string;
     compraId?: string;
     cuerpo?: unknown;
+    encabezados?: Record<string, string>;
   } = {},
 ): Parameters<typeof handler>[0] {
   return {
@@ -91,7 +92,7 @@ function crearPeticion(
     rawPath: opciones.rawPath ?? '/api/compras',
     pathParameters: opciones.compraId ? { compraId: opciones.compraId } : undefined,
     body: opciones.cuerpo !== undefined ? JSON.stringify(opciones.cuerpo) : undefined,
-    headers: {},
+    headers: opciones.encabezados ?? {},
   } as unknown as Parameters<typeof handler>[0];
 }
 
@@ -627,6 +628,39 @@ describe('POST /api/compras — pago con Bold', () => {
     const comandoPut = sendMock.mock.calls[1]?.[0];
     expect(comandoPut.input.Item.medioPago).toBe('transferencia');
     expect(firmarBotonMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/compras — idempotencia (roadmap #32)', () => {
+  const CLAVE = '3f0c9f4e-5b1a-4c2e-9d7a-1a2b3c4d5e6f';
+  const cuerpo = { slug: 'concierto-jazz', cantidad: 2, cliente: clienteValido, autorizacionDatos: true };
+
+  it('una clave repetida devuelve la compra ya creada sin reservar aforo otra vez', async () => {
+    process.env['TABLA_IDEMPOTENCIA'] = 'agora-idempotencia-test';
+    const respuestaGuardada = JSON.stringify({ compraId: 'compra-1', estado: 'esperando_comprobante' });
+    sendMock
+      .mockRejectedValueOnce(Object.assign(new Error('x'), { name: 'ConditionalCheckFailedException' })) // reclamo
+      .mockImplementationOnce(async () => ({
+        Item: {
+          cuerpoHash: (await import('node:crypto')).createHash('sha256').update(JSON.stringify(cuerpo)).digest('hex'),
+          estado: 'completada',
+          statusCode: 201,
+          respuesta: respuestaGuardada,
+        },
+      }));
+
+    const respuesta = await invocar('POST', { cuerpo, encabezados: { 'idempotency-key': CLAVE } });
+
+    expect(respuesta.statusCode).toBe(201);
+    expect(respuesta.body).toBe(respuestaGuardada);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza con 400 una Idempotency-Key que no es UUID v4', async () => {
+    const respuesta = await invocar('POST', { cuerpo, encabezados: { 'idempotency-key': 'no-es-uuid' } });
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
   });
 });
 

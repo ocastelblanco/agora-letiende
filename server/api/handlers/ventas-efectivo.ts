@@ -21,6 +21,8 @@ import {
   etapaVigente,
 } from './compras';
 import { respuestaJson } from '../lib/http';
+import { ejecutarIdempotente } from '../services/idempotencia';
+import type { PermisosUsuario } from '../lib/resolver-permisos';
 
 const canalNotificacion = new CanalCorreoSes();
 
@@ -55,7 +57,20 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
   if (!autorizacion.autorizado) {
     return autorizacion.respuesta;
   }
-  const emailVendedor = autorizacion.permisos.email;
+  const permisos = autorizacion.permisos;
+
+  // El actor (correo del vendedor) entra en el identificador de la clave: la
+  // misma `Idempotency-Key` de dos porteros distintos nunca se cruza.
+  return ejecutarIdempotente(evento, 'venta-efectivo', permisos.email, () =>
+    registrarVentaEfectivo(evento, permisos),
+  );
+}
+
+async function registrarVentaEfectivo(
+  evento: APIGatewayProxyEventV2,
+  permisos: PermisosUsuario,
+): Promise<APIGatewayProxyResultV2> {
+  const emailVendedor = permisos.email;
 
   const cuerpo = leerCuerpo(evento);
   if (cuerpo === undefined) {
@@ -119,7 +134,7 @@ async function crearVentaEfectivo(evento: APIGatewayProxyEventV2): Promise<APIGa
   // administrador o productor asignado también pasan (`tieneAccesoAlEvento`,
   // que ya incluye esos dos casos). Sin lectura extra: `eventoEncontrado` ya
   // trae `porteros`/`productores` completos desde la Query de arriba.
-  if (!tieneAccesoAlEvento(eventoEncontrado, autorizacion.permisos)) {
+  if (!tieneAccesoAlEvento(eventoEncontrado, permisos)) {
     return respuestaJson(403, { mensaje: 'No estás asignado a este evento' });
   }
 

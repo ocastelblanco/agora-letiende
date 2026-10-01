@@ -16,6 +16,7 @@ import {
 import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { firmarBoton } from '../services/bold';
+import { ejecutarIdempotente } from '../services/idempotencia';
 import { generarTokenEnlace } from '../lib/enlaces-magicos';
 import { finalizarSiVencido, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import { CanalCorreoSes } from '../services/notificaciones';
@@ -654,7 +655,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (
       return await consultarEstadoCompra(compraId);
     }
     if (evento.requestContext.http.method === 'POST') {
-      return await crearCompra(evento);
+      // Endpoint público: el actor es el propio cliente anónimo, así que la
+      // clave por sí sola (UUID v4 de ≥ 122 bits) es el identificador.
+      return await ejecutarIdempotente(evento, 'crear-compra', 'publico', () => crearCompra(evento));
     }
     return respuestaJson(405, { mensaje: 'Método no soportado' });
   } catch {

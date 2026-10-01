@@ -27,6 +27,27 @@ describe('ComprasService', () => {
   });
 
   describe('crearCompra', () => {
+    it('envía una Idempotency-Key UUID v4, la reutiliza en un reintento y la renueva tras un éxito', async () => {
+      const primera = servicio.crearCompra(datosValidos);
+      const peticion1 = httpMock.expectOne('/api/compras');
+      const clave = peticion1.request.headers.get('Idempotency-Key');
+      expect(clave).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      peticion1.flush({ mensaje: 'Error interno' }, { status: 500, statusText: 'Error' });
+      await primera;
+
+      const reintento = servicio.crearCompra(datosValidos);
+      const peticion2 = httpMock.expectOne('/api/compras');
+      expect(peticion2.request.headers.get('Idempotency-Key')).toBe(clave);
+      peticion2.flush({ compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 90000 });
+      await reintento;
+
+      const nueva = servicio.crearCompra(datosValidos);
+      const peticion3 = httpMock.expectOne('/api/compras');
+      expect(peticion3.request.headers.get('Idempotency-Key')).not.toBe(clave);
+      peticion3.flush({ compraId: 'compra-2', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 90000 });
+      await nueva;
+    });
+
     it('llama POST /api/compras sin encabezado Authorization', async () => {
       const promesa = servicio.crearCompra(datosValidos);
 
