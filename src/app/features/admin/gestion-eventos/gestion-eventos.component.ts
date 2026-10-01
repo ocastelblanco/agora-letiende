@@ -84,6 +84,8 @@ export class GestionEventosComponent implements OnInit {
   protected readonly eventos = this.eventosService.eventos;
 
   protected readonly eliminandoEventoId = signal<string | null>(null);
+  /** Guarda síncrona contra un doble clic en «Eliminar» (no es un Signal: no se pinta). */
+  private dialogoEliminarAbierto = false;
   protected readonly duplicando = signal(false);
 
   // Orden y filtros (roadmap #27): viven en la URL para sobrevivir a la ida y
@@ -206,13 +208,24 @@ export class GestionEventosComponent implements OnInit {
   }
 
   protected async eliminar(evento: Evento): Promise<void> {
-    const referenciaDialogo = this.dialog.open(ConfirmarDialogComponent, {
-      data: {
-        titulo: 'Eliminar evento',
-        mensaje: `¿Eliminar "${evento.nombre}"? Esta acción no se puede deshacer.`,
-      },
-    });
-    const confirmado = await firstValueFrom(referenciaDialogo.afterClosed());
+    // Guarda síncrona (roadmap #32): un doble clic abriría dos diálogos y, confirmados ambos,
+    // el segundo borrado respondería «no existe». Mismo patrón de `if (enviando()) return;`.
+    if (this.dialogoEliminarAbierto || this.eliminandoEventoId() !== null) {
+      return;
+    }
+    this.dialogoEliminarAbierto = true;
+    let confirmado: unknown;
+    try {
+      const referenciaDialogo = this.dialog.open(ConfirmarDialogComponent, {
+        data: {
+          titulo: 'Eliminar evento',
+          mensaje: `¿Eliminar "${evento.nombre}"? Esta acción no se puede deshacer.`,
+        },
+      });
+      confirmado = await firstValueFrom(referenciaDialogo.afterClosed());
+    } finally {
+      this.dialogoEliminarAbierto = false;
+    }
     if (confirmado !== true) {
       return;
     }

@@ -175,6 +175,34 @@ describe('GestionEventosComponent', () => {
       expect(eliminarEventoMock).not.toHaveBeenCalled();
     });
 
+    it('ignora un segundo clic: abre un solo diálogo y borra una sola vez', async () => {
+      const eliminarEventoMock = vi.fn().mockResolvedValue({ exito: true });
+      const { fixture, dialogOpenMock } = configurarPrueba({
+        eventos: [eventoEjemplo],
+        eliminarEventoMock,
+        dialogAfterClosed: true,
+      });
+      const componente = fixture.componentInstance;
+
+      await Promise.all([componente['eliminar'](eventoEjemplo), componente['eliminar'](eventoEjemplo)]);
+
+      expect(dialogOpenMock).toHaveBeenCalledTimes(1);
+      expect(eliminarEventoMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('vuelve a funcionar después de cancelar el diálogo', async () => {
+      const { fixture, dialogOpenMock } = configurarPrueba({
+        eventos: [eventoEjemplo],
+        dialogAfterClosed: undefined,
+      });
+      const componente = fixture.componentInstance;
+
+      await componente['eliminar'](eventoEjemplo);
+      await componente['eliminar'](eventoEjemplo);
+
+      expect(dialogOpenMock).toHaveBeenCalledTimes(2);
+    });
+
     it('llama a la API cuando el diálogo se confirma', async () => {
       const eliminarEventoMock = vi.fn().mockResolvedValue({ exito: true });
       const { fixture, snackBarOpenMock } = configurarPrueba({

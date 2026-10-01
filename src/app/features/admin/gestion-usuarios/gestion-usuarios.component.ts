@@ -57,6 +57,8 @@ export class GestionUsuariosComponent implements OnInit {
 
   protected readonly guardando = signal(false);
   protected readonly eliminandoEmail = signal<string | null>(null);
+  /** Guarda síncrona contra un doble clic en «Eliminar» (no es un Signal: no se pinta). */
+  private dialogoEliminarAbierto = false;
 
   /** Controla si el formulario de creación/edición está desplegado — oculto por defecto. */
   protected readonly formularioVisible = signal(false);
@@ -165,13 +167,24 @@ export class GestionUsuariosComponent implements OnInit {
   }
 
   protected async eliminar(usuario: Usuario): Promise<void> {
-    const referenciaDialogo = this.dialog.open(ConfirmarDialogComponent, {
-      data: {
-        titulo: 'Eliminar usuario',
-        mensaje: `¿Eliminar a "${usuario.nombre}" (${usuario.email})? Esta acción no se puede deshacer.`,
-      },
-    });
-    const confirmado = await firstValueFrom(referenciaDialogo.afterClosed());
+    // Guarda síncrona (roadmap #32): un doble clic abriría dos diálogos y, confirmados ambos,
+    // el segundo borrado respondería «no existe». Mismo patrón de `if (enviando()) return;`.
+    if (this.dialogoEliminarAbierto || this.eliminandoEmail() !== null) {
+      return;
+    }
+    this.dialogoEliminarAbierto = true;
+    let confirmado: unknown;
+    try {
+      const referenciaDialogo = this.dialog.open(ConfirmarDialogComponent, {
+        data: {
+          titulo: 'Eliminar usuario',
+          mensaje: `¿Eliminar a "${usuario.nombre}" (${usuario.email})? Esta acción no se puede deshacer.`,
+        },
+      });
+      confirmado = await firstValueFrom(referenciaDialogo.afterClosed());
+    } finally {
+      this.dialogoEliminarAbierto = false;
+    }
     if (confirmado !== true) {
       return;
     }

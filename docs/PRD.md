@@ -278,7 +278,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Sincronización con Google Calendar | Media | ✅ Fusionado y verificado en producción (roadmap #22, PR #48) |
 | Pago automático con Bold | **Alta** | ✅ Fusionado y validado de punta a punta en staging real, con tarjetas de prueba (aprobado/rechazado/error/abandono) (roadmap #19, PR #50/#51/#52) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
-| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado, en el backlog (después del endurecimiento y de la segunda fase de Playwright) |
+| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado, siguiente tarea activa (cerrado el endurecimiento) |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
 | Enlace (slug) único por función | **Alta** | ✅ Hotfix fusionado y datos de producción corregidos (PR #77, 30/09/2026) |
 | Duración de eventos | **Alta** | ✅ Fusionado; eventos existentes de producción rellenados a 3 h (roadmap #26, PR #79) |
@@ -287,7 +287,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Lista de paneles con orden y filtro por periodo | Media | ✅ Fusionado y validado en vivo en staging (roadmap #29, PR #82) |
 | Protección contra doble toque en acciones de un solo uso (compra, venta en efectivo, comprobante, guardado de eventos y usuarios) | **Alta** | ✅ Fusionado (roadmap #31, PR #83 y #84) — encontrado por las pruebas E2E |
 | Pantalla sin salida tras un pago rechazado con Bold (el cliente queda sin ningún botón para continuar) | **Alta** | ✅ Corregido (01/10/2026): el estado de la compra devuelve la config de Bold mientras la reserva esté vigente; primera parte del endurecimiento (roadmap #32), validado por OCM, PR #88 pendiente de fusión |
-| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | 🟡 Idempotencia implementada y validada en staging (01/10/2026, pendiente de fusión); falta la protección de "eliminar" contra doble clic (roadmap #32) |
+| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | ✅ Idempotencia fusionada y validada en staging (PR #89); guarda de "eliminar" implementada (01/10/2026, pendiente de fusión) — endurecimiento (roadmap #32) completo |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | ✅ Suite simulada corriendo en cada PR (roadmap #30, PR #83) y suite real contra el sandbox de Bold, a demanda (PR #85) |
 
 ### v3 — Ideas no comprometidas
