@@ -183,6 +183,30 @@ describe('EditarEventoComponent', () => {
       expect(componente['formulario'].controls.slug.disabled).toBe(false);
     });
 
+    it('guardar() con un doble toque antes de repintar crea el evento una sola vez (guarda síncrona)', async () => {
+      let resolverCreacion!: (valor: unknown) => void;
+      const crearEventoMock = vi.fn().mockReturnValue(new Promise((resolver) => (resolverCreacion = resolver)));
+      const { fixture } = configurarPrueba({ crearEventoMock });
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+      componente['formulario'].patchValue({
+        slug: 'concierto-jazz',
+        nombre: 'Concierto de jazz',
+        descripcion: 'Una noche de jazz',
+        fechaHora: '2026-09-14T20:00',
+        sillasTotales: 100,
+        productores: ['productor@letiende.co'],
+      });
+
+      const primera = componente['guardar']();
+      const segunda = componente['guardar']();
+      resolverCreacion({ exito: true, evento: eventoExistente });
+      await Promise.all([primera, segunda]);
+
+      expect(crearEventoMock).toHaveBeenCalledTimes(1);
+      expect(componente['guardando']()).toBe(false);
+    });
+
     describe('duración del evento (roadmap #26)', () => {
       it('arranca en 3 h 0 min y envía duracionMinutos: 180 al crear', async () => {
         const crearEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoExistente });

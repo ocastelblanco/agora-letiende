@@ -48,6 +48,13 @@ export class ComprobanteComponent {
   }
 
   protected async subir(): Promise<void> {
+    // Guarda síncrona, ANTES de `enviando.set(true)` (CLAUDE.md §7): el `[disabled]`
+    // del botón no llega al DOM hasta el siguiente ciclo de detección de
+    // cambios, y un doble toque real puede disparar este método dos veces
+    // antes — dos cargas del mismo comprobante y dos confirmaciones contra el mismo enlace de un solo uso.
+    if (this.enviando()) {
+      return;
+    }
     const archivo = this.archivoSeleccionado();
     if (!archivo) {
       return;

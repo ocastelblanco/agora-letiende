@@ -278,13 +278,15 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Sincronización con Google Calendar | Media | ✅ Fusionado y verificado en producción (roadmap #22, PR #48) |
 | Pago automático con Bold | **Alta** | ✅ Fusionado y validado de punta a punta en staging real, con tarjetas de prueba (aprobado/rechazado/error/abandono) (roadmap #19, PR #50/#51/#52) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
-| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado |
+| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado, en el backlog (después del endurecimiento y de la segunda fase de Playwright) |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
 | Enlace (slug) único por función | **Alta** | ✅ Hotfix fusionado y datos de producción corregidos (PR #77, 30/09/2026) |
 | Duración de eventos | **Alta** | ✅ Fusionado; eventos existentes de producción rellenados a 3 h (roadmap #26, PR #79) |
 | Lista de eventos con estado, orden y filtros | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #27, PR #80) |
 | Duplicar evento (varias funciones) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #28, PR #81) |
 | Lista de paneles con orden y filtro por periodo | Media | ✅ Fusionado y validado en vivo en staging (roadmap #29, PR #82) |
+| Protección contra doble toque en acciones de un solo uso (compra, venta en efectivo, comprobante, guardado de eventos y usuarios) | **Alta** | ✅ Fusionado (roadmap #31, PR #83 y #84) — encontrado por las pruebas E2E |
+| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | 🟡 Planeado (roadmap #32, justo después de la segunda fase de Playwright) |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | 🟡 Suite simulada fusionada y corriendo en cada PR (roadmap #30, PR #83) · suite contra el sandbox real de Bold pendiente de credenciales IAM de CI y tarjetas de prueba |
 
 ### v3 — Ideas no comprometidas

@@ -105,6 +105,13 @@ export class VentaEfectivoComponent {
   }
 
   protected async registrarVenta(): Promise<void> {
+    // Guarda síncrona, ANTES de `enviando.set(true)` (CLAUDE.md §7): el `[disabled]`
+    // del botón no llega al DOM hasta el siguiente ciclo de detección de
+    // cambios, y un doble toque real puede disparar este método dos veces
+    // antes — dos ventas en efectivo (dos juegos de boletas y dos descuentos de aforo) para un solo cobro.
+    if (this.enviando()) {
+      return;
+    }
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
       return;
