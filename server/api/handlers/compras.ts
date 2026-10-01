@@ -276,6 +276,18 @@ async function crearAdquisicionSinEtapas(
  * la llave de identidad es pública por diseño (Bold la expone en el
  * `<script>` del cliente), nunca la llave secreta.
  */
+function configuracionBold(compraId: string, montoTotal: number): {
+  llaveIdentidad: string;
+  firma: string;
+  moneda: string;
+} {
+  return {
+    llaveIdentidad: process.env['BOLD_LLAVE_IDENTIDAD'] ?? '',
+    firma: firmarBoton(compraId, montoTotal, 'COP'),
+    moneda: 'COP',
+  };
+}
+
 async function crearCompraBold(
   eventoEncontrado: EventoParaCompra,
   etapa: EtapaBoleteria,
@@ -345,11 +357,7 @@ async function crearCompraBold(
     cantidad,
     montoTotal,
     expiraEn: expiraEnFecha.toISOString(),
-    bold: {
-      llaveIdentidad: process.env['BOLD_LLAVE_IDENTIDAD'] ?? '',
-      firma: firmarBoton(compraId, montoTotal, 'COP'),
-      moneda: 'COP',
-    },
+    bold: configuracionBold(compraId, montoTotal),
   });
 }
 
@@ -608,12 +616,21 @@ async function consultarEstadoCompra(
     item['estado'] === 'esperando_comprobante' || item['estado'] === 'esperando_pago_bold';
   const estado = seEsperaConfirmacion && yaVencio ? 'expirada' : item['estado'];
 
+  // Mientras la compra siga esperando el pago de Bold y la reserva no haya
+  // vencido, se devuelve la configuración del botón: tras un rechazo Bold
+  // no notifica nada, y sin ella el cliente que vuelve a la página no tiene
+  // forma de pagar de nuevo (roadmap #32). Mismos datos que `POST /api/compras`
+  // (firma de integridad + llave pública), el compraId es un UUID v4.
+  const reofreceBold =
+    item['estado'] === 'esperando_pago_bold' && !yaVencio && typeof item['montoTotal'] === 'number';
+
   return respuestaJson(200, {
     compraId: item['compraId'],
     estado,
     cantidad: item['cantidad'],
     montoTotal: item['montoTotal'],
     expiraEn: expiraEnEpoch !== undefined ? new Date(expiraEnEpoch * 1000).toISOString() : undefined,
+    ...(reofreceBold ? { bold: configuracionBold(String(item['compraId']), item['montoTotal'] as number) } : {}),
   });
 }
 

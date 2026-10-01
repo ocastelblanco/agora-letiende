@@ -33,11 +33,14 @@ const eventoEjemplo: EventoPublico = {
  * input `slug()`, ver su docstring) para su guarda contra respuestas
  * tardías — `activarConSlug()` la mantiene sincronizada con cada `setInput`.
  */
-function activatedRouteFake(boldOrderId: string | null) {
+function activatedRouteFake(boldOrderId: string | null, estadoTransaccion: string | null = null) {
   const fake = {
     slugActual: null as string | null,
     snapshot: {
-      queryParamMap: { get: (clave: string) => (clave === 'bold-order-id' ? boldOrderId : null) },
+      queryParamMap: {
+        get: (clave: string) =>
+          clave === 'bold-order-id' ? boldOrderId : clave === 'bold-tx-status' ? estadoTransaccion : null,
+      },
       get paramMap() {
         return { get: (clave: string) => (clave === 'slug' ? fake.slugActual : null) };
       },
@@ -52,6 +55,7 @@ function configurarPrueba(opciones: {
   crearCompraMock?: ReturnType<typeof vi.fn>;
   consultarEstadoCompraMock?: ReturnType<typeof vi.fn>;
   boldOrderId?: string | null;
+  estadoTransaccion?: string | null;
 }) {
   const cargarEventoPorSlugMock = opciones.errorCarga
     ? vi.fn().mockResolvedValue({ exito: false, error: 'no_encontrado' })
@@ -61,7 +65,7 @@ function configurarPrueba(opciones: {
     imports: [NoopAnimationsModule],
     providers: [
       provideRouter([]),
-      { provide: ActivatedRoute, useValue: activatedRouteFake(opciones.boldOrderId ?? null) },
+      { provide: ActivatedRoute, useValue: activatedRouteFake(opciones.boldOrderId ?? null, opciones.estadoTransaccion ?? null) },
       { provide: EventosPublicosService, useValue: { cargarEventoPorSlug: cargarEventoPorSlugMock } },
       {
         provide: ComprasService,
@@ -887,6 +891,46 @@ describe('ComprarComponent', () => {
 
       expect(consultarEstadoCompraMock).toHaveBeenCalledWith('compra-1');
       expect(fixture.componentInstance['compraCreada']()?.estado).toBe('aprobada');
+    });
+
+    it('tras un pago rechazado muestra el mensaje y conserva la config de Bold para pagar de nuevo', async () => {
+      const consultarEstadoCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: {
+          compraId: 'compra-1',
+          estado: 'esperando_pago_bold',
+          cantidad: 2,
+          montoTotal: 90000,
+          bold: { llaveIdentidad: 'llave', firma: 'firma', moneda: 'COP' },
+        },
+      });
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        consultarEstadoCompraMock,
+        boldOrderId: 'compra-1',
+        estadoTransaccion: 'rejected',
+      });
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.componentInstance['pagoRechazado']()).toBe(true);
+      expect(fixture.componentInstance['compraCreada']()?.bold?.firma).toBe('firma');
+    });
+
+    it('no marca pagoRechazado si el estado de la transacción no es rechazo', async () => {
+      const { fixture } = configurarPrueba({
+        evento: { ...eventoEjemplo, mediosPago: ['bold'] },
+        consultarEstadoCompraMock: vi.fn().mockResolvedValue({
+          exito: true,
+          compra: { compraId: 'compra-1', estado: 'aprobada', cantidad: 2, montoTotal: 90000, boletas: 2 },
+        }),
+        boldOrderId: 'compra-1',
+        estadoTransaccion: 'approved',
+      });
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.componentInstance['pagoRechazado']()).toBe(false);
     });
 
     it('muestra un snackbar si la consulta de estado falla (ej. red o compra ya expirada por TTL)', async () => {

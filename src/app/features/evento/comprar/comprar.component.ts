@@ -104,6 +104,8 @@ export class ComprarComponent {
    * si se muestran "Verificar estado"/"Reabrir el pago con Bold".
    */
   protected readonly esperaInconclusa = signal(false);
+  /** `true` si Bold redirigió de vuelta con un pago rechazado o fallido (solo para el mensaje). */
+  protected readonly pagoRechazado = signal(false);
   /** Remueve el listener de `postMessage` del checkout de Bold actualmente abierto, si hay uno. */
   private removerListenerBold: (() => void) | null = null;
 
@@ -196,6 +198,10 @@ export class ComprarComponent {
     // URL — la fuente de verdad es esta consulta al backend.
     const boldOrderId = this.route.snapshot.queryParamMap.get('bold-order-id');
     if (boldOrderId) {
+      // Solo para el MENSAJE al cliente (qué pasó con su pago): el estado real
+      // sigue viniendo del backend, `bold-tx-status` nunca decide nada.
+      const estadoTransaccion = this.route.snapshot.queryParamMap.get('bold-tx-status');
+      this.pagoRechazado.set(estadoTransaccion === 'rejected' || estadoTransaccion === 'failed');
       void this.recuperarEstadoTrasBold(boldOrderId);
     }
 
