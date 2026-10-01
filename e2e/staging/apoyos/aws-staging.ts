@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
-  BatchWriteCommand,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
@@ -123,10 +122,15 @@ export async function leerEvento(eventoId: string): Promise<Item | undefined> {
   return respuesta.Item as Item | undefined;
 }
 
-async function borrarPorLotes(tabla: string, llaves: Record<string, unknown>[]): Promise<void> {
-  for (let i = 0; i < llaves.length; i += 25) {
-    const lote = llaves.slice(i, i + 25).map((Key) => ({ DeleteRequest: { Key } }));
-    await cliente.send(new BatchWriteCommand({ RequestItems: { [tabla]: lote } }));
+/**
+ * Borra ítem por ítem con `DeleteItem`, a propósito y no con `BatchWriteItem`: la política
+ * IAM mínima del usuario de CI (`agora-e2e-staging`) solo concede PutItem, GetItem,
+ * UpdateItem, DeleteItem y Query. Una prueba son un puñado de ítems, así que el lote no
+ * ahorra nada y pedir otro permiso solo ampliaría la superficie (`CLAUDE.md` §5, A05).
+ */
+async function borrarItems(tabla: string, llaves: Record<string, unknown>[]): Promise<void> {
+  for (const Key of llaves) {
+    await cliente.send(new DeleteCommand({ TableName: tabla, Key }));
   }
 }
 
@@ -139,11 +143,11 @@ async function borrarPorLotes(tabla: string, llaves: Record<string, unknown>[]):
 export async function limpiarEvento(eventoId: string): Promise<{ compras: number; boletas: number }> {
   const boletas = await leerBoletas(eventoId);
   const compras = await leerCompras(eventoId);
-  await borrarPorLotes(
+  await borrarItems(
     TABLA_BOLETAS,
     boletas.map((b) => ({ boletaId: b['boletaId'] })),
   );
-  await borrarPorLotes(
+  await borrarItems(
     TABLA_COMPRAS,
     compras.map((c) => ({ compraId: c['compraId'] })),
   );
