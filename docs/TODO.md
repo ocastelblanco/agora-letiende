@@ -177,7 +177,7 @@ Vacío de ítems v1 (`PRD.md` §6) — Panel de control básico fue el último. 
 
 No ocupan slots del motor JIT porque no dependen del desarrollo. **El paso a paso completo está en `docs/tareas-a-realizar.md`** (documento de trabajo personal de OCM, fuera de control de versiones porque puede contener secretos).
 
-**Primera corrida de la suite real de Playwright en CI (roadmap #30, ADR-015).** El PR #85 deja el job `staging` (a demanda, `workflow_dispatch`) en `e2e.yml`, pero un `workflow_dispatch` solo se puede lanzar desde la interfaz de GitHub cuando el archivo ya está en `main`, y su corrida local usó las credenciales del propio OCM. **Tras fusionar el PR #85, OCM debe lanzarlo una vez** (Actions → "Pruebas E2E (Playwright)" → *Run workflow*) para confirmar que el usuario IAM `agora-e2e-ci` y sus dos secretos del environment `staging` funcionan con la política mínima (pasos en `docs/tareas-a-realizar.md`). Si falla por permisos, el log dirá qué acción falta.
+**Primera corrida de la suite real de Playwright en CI — ✅ validada (01/10/2026).** OCM la lanzó desde Actions y funcionó con el usuario IAM `agora-e2e-ci` y sus dos secretos del environment `staging`. La primera corrida (PR #85) falló en la limpieza por un `BatchWriteItem` que la política mínima no concede; se corrigió con `DeleteItem` ítem por ítem en el PR #86. Ya no hay pendientes de OCM para Playwright.
 
 Lo que bloquea el primer evento real, pero no el desarrollo inmediato:
 
