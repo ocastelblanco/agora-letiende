@@ -119,6 +119,7 @@ Esquema **híbrido**, decidido con OCM (ADR-015). **Entregada en dos PR** (decis
 - **Pendientes que no son de código** (en `docs/tareas-a-realizar.md`):
   - Credenciales IAM propias para CI, limitadas a las tablas `agora-*-staging` (sin reutilizar las de despliegue).
   - Confirmar las tarjetas de prueba vigentes del sandbox de Bold.
+  - Detalle del 30/09/2026: se agregó un usuario IAM `agora-e2e-ci` con política de mínimo privilegio (sin `Scan`, solo tablas y GSIs de `agora-eventos/compras/boletas-staging`), dos secretos del environment `staging` (`E2E_AWS_ACCESS_KEY_ID`, `E2E_AWS_SECRET_ACCESS_KEY`) y la verificación de las tarjetas de prueba contra la documentación de Bold del día. Paso a paso en `docs/tareas-a-realizar.md`.
 
 ---
 
