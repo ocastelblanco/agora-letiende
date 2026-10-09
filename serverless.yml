@@ -11,19 +11,8 @@ provider:
   timeout: 10
   httpApi:
     cors: true
-    # GAP DOCUMENTADO A PROPÓSITO, no silenciado (TODO.md Tarea 2,
-    # CLAUDE.md §5 A07: "la creación de compras es la superficie más barata
-    # de abusar de toda la aplicación"): `POST /api/compras` NO tiene
-    # límite de tasa todavía. Se investigó `provider.httpApi.throttle`
-    # (nativo de Serverless Framework para REST API vía `usagePlan`, pero
-    # NO existe para HTTP API — verificado, no asumido) y `routeSettings`
-    # por ruta (requiere el plugin `serverless-apigateway-route-settings`,
-    # no evaluado todavía contra Serverless Framework 4, o un
-    # `resources.extensions` de CloudFormation a mano sobre el Stage
-    # autogenerado, no verificable sin desplegar en este entorno). Cerrar
-    # esto es la primera mejora de seguridad a agregar antes de tráfico
-    # real — sin él, un script puede agotar el aforo de un evento con
-    # reservas que nunca se pagan.
+    # Límite de tasa: ver `resources.extensions.HttpApiStage` más abajo
+    # (`provider.httpApi.throttle` no existe para HTTP API).
   deploymentBucket:
     # Sin este tope, cada despliegue deja su artefacto en S3 para siempre
     # (docs/advertencia-urgente-costos-aws.md §3). Se conservan 5, el resto
@@ -563,6 +552,41 @@ functions:
           method: '*'
 
 resources:
+  extensions:
+    # Límite de tasa del stage de la HTTP API (CLAUDE.md §5 A07). Serverless
+    # Framework no expone `throttle` para HTTP API, así que se extiende el
+    # `AWS::ApiGatewayV2::Stage` autogenerado. El límite es por ruta y por
+    # stage, no por IP (eso requeriría WAF, con costo fijo mensual).
+    # Un `RouteKey` que no exista como ruta hace fallar el despliegue.
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingRateLimit: 50
+          ThrottlingBurstLimit: 100
+        RouteSettings:
+          # Crear compras reserva aforo: la ruta más barata de abusar.
+          'POST /api/compras':
+            ThrottlingRateLimit: 5
+            ThrottlingBurstLimit: 10
+          'GET /api/compras/{compraId}/estado':
+            ThrottlingRateLimit: 20
+            ThrottlingBurstLimit: 40
+          'POST /api/comprobantes/{token}/url-carga':
+            ThrottlingRateLimit: 5
+            ThrottlingBurstLimit: 10
+          'POST /api/comprobantes/{token}/confirmar':
+            ThrottlingRateLimit: 5
+            ThrottlingBurstLimit: 10
+          'POST /api/aprobaciones/{token}/aprobar':
+            ThrottlingRateLimit: 5
+            ThrottlingBurstLimit: 10
+          'POST /api/aprobaciones/{token}/rechazar':
+            ThrottlingRateLimit: 5
+            ThrottlingBurstLimit: 10
+          'GET /api/boletas/{codigo}':
+            ThrottlingRateLimit: 20
+            ThrottlingBurstLimit: 40
+
   Conditions:
     # Dominio personalizado solo en production (roadmap #17, TODO.md) —
     # staging sigue con la URL plana de API Gateway, sin cambios.
