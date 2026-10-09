@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "project": "agora",
+  "confirmed": true,
+  "level": 2,
+  "signals": {
+    "pii": true,
+    "payments": true
+  },
+  "signal_evidence": {
+    "pii": [
+      {
+        "file": "CLAUDE.md:89",
+        "match": "datos personales"
+      },
+      {
+        "file": "CLAUDE.md:89",
+        "match": "datos personales"
+      },
+      {
+        "file": "CLAUDE.md:99",
+        "match": "datos personales"
+      }
+    ],
+    "payments": [
+      {
+        "file": "CLAUDE.md:47",
+        "match": "Pasarela de pagos"
+      },
+      {
+        "file": "CLAUDE.md:47",
+        "match": "Bold"
+      },
+      {
+        "file": "CLAUDE.md:47",
+        "match": "link de pagos"
+      }
+    ]
+  },
+  "facets": [
+    "baseline",
+    "angular-spa",
+    "node-backend",
+    "serverless-aws",
+    "firebase",
+    "iac",
+    "ci-cd"
+  ],
+  "facets_disabled": [],
+  "exclude_paths": [],
+  "accepted": [],
+  "live": {
+    "urls": [
+      {
+        "url": "https://agora.letiende.co"
+      }
+    ],
+    "aws": {
+      "profile": null,
+      "region": "us-east-1"
+    }
+  },
+  "confirmed_at": "2026-10-09"
+}
