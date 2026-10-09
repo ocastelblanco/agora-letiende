@@ -66,3 +66,15 @@ Thumbs.db
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Llaves y cuentas de servicio (CLAUDE.md §5, A02 — hallazgo BASE-03 de la
+# auditoría OWASP del 09/10/2026)
+*.pem
+*.key
+firebase-service-account*.json
+
+# Auditoría OWASP: los reportes describen debilidades reales y este
+# repositorio es público. Solo se versiona el perfil (.owasp/profile.json).
+/audit/
+/.owasp/*
+!/.owasp/profile.json
