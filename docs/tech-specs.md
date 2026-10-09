@@ -686,7 +686,7 @@ Un token de aprobación otorga la capacidad de aprobar **esa compra específica*
 | Endpoint | Protección |
 |---|---|
 | `GET /api/eventos-publicos*` | Solo lectura, sin datos personales. CORS abierto |
-| `POST /api/compras` | Límite de tasa por IP, validación de tamaño, precio calculado en servidor, CORS restringido al origen de la app |
+| `POST /api/compras` | Límite de tasa por ruta (stage de la HTTP API, `serverless.yml`), validación de tamaño, precio calculado en servidor, CORS restringido al origen de la app |
 | `GET /api/boletas/:codigo` | Firma HMAC obligatoria; devuelve solo lo necesario para mostrar la boleta |
 | `POST /api/comprobantes/*` | Token de un solo uso; URL prefirmada de S3 con tipo MIME y tamaño acotados |
 
