@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ErrorConsultaBold, consultarNotificacionesBold, firmarBoton, montoCoincide, verificarFirmaWebhook } from './bold';
+import { ErrorConsultaBold, consultarPagoBold, firmarBoton, montoCoincide, verificarFirmaWebhook } from './bold';
 
 const LLAVE_SECRETA_ORIGINAL = process.env['BOLD_LLAVE_SECRETA'];
 
@@ -122,7 +122,7 @@ describe('montoCoincide', () => {
   });
 });
 
-describe('consultarNotificacionesBold', () => {
+describe('consultarPagoBold (consulta de transacciones del Botón de pagos)', () => {
   const fetchOriginal = globalThis.fetch;
   const llaveOriginal = process.env['BOLD_LLAVE_IDENTIDAD'];
   const fetchMock = vi.fn();
@@ -142,42 +142,49 @@ describe('consultarNotificacionesBold', () => {
     }
   });
 
-  it('consulta por referencia externa, con host fijo y la llave de identidad', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ notifications: [{ type: 'SALE_APPROVED' }] }) });
+  it('consulta payment-voucher por el identificador de la venta, con host fijo y la llave de identidad', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ payment_status: 'APPROVED', total: 90000, reference_id: 'compra-1', transaction_id: 'TX1', payer_email: 'pagador@correo.com' }),
+    });
 
-    const resultado = await consultarNotificacionesBold('compra/../1', 3000);
+    const comprobante = await consultarPagoBold('compra/../1', 1500);
 
     const [url, opciones] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string>; signal: AbortSignal }];
-    expect(url).toBe('https://integrations.api.bold.co/payments/webhook/notifications/compra%2F..%2F1?is_external_reference=true');
+    expect(url).toBe('https://payments.api.bold.co/v2/payment-voucher/compra%2F..%2F1');
     expect(opciones.headers['Authorization']).toBe('x-api-key llave-identidad-de-prueba');
     expect(opciones.signal).toBeInstanceOf(AbortSignal);
-    expect(resultado).toEqual([{ type: 'SALE_APPROVED' }]);
+    // Solo los campos que Ágora usa: nunca el correo del pagador.
+    expect(comprobante).toEqual({ payment_status: 'APPROVED', total: 90000, reference_id: 'compra-1', transaction_id: 'TX1' });
   });
 
-  it('devuelve una lista vacía si la respuesta no trae notifications', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+  it('lanza ErrorConsultaBold si la respuesta no trae payment_status', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ total: 90000 }) });
 
-    expect(await consultarNotificacionesBold('compra-1', 3000)).toEqual([]);
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toBeInstanceOf(ErrorConsultaBold);
   });
 
   it('lanza ErrorConsultaBold sin llamar a Bold si falta la llave de identidad', async () => {
     delete process.env['BOLD_LLAVE_IDENTIDAD'];
 
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toBeInstanceOf(ErrorConsultaBold);
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toBeInstanceOf(ErrorConsultaBold);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('lanza ErrorConsultaBold si Bold responde con error, falla la red o vence el tiempo', async () => {
+  it('distingue credenciales rechazadas (401/403) de caídas de Bold (5xx, red, tiempo)', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) });
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toMatchObject({ estadoHttp: 401, esDeAutorizacion: true });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 401, esDeAutorizacion: true });
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({}) });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 403, esDeAutorizacion: true });
 
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toMatchObject({ estadoHttp: 500, esDeAutorizacion: false });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 500, esDeAutorizacion: false });
 
     fetchMock.mockRejectedValueOnce(new Error('red caída'));
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toMatchObject({ estadoHttp: undefined, esDeAutorizacion: false });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: undefined, esDeAutorizacion: false });
 
     fetchMock.mockRejectedValueOnce(new DOMException('Tiempo agotado', 'TimeoutError'));
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toBeInstanceOf(ErrorConsultaBold);
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ message: 'No se pudo consultar a Bold (TimeoutError)' });
   });
 });

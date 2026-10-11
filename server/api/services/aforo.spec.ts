@@ -164,13 +164,13 @@ describe('reservarSillas', () => {
       globalThis.fetch = fetchOriginal;
     });
 
-    it('consulta el endpoint de reconciliación por la referencia externa (compraId) — el bloqueo del payment_id no aplica: is_external_reference=true lo evita', async () => {
+    it('consulta la transacción del Botón de pagos por el compraId (payment-voucher)', async () => {
       sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException()); // 1. intento inicial
       sendMock.mockResolvedValueOnce({ Items: [] }); // 2. esperando_comprobante: ninguna
       sendMock.mockResolvedValueOnce({
         Items: [{ compraId: 'compra-bold-1', eventoId: 'evt-1', cantidad: 1, estado: 'esperando_pago_bold' }],
       }); // 3. esperando_pago_bold: una vencida
-      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ notifications: [] }) });
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ payment_status: 'NO_TRANSACTION_FOUND' }) });
       sendMock.mockResolvedValueOnce({}); // 4. marca expirada
       sendMock.mockResolvedValueOnce({}); // 5. liberarSillas
       sendMock.mockResolvedValueOnce({}); // 6. reintento exitoso
@@ -179,18 +179,17 @@ describe('reservarSillas', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, opciones] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string> }];
-      expect(url).toContain('/payments/webhook/notifications/compra-bold-1');
-      expect(url).toContain('is_external_reference=true');
+      expect(url).toBe('https://payments.api.bold.co/v2/payment-voucher/compra-bold-1');
       expect(opciones.headers['Authorization']).toBe('x-api-key llave-identidad-test');
     });
 
-    it('NO expira una reserva esperando_pago_bold si la reconciliación encuentra un SALE_APPROVED (evita perder una venta real)', async () => {
+    it('NO expira una reserva esperando_pago_bold si Bold dice APPROVED (evita perder una venta real)', async () => {
       sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException()); // 1. intento inicial
       sendMock.mockResolvedValueOnce({ Items: [] }); // 2. esperando_comprobante: ninguna
       sendMock.mockResolvedValueOnce({
         Items: [{ compraId: 'compra-bold-1', eventoId: 'evt-1', cantidad: 1, estado: 'esperando_pago_bold' }],
       }); // 3. esperando_pago_bold: una vencida
-      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ notifications: [{ type: 'SALE_APPROVED' }] }) });
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ payment_status: 'APPROVED' }) });
       sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException()); // 4. reintento (todavía sin aforo)
       sendMock.mockResolvedValueOnce({ Item: { estado: 'publicado', sillasDisponibles: 0 } }); // 5. clasificación
 
@@ -202,13 +201,13 @@ describe('reservarSillas', () => {
       expect(sendMock).toHaveBeenCalledTimes(5);
     });
 
-    it('expira normalmente si la reconciliación confirma que no hay un SALE_APPROVED', async () => {
+    it('expira normalmente si Bold dice REJECTED', async () => {
       sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
       sendMock.mockResolvedValueOnce({ Items: [] });
       sendMock.mockResolvedValueOnce({
         Items: [{ compraId: 'compra-bold-1', eventoId: 'evt-1', cantidad: 3, estado: 'esperando_pago_bold' }],
       });
-      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ notifications: [{ type: 'SALE_REJECTED' }] }) });
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ payment_status: 'REJECTED' }) });
       sendMock.mockResolvedValueOnce({}); // marca expirada
       sendMock.mockResolvedValueOnce({}); // liberarSillas
       sendMock.mockResolvedValueOnce({}); // reintento exitoso
@@ -223,6 +222,22 @@ describe('reservarSillas', () => {
       });
       const comandoLibera = sendMock.mock.calls[4]?.[0];
       expect(comandoLibera.input).toMatchObject({ ExpressionAttributeValues: { ':n': 3 } });
+    });
+
+    it.each(['PROCESSING', 'PENDING'])('NO expira si Bold dice %s (pago en curso, p. ej. PSE)', async (estado) => {
+      sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+      sendMock.mockResolvedValueOnce({ Items: [] });
+      sendMock.mockResolvedValueOnce({
+        Items: [{ compraId: 'compra-bold-1', eventoId: 'evt-1', cantidad: 1, estado: 'esperando_pago_bold' }],
+      });
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ payment_status: estado }) });
+      sendMock.mockRejectedValueOnce(new ConditionalCheckFailedException());
+      sendMock.mockResolvedValueOnce({ Item: { estado: 'publicado', sillasDisponibles: 0 } });
+
+      const error = await reservarSillas('evt-1', 1).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(AforoInsuficienteError);
+      expect(sendMock).toHaveBeenCalledTimes(5);
     });
 
     it('NO expira (conservador) si la consulta de reconciliación falla — nunca arriesga una venta real por un fallo de red transitorio', async () => {

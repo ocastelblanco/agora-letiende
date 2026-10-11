@@ -6,7 +6,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
  * de separación que `lib/firma-boletas.ts`/`lib/enlaces-magicos.ts`). Sin
  * llamadas a AWS ni a DynamoDB aquí: `handlers/compras.ts` la usa para
  * firmar el botón, `handlers/bold-webhook.ts` para verificar la firma
- * entrante. La consulta HTTP de conciliación (`consultarNotificacionesBold`)
+ * entrante. La consulta HTTP de conciliación (`consultarPagoBold`)
  * es la única función de este archivo con I/O de red (ninguna toca AWS ni
  * DynamoDB); la usan `handlers/bold-webhook.ts` y `services/aforo.ts`.
  *
@@ -89,7 +89,7 @@ export interface NotificacionBold {
   };
 }
 
-const BASE_URL_API_BOLD = 'https://integrations.api.bold.co';
+const BASE_URL_PAGOS_BOLD = 'https://payments.api.bold.co';
 
 /** La consulta de conciliación no se pudo completar (red, timeout, credenciales o respuesta no válida). */
 export class ErrorConsultaBold extends Error {
@@ -101,36 +101,55 @@ export class ErrorConsultaBold extends Error {
     super(mensaje);
   }
 
-  /**
-   * Bold rechazó las credenciales (401/403): las llaves de Ágora no tienen
-   * acceso al servicio de consulta. La documentación exige llaves de API
-   * Datáfono para él (https://developers.bold.co/webhook) y Ágora usa las del
-   * Botón de pagos. Es un problema de configuración, no una caída de Bold.
-   */
+  /** Bold rechazó las credenciales (401/403): es un problema de configuración, no una caída de Bold. */
   get esDeAutorizacion(): boolean {
     return this.estadoHttp === 401 || this.estadoHttp === 403;
   }
 }
 
+/** Valores de `payment_status` documentados por Bold para la consulta del Botón de pagos. */
+export type EstadoPagoBold =
+  | 'NO_TRANSACTION_FOUND'
+  | 'PROCESSING'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'VOIDED';
+
 /**
- * Consulta de conciliación de Bold (`GET /payments/webhook/notifications/
- * {referencia}?is_external_reference=true`, https://developers.bold.co/webhook):
- * devuelve las notificaciones de la compra, como máximo 10. La referencia
- * externa es el `compraId` que Ágora le envió a Bold como `data-order-id`.
- * Host fijo en código (`CLAUDE.md` §5, A10); falla cerrado: sin llave de
- * identidad, con una respuesta no `ok` o ante cualquier error de red lanza
- * `ErrorConsultaBold` en vez de devolver una lista vacía que parezca «sin pagos».
+ * Lo que Ágora lee de la consulta. Bold devuelve más campos (`payer_email`,
+ * `description`…) que no se usan ni se registran nunca.
  */
-export async function consultarNotificacionesBold(
-  referenciaExterna: string,
-  timeoutMs: number,
-): Promise<NotificacionBold[]> {
+export interface ComprobantePagoBold {
+  payment_status: string;
+  total?: unknown;
+  reference_id?: unknown;
+  transaction_id?: unknown;
+}
+
+/**
+ * Consulta de transacciones del Botón de pagos
+ * (https://developers.bold.co/pagos-en-linea/consulta-de-transacciones, verificado
+ * el 11/10/2026): `GET /v2/payment-voucher/{identificador único de la venta}`,
+ * que es el `data-order-id` que Ágora envía al renderizar el botón (el
+ * `compraId`). Usa la llave de identidad del Botón de pagos. Reemplaza al
+ * «servicio de fallback» del webhook (`integrations.api.bold.co`), que es de
+ * API Integrations (datáfono) y respondía 403 con las llaves del botón.
+ *
+ * Bold advierte que una venta «aparecerá disponible para consulta en hasta 10
+ * minutos»: un `NO_TRANSACTION_FOUND` justo después del pago no prueba que no
+ * hubo pago. Host fijo en código (`CLAUDE.md` §5, A10). Falla cerrado: sin llave,
+ * con una respuesta no `ok`, un cuerpo sin `payment_status` o cualquier error de
+ * red lanza `ErrorConsultaBold`.
+ */
+export async function consultarPagoBold(identificadorVenta: string, timeoutMs: number): Promise<ComprobantePagoBold> {
   const llaveIdentidad = process.env['BOLD_LLAVE_IDENTIDAD'] ?? '';
   if (!llaveIdentidad) {
     throw new ErrorConsultaBold('Falta BOLD_LLAVE_IDENTIDAD');
   }
   try {
-    const url = `${BASE_URL_API_BOLD}/payments/webhook/notifications/${encodeURIComponent(referenciaExterna)}?is_external_reference=true`;
+    const url = `${BASE_URL_PAGOS_BOLD}/v2/payment-voucher/${encodeURIComponent(identificadorVenta)}`;
     const respuesta = await fetch(url, {
       headers: { Authorization: `x-api-key ${llaveIdentidad}` },
       signal: AbortSignal.timeout(timeoutMs),
@@ -138,8 +157,17 @@ export async function consultarNotificacionesBold(
     if (!respuesta.ok) {
       throw new ErrorConsultaBold(`Bold respondió ${respuesta.status}`, respuesta.status);
     }
-    const cuerpo = (await respuesta.json()) as { notifications?: NotificacionBold[] };
-    return Array.isArray(cuerpo.notifications) ? cuerpo.notifications : [];
+    const cuerpo = (await respuesta.json()) as unknown;
+    if (typeof cuerpo !== 'object' || cuerpo === null || typeof (cuerpo as { payment_status?: unknown }).payment_status !== 'string') {
+      throw new ErrorConsultaBold('Respuesta de Bold sin payment_status');
+    }
+    const datos = cuerpo as Record<string, unknown>;
+    return {
+      payment_status: datos['payment_status'] as string,
+      total: datos['total'],
+      reference_id: datos['reference_id'],
+      transaction_id: datos['transaction_id'],
+    };
   } catch (error) {
     // Solo el tipo de error (TimeoutError, TypeError…), nunca su mensaje: podría incluir la URL.
     throw error instanceof ErrorConsultaBold
