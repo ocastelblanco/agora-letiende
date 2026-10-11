@@ -6,9 +6,9 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
  * de separación que `lib/firma-boletas.ts`/`lib/enlaces-magicos.ts`). Sin
  * llamadas a AWS ni a DynamoDB aquí: `handlers/compras.ts` la usa para
  * firmar el botón, `handlers/bold-webhook.ts` para verificar la firma
- * entrante. La consulta HTTP de reconciliación (decisión 4 del plan) vive en
- * `services/aforo.ts`, su único consumidor — no aquí, para mantener este
- * archivo libre de I/O de red además de AWS/DynamoDB.
+ * entrante. La consulta HTTP de conciliación (`consultarNotificacionesBold`)
+ * es la única función de este archivo con I/O de red (ninguna toca AWS ni
+ * DynamoDB); la usan `handlers/bold-webhook.ts` y `services/aforo.ts`.
  *
  * Verificado hoy (25/08/2026) contra la documentación oficial de Bold —
  * https://developers.bold.co/pagos-en-linea/boton-de-pagos/integracion-manual/integracion-manual
@@ -81,7 +81,58 @@ export interface NotificacionBold {
     // renderizar el botón (handlers/compras.ts) — el vínculo entre la
     // notificación de Bold y la compra real en agora-compras.
     metadata: { reference: string };
-    amount: { total: number; currency: string };
+    // `currency` es opcional a propósito: la documentación de Bold lo lista en
+    // la tabla de campos pero el ejemplo de la respuesta de consulta no lo
+    // incluye (https://developers.bold.co/webhook) — solo se exige cuando viene.
+    amount: { total: number; currency?: string };
     payment_method?: string;
   };
+}
+
+const BASE_URL_API_BOLD = 'https://integrations.api.bold.co';
+
+/** La consulta de conciliación no se pudo completar (red, timeout, credenciales o respuesta no válida). */
+export class ErrorConsultaBold extends Error {}
+
+/**
+ * Consulta de conciliación de Bold (`GET /payments/webhook/notifications/
+ * {referencia}?is_external_reference=true`, https://developers.bold.co/webhook):
+ * devuelve las notificaciones de la compra, como máximo 10. La referencia
+ * externa es el `compraId` que Ágora le envió a Bold como `data-order-id`.
+ * Host fijo en código (`CLAUDE.md` §5, A10); falla cerrado: sin llave de
+ * identidad, con una respuesta no `ok` o ante cualquier error de red lanza
+ * `ErrorConsultaBold` en vez de devolver una lista vacía que parezca «sin pagos».
+ */
+export async function consultarNotificacionesBold(
+  referenciaExterna: string,
+  timeoutMs: number,
+): Promise<NotificacionBold[]> {
+  const llaveIdentidad = process.env['BOLD_LLAVE_IDENTIDAD'] ?? '';
+  if (!llaveIdentidad) {
+    throw new ErrorConsultaBold('Falta BOLD_LLAVE_IDENTIDAD');
+  }
+  try {
+    const url = `${BASE_URL_API_BOLD}/payments/webhook/notifications/${encodeURIComponent(referenciaExterna)}?is_external_reference=true`;
+    const respuesta = await fetch(url, {
+      headers: { Authorization: `x-api-key ${llaveIdentidad}` },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!respuesta.ok) {
+      throw new ErrorConsultaBold(`Bold respondió ${respuesta.status}`);
+    }
+    const cuerpo = (await respuesta.json()) as { notifications?: NotificacionBold[] };
+    return Array.isArray(cuerpo.notifications) ? cuerpo.notifications : [];
+  } catch (error) {
+    throw error instanceof ErrorConsultaBold ? error : new ErrorConsultaBold('No se pudo consultar a Bold');
+  }
+}
+
+const MONEDA_ESPERADA = 'COP';
+
+/** Monto en pesos enteros y, si Bold informa la moneda, que sea COP. Nunca coerciona tipos. */
+export function montoCoincide(amount: { total?: unknown; currency?: unknown } | undefined, montoEsperado: number): boolean {
+  if (!amount || typeof amount.total !== 'number' || amount.total !== montoEsperado) {
+    return false;
+  }
+  return amount.currency === undefined || amount.currency === MONEDA_ESPERADA;
 }

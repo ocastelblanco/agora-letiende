@@ -316,6 +316,9 @@ functions:
       SECRETO_FIRMA_BOLETAS: ${env:SECRETO_FIRMA_BOLETAS, ''}
       SES_REMITENTE: ${env:SES_REMITENTE, ''}
       BOLD_LLAVE_SECRETA: ${env:BOLD_LLAVE_SECRETA, ''}
+      # Conciliación contra la API de Bold antes de aprobar un pago
+      # (consultarNotificacionesBold, services/bold.ts).
+      BOLD_LLAVE_IDENTIDAD: ${env:BOLD_LLAVE_IDENTIDAD, ''}
       # 'true' en staging (llaves de prueba reales de Bold, que firman el
       # webhook con una llave vacía en vez de BOLD_LLAVE_SECRETA — hallazgo
       # verificado, services/bold.ts), 'false' en production.

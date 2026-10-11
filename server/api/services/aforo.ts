@@ -1,6 +1,6 @@
 import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from './dynamodb';
-import type { NotificacionBold } from './bold';
+import { consultarNotificacionesBold } from './bold';
 
 /**
  * Las tres primitivas de escritura condicional del ciclo de vida del aforo
@@ -159,8 +159,6 @@ async function expirarYLiberar(
   }
 }
 
-const BASE_URL_RECONCILIACION_BOLD = 'https://integrations.api.bold.co';
-
 /**
  * Bold (roadmap #19, Sub-tarea 1, decisión 4 del plan aprobado en
  * `.omc/plans/bold-pagos.md`) — antes de expirar una compra
@@ -202,8 +200,6 @@ const BASE_URL_RECONCILIACION_BOLD = 'https://integrations.api.bold.co';
  */
 async function esSeguroExpirarReservaBold(compraId: string): Promise<boolean> {
   try {
-    const llaveIdentidad = process.env['BOLD_LLAVE_IDENTIDAD'] ?? '';
-    const url = `${BASE_URL_RECONCILIACION_BOLD}/payments/webhook/notifications/${encodeURIComponent(compraId)}?is_external_reference=true`;
     // Timeout corto y explícito (hallazgo de revisión de seguridad,
     // 25/08/2026): esta consulta ocurre en el camino síncrono de
     // reservarSillas() — sin límite propio, una API de Bold lenta o caída
@@ -212,18 +208,8 @@ async function esSeguroExpirarReservaBold(compraId: string): Promise<boolean> {
     // estaba compitiendo por la misma silla. Es un chequeo best-effort (el
     // catch de abajo ya trata cualquier fallo como "no seguro expirar"), así
     // que 3s deja margen de sobra sin arriesgar el resto de la función.
-    const respuesta = await fetch(url, {
-      headers: { Authorization: `x-api-key ${llaveIdentidad}` },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!respuesta.ok) {
-      return false;
-    }
-    const cuerpo = (await respuesta.json()) as { notifications?: Pick<NotificacionBold, 'type'>[] };
-    const hayPagoAprobado = (cuerpo.notifications ?? []).some(
-      (notificacion) => notificacion.type === 'SALE_APPROVED',
-    );
-    return !hayPagoAprobado;
+    const notificaciones = await consultarNotificacionesBold(compraId, 3000);
+    return !notificaciones.some((notificacion) => notificacion.type === 'SALE_APPROVED');
   } catch {
     return false;
   }

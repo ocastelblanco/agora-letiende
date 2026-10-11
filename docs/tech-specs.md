@@ -418,7 +418,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | POST | `/api/usuarios` | Administrador | Crea usuario | `{ email, nombre, rol }` |
 | PUT | `/api/usuarios/:email` | Administrador | Edita usuario | `{ nombre?, rol?, activo? }` |
 | DELETE | `/api/usuarios/:email` | Administrador | Elimina usuario | — |
-| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago, **con firma verificada y reconciliada** | Payload de Bold |
+| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago: firma HMAC verificada; en `SALE_APPROVED`, además el monto y la moneda deben coincidir con la compra y el pago se concilia contra la API de Bold antes de aprobar (`422` monto distinto, `409` no conciliado, `503` Bold no responde y Bold reintenta) | Payload de Bold |
 
 ### 5.2 Tablas de DynamoDB
 

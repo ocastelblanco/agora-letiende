@@ -5,7 +5,13 @@ import type {
 } from 'aws-lambda';
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
-import { verificarFirmaWebhook, type NotificacionBold } from '../services/bold';
+import {
+  ErrorConsultaBold,
+  consultarNotificacionesBold,
+  montoCoincide,
+  verificarFirmaWebhook,
+  type NotificacionBold,
+} from '../services/bold';
 import { ErrorAforo, confirmarSillas, liberarSillas } from '../services/aforo';
 import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
@@ -58,6 +64,52 @@ function leerCuerpoCrudo(evento: APIGatewayProxyEventV2): string {
 function leerFirmaRecibida(evento: APIGatewayProxyEventV2): string | undefined {
   const encabezados = evento.headers ?? {};
   return encabezados['x-bold-signature'] ?? encabezados['X-Bold-Signature'];
+}
+
+/**
+ * Timeout de la consulta de conciliación. El webhook corre en una Lambda de
+ * 10 s: 4 s dejan margen para aprobar, emitir boletas y enviar el correo.
+ */
+const TIMEOUT_CONCILIACION_MS = 4000;
+
+type ResultadoVerificacionPago = 'ok' | 'monto_no_coincide' | 'no_conciliado' | 'bold_no_disponible';
+
+/**
+ * Verificaciones previas a aprobar un pago (`CLAUDE.md` §5, A08): una firma
+ * válida prueba que la notificación viene de Bold, no que el monto sea el de
+ * la compra ni que el pago exista. (1) El monto y la moneda del payload deben
+ * coincidir con `montoTotal` de la compra, calculado en el backend. (2) Se
+ * concilia contra la API de Bold: debe existir un `SALE_APPROVED` de esa
+ * referencia, con el mismo `payment_id` y el mismo monto. Falla cerrado: si
+ * Bold no responde, no se aprueba (el webhook responde 5xx y Bold reintenta).
+ */
+async function verificarPagoAprobado(
+  compra: CompraParaWebhookBold,
+  payload: NotificacionBold,
+): Promise<ResultadoVerificacionPago> {
+  if (!montoCoincide(payload.data?.amount, compra.montoTotal)) {
+    return 'monto_no_coincide';
+  }
+
+  let notificaciones: NotificacionBold[];
+  try {
+    notificaciones = await consultarNotificacionesBold(compra.compraId, TIMEOUT_CONCILIACION_MS);
+  } catch (error) {
+    if (error instanceof ErrorConsultaBold) {
+      return 'bold_no_disponible';
+    }
+    throw error;
+  }
+
+  const paymentIdRecibido = payload.data.payment_id;
+  const conciliado = notificaciones.some(
+    (notificacion) =>
+      notificacion.type === 'SALE_APPROVED' &&
+      notificacion.data?.metadata?.reference === compra.compraId &&
+      (paymentIdRecibido === undefined || notificacion.data.payment_id === paymentIdRecibido) &&
+      montoCoincide(notificacion.data.amount, compra.montoTotal),
+  );
+  return conciliado ? 'ok' : 'no_conciliado';
 }
 
 /**
@@ -225,6 +277,27 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
   }
 
   if (payload.type === 'SALE_APPROVED') {
+    // Reintento de Bold sobre una compra ya resuelta: 200 sin gastar una
+    // consulta a Bold (la escritura condicional de más abajo sigue siendo la
+    // autoridad contra la doble emisión).
+    if (compra.estado !== 'esperando_pago_bold') {
+      return respuestaJson(200, { recibido: true });
+    }
+
+    const verificacion = await verificarPagoAprobado(compra, payload);
+    // Solo el compraId en los logs, nunca datos del cliente (CLAUDE.md §5, A09).
+    if (verificacion === 'monto_no_coincide') {
+      console.error('Webhook de Bold: el monto o la moneda no coinciden con la compra', { compraId: compra.compraId });
+      return respuestaJson(422, { mensaje: 'El monto no coincide con la compra' });
+    }
+    if (verificacion === 'no_conciliado') {
+      console.error('Webhook de Bold: el pago no aparece aprobado en la conciliación', { compraId: compra.compraId });
+      return respuestaJson(409, { mensaje: 'El pago no pudo conciliarse' });
+    }
+    if (verificacion === 'bold_no_disponible') {
+      console.error('Webhook de Bold: no se pudo consultar a Bold para conciliar', { compraId: compra.compraId });
+      return respuestaJson(503, { mensaje: 'No se pudo conciliar el pago, reintenta' });
+    }
     return await procesarPagoAprobado(compra);
   }
   if (payload.type === 'SALE_REJECTED') {
