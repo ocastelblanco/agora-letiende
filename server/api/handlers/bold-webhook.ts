@@ -86,8 +86,16 @@ type ResultadoVerificacionPago = 'ok' | 'monto_no_coincide' | 'no_conciliado' | 
 async function verificarPagoAprobado(
   compra: CompraParaWebhookBold,
   payload: NotificacionBold,
+  modoPruebas: boolean,
 ): Promise<ResultadoVerificacionPago> {
-  if (!montoCoincide(payload.data?.amount, compra.montoTotal)) {
+  // El sandbox de Bold informa `amount.total: 0` en sus webhooks aunque la
+  // compra sea de 30.000 (observado con el webhook real en staging el
+  // 10/10/2026: `{ currency: 'COP', total: 0, taxes: [], tip: 0 }`, no
+  // documentado). Solo en modo pruebas se omite la comparación de monto; la
+  // conciliación contra la API de Bold se exige siempre. En producción
+  // (`BOLD_MODO_PRUEBAS=false`) la comparación es estricta.
+  const comparaMonto = !modoPruebas;
+  if (comparaMonto && !montoCoincide(payload.data?.amount, compra.montoTotal)) {
     return 'monto_no_coincide';
   }
 
@@ -107,7 +115,7 @@ async function verificarPagoAprobado(
       notificacion.type === 'SALE_APPROVED' &&
       notificacion.data?.metadata?.reference === compra.compraId &&
       (paymentIdRecibido === undefined || notificacion.data.payment_id === paymentIdRecibido) &&
-      montoCoincide(notificacion.data.amount, compra.montoTotal),
+      (!comparaMonto || montoCoincide(notificacion.data.amount, compra.montoTotal)),
   );
   return conciliado ? 'ok' : 'no_conciliado';
 }
@@ -284,7 +292,7 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
       return respuestaJson(200, { recibido: true });
     }
 
-    const verificacion = await verificarPagoAprobado(compra, payload);
+    const verificacion = await verificarPagoAprobado(compra, payload, modoPruebas);
     // Solo el compraId en los logs, nunca datos del cliente (CLAUDE.md §5, A09).
     if (verificacion === 'monto_no_coincide') {
       // `amount` (total, moneda, impuestos, propina) y el monto esperado son

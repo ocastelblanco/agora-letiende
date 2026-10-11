@@ -347,6 +347,39 @@ describe('POST /api/pagos/bold/webhook — verificación del monto y conciliaci�
     expect(respuesta.statusCode).toBe(503);
   });
 
+  it('en modo pruebas (sandbox, que informa total 0) omite la comparación de monto pero sigue exigiendo la conciliación', async () => {
+    process.env['BOLD_MODO_PRUEBAS'] = 'true';
+    try {
+      const sandbox = { ...pagoAprobadoBold, data: { ...pagoAprobadoBold.data, amount: { currency: 'COP', total: 0, taxes: [], tip: 0 } } };
+      consultarNotificacionesBoldMock.mockResolvedValue([sandbox]);
+      sendMock.mockResolvedValueOnce({ Item: compraEsperandoPago }).mockResolvedValueOnce({}).mockResolvedValueOnce({ Item: { nombre: 'Concierto' } });
+
+      const aprobada = await invocar({ cuerpo: sandbox, firma: 'firma-valida' });
+      expect(aprobada.statusCode).toBe(200);
+      expect(emitirBoletasMock).toHaveBeenCalledTimes(1);
+
+      // Sin un SALE_APPROVED en la conciliación, ni siquiera en modo pruebas se aprueba.
+      emitirBoletasMock.mockClear();
+      confirmarSillasMock.mockClear();
+      enviarMock.mockClear();
+      sendMock.mockReset();
+      consultarNotificacionesBoldMock.mockResolvedValue([]);
+      const sinConciliar = await invocarYVerificarQueNoSeAprueba(sandbox);
+      expect(sinConciliar.statusCode).toBe(409);
+    } finally {
+      delete process.env['BOLD_MODO_PRUEBAS'];
+    }
+  });
+
+  it('en producción (BOLD_MODO_PRUEBAS distinto de true) un total 0 se rechaza aunque la conciliación lo confirme', async () => {
+    const cero = { ...pagoAprobadoBold, data: { ...pagoAprobadoBold.data, amount: { currency: 'COP', total: 0, taxes: [], tip: 0 } } };
+    consultarNotificacionesBoldMock.mockResolvedValue([cero]);
+
+    const respuesta = await invocarYVerificarQueNoSeAprueba(cero);
+
+    expect(respuesta.statusCode).toBe(422);
+  });
+
   it('aprueba si la conciliación no informa la moneda (la documentación de Bold la omite en esa respuesta)', async () => {
     consultarNotificacionesBoldMock.mockResolvedValue([
       { ...pagoAprobadoBold, data: { ...pagoAprobadoBold.data, amount: { total: 90000 } } },
