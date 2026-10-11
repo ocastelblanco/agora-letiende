@@ -21,7 +21,7 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 09/10/2026 — Límite de tasa por ruta en el stage de la HTTP API (PR #92): verificado en staging con `GetStage` y una ráfaga real; producción lo recibe al fusionar. |
+| **Última sesión** | 10/10/2026 — Límite de tasa verificado en producción (PR #92) y actualización de dependencias (Angular 22.2.2, `firebase-admin` 14.5, `serverless` 4.43). |
 
 ---
 
@@ -71,7 +71,8 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 - [x] Auditoría de producción pre-lanzamiento y Dominio personalizado como hotfix urgente (14/08/2026, pedido directo del usuario tras fusionar el PR #42 — "alista todo para el paso a producción", lanzamiento esa misma tarde — **PR #43 fusionado, Ágora en producción**): antes de tocar código se auditó el estado real de producción por CLI (no el IaC ni las notas de sesiones anteriores) — el stack `agora-letiende-production` se despliega automáticamente en cada merge a `main` (`.github/workflows/deploy.yml`, job `desplegar-produccion`) y ya estaba al día; las 5 tablas DynamoDB en `PAY_PER_REQUEST` y vacías; los 4 secretos por-ambiente (`SES_REMITENTE`, `URL_BASE_APP`, `SECRETO_ENLACES_MAGICOS`, `SECRETO_FIRMA_BOLETAS`) ya existían en el entorno `production` de GitHub, creados el 08-09/08/2026 junto con los de `staging`. **Tres gaps reales encontrados y corregidos, ninguno teórico:** (1) `agora-usuarios-production` tenía **0 ítems** — nadie podía operar el sistema en producción, ni siquiera con sesión de Firebase válida (proyecto compartido, autorización de Ágora independiente, `CLAUDE.md` §5 A01); se agregó `ocastelblanco@gmail.com` como `administrador` con `aws dynamodb put-item` (`ConditionExpression: attribute_not_exists(email)`), autorizado explícitamente por el usuario. (2) El secreto `SES_REMITENTE` de `production` tenía **un espacio al inicio** (`" taquilla@letiende.co"`, confirmado comparando contra el valor real desplegado en la Lambda de `staging`, que no lo tenía) — habría roto el formato `"Taquilla Le Tiende" <correo>` recién desplegado en el PR #42, y posiblemente el envío mismo; corregido con `gh secret set SES_REMITENTE --env production`. (3) **`URL_BASE_APP` de producción ya apuntaba a `https://agora.letiende.co`** desde el 08/08/2026 — un dominio que todavía no existía; cualquier correo real (comprobante, aprobación, boletas) habría tenido un enlace roto desde el primer minuto de producción. Esto ascendió **Dominio personalizado** (roadmap #17, pausado en el Backlog) a hotfix urgente — decidido con el usuario (`AskUserQuestion`) montarlo esa misma sesión en vez de lanzar con la URL cruda de API Gateway. Implementación completa y decisión de arquitectura documentadas como **ADR-013** (ver arriba) — replica el patrón ya verificado en producción por **Babel** (`babel.letiende.co`, confirmado con `aws apigatewayv2 get-domain-name` antes de escribir una sola línea de `serverless.yml`, mismo criterio ya seguido para ADR-001/002/009/010): dominio directo de API Gateway HTTP API con certificado ACM regional, sin CloudFront, costo adicional verificado en **US$0** contra documentación oficial de AWS (no de memoria). `NG_ALLOWED_HOSTS` de la Lambda `ssr` agrega `agora.letiende.co` en el mismo cambio (gotcha de Babel, `CLAUDE.md` §7). Verificado sintetizando la plantilla compilada (`npx serverless package`) contra **ambos** stages antes de comitear: `staging` no genera ninguno de los cuatro recursos nuevos (`Condition: EsProduccion` evalúa `false`), `production` sí. Sin cambios de código de aplicación — 325 pruebas backend + 272 frontend siguen en verde, auditoría de costos sin coincidencias nuevas. **Verificación real tras el despliegue (14/08/2026, mismo día):** `aws acm list-certificates` confirmó `Status: ISSUED` (emitido en minutos, sin incidente); `curl https://agora.letiende.co/api/salud` → `200`, `{"estado":"ok","stage":"production",...}`; `curl -I https://agora.letiende.co/` → `200` con `ssl_verify_result: 0` (TLS válido). El usuario confirmó en vivo que el dominio funciona. **Ágora queda formalmente lanzada en producción**
 
 - [x] Boletería opcional — evento sin etapas no cobra, solo controla aforo (24/08/2026, roadmap #24, **PR #46, fusionado**): `server/api/handlers/eventos.ts` (`normalizarEtapas` admite `[]`; nueva regla que bloquea `bold` en `mediosPago` sin etapas, tanto al crear como al editar, con retirada automática de `bold` si un PUT vacía las etapas sin tocar `mediosPago` en el mismo payload). `server/api/handlers/compras.ts` gana `crearAdquisicionSinEtapas()` — reserva, confirma y emite boletas en la misma operación, sin comprobante ni aprobación del productor, generalizando el camino que hasta esta tarea rechazaba boletas gratuitas con `501` explícito. `ventas-efectivo.ts` recibe el mismo camino para la venta en taquilla. `boleteria.ts`/`reportes.ts`/`boletas.ts`: `etapaId` pasa a opcional, con etiqueta "Sin etapa (boletería sin cobro)" distinta de una etapa realmente eliminada. `vigencia-evento.ts`: la finalización de un evento sin etapas depende solo de `fechaHora`. Frontend: `EditarEventoComponent` inicia el `FormArray` de etapas vacío (antes precargaba una por defecto), permite bajar hasta 0, y deshabilita/fuerza en `false` el checkbox de Bold reactivamente mientras no haya etapas; `DetalleEventoComponent`/`ComprarComponent` muestran "Adquirir boletas" en vez de "Comprar boletas" y una confirmación de emisión inmediata en vez del mensaje de plazo de comprobante. 345 pruebas backend + 282 frontend en verde. **Bug real encontrado por el usuario en la primera prueba en vivo, corregido en el mismo PR (ver §7, 24/08/2026):** `crearAdquisicionSinEtapas()` empezó a depender de `emitirBoletas()`/`firmarCodigoBoleta()` (escritura sobre `agora-boletas`), pero `ComprasLambdaRole`/el `environment` de la función `compras` en `serverless.yml` nunca se actualizaron para esa dependencia nueva — la adquisición en línea respondía "0 boletas" sin correo, mientras la venta en efectivo (que ya tenía esos permisos desde antes) funcionaba bien. Corregido agregando `TABLA_BOLETAS`/`SECRETO_FIRMA_BOLETAS` al `environment` y una política IAM nueva (`dynamodb:PutItem` sobre `AgoraBoletas`) a `ComprasLambdaRole`, mismo patrón que `ventasEfectivo`. Tercera repetición de esta clase de bug en el proyecto (ver la lección en §7) — verificar `serverless.yml` contra cada dependencia nueva de una función existente, no solo de una función nueva. Ver §9 para la narrativa completa
-- [x] Límite de tasa por ruta en la HTTP API (09/10/2026, **PR #92**): `serverless.yml` extiende el `AWS::ApiGatewayV2::Stage` autogenerado con `resources.extensions.HttpApiStage` — `DefaultRouteSettings` de 50 rps con ráfaga de 100 y `RouteSettings` de 5 rps con ráfaga de 10 en `POST /api/compras`, `POST /api/comprobantes/{token}/url-carga` y `/confirmar`, `POST /api/aprobaciones/{token}/aprobar` y `/rechazar`; 20 rps con ráfaga de 40 en `GET /api/compras/{compraId}/estado` y `GET /api/boletas/{codigo}`. Cierra el gap de `POST /api/compras` documentado desde el 07/08/2026. Sin costo adicional (no usa WAF), por lo que el límite es por ruta y por stage, **no por IP**. Verificado en staging: `GetStage` muestra los límites y una ráfaga de 300 peticiones simultáneas por HTTP/2 a `POST /api/compras` recibió 147 `429` en la primera ronda y unos 270 en las siguientes. Se descartó `reservedConcurrency` por ahora (un tope bajo dejaría sin servicio a compradores legítimos en una preventa). Producción recibe el cambio al fusionar; verificar con `aws apigatewayv2 get-stage`. Build + 508 pruebas backend en verde.
+- [x] Límite de tasa por ruta en la HTTP API (09/10/2026, **PR #92**): `serverless.yml` extiende el `AWS::ApiGatewayV2::Stage` autogenerado con `resources.extensions.HttpApiStage` — `DefaultRouteSettings` de 50 rps con ráfaga de 100 y `RouteSettings` de 5 rps con ráfaga de 10 en `POST /api/compras`, `POST /api/comprobantes/{token}/url-carga` y `/confirmar`, `POST /api/aprobaciones/{token}/aprobar` y `/rechazar`; 20 rps con ráfaga de 40 en `GET /api/compras/{compraId}/estado` y `GET /api/boletas/{codigo}`. Cierra el gap de `POST /api/compras` documentado desde el 07/08/2026. Sin costo adicional (no usa WAF), por lo que el límite es por ruta y por stage, **no por IP**. Verificado en staging: `GetStage` muestra los límites y una ráfaga de 300 peticiones simultáneas por HTTP/2 a `POST /api/compras` recibió 147 `429` en la primera ronda y unos 270 en las siguientes. Se descartó `reservedConcurrency` por ahora (un tope bajo dejaría sin servicio a compradores legítimos en una preventa). **Verificado también en producción (10/10/2026):** `GetStage` con los 8 límites, tráfico normal sin `429`, una ráfaga de 150 peticiones con cuerpo inválido recibió 40 `429` y la ruta se recuperó sola en unos 25 s. Build + 508 pruebas backend en verde.
+- [x] Actualización de dependencias (10/10/2026, **PR a continuación**): todo `@angular/*` de 22.1 a 22.2.2 (los paquetes de Angular se exigen entre sí la misma versión exacta, así que se suben todos a la vez; `npm install` por separado falla con `ERESOLVE`), `firebase-admin` 14.2 → 14.5, `serverless` 4.39 → 4.43, y versiones parcheadas de dependencias transitivas. Build de producción, 421 pruebas frontend, 508 backend y un smoke test del SSR local en verde. La plantilla de CloudFormation solo cambia en los `LambdaVersion` de las funciones cuyo código se reempaquetó. **No usar `npm install --legacy-peer-deps`:** deja el lockfile sin los pares opcionales (p. ej. `@zxing/library`) y `npm ci` del CI falla.
 
 ### Pendiente (v1 — MVP)
 
@@ -337,17 +338,45 @@ Se presentaron cuatro opciones al usuario (Angular Material, solo Tailwind sin s
 
 ---
 
+### ADR-016 — Límite de tasa por ruta, sin WAF; se acepta una interrupción temporal
+
+**Fecha:** 10/10/2026 · **Estado:** Aceptada (decisión de OCM)
+
+**Decisión:** el límite de tasa de la API pública es **por ruta y por stage** (`DefaultRouteSettings`/`RouteSettings` en `resources.extensions.HttpApiStage`, `serverless.yml`), no por IP. No se contrata AWS WAF.
+
+**Contexto:** `CLAUDE.md` §5 A07 pedía originalmente «límite de tasa por IP». Una HTTP API de API Gateway no puede limitar por IP por sí sola; eso exige una web ACL de WAF, con costo fijo mensual que rompe el objetivo de < US$1/mes <!-- SIN VERIFICAR: confirmar el precio en calculator.aws antes de reabrir esta decisión -->. No hay presupuesto para WAF.
+
+**Consecuencias:**
+- Un abuso sostenido a una ruta (p. ej. `POST /api/compras`) agota el cupo compartido y **interrumpe temporalmente la compra para todos**; la ruta se recupera sola unos 25 s después de que cesa (medido en producción el 10/10/2026). OCM acepta esa interrupción: los eventos son de un teatro pequeño con artistas de nicho, no se prevén avalanchas legítimas, y prefiere una interrupción temporal antes que sobreventa o costo.
+- El aforo sigue protegido por la escritura condicional (A04), y un `429` no consume aforo ni crea compras.
+- Un `429` de API Gateway llega sin `mensaje`; la pantalla de compra muestra el texto genérico «No se pudo iniciar la compra. Intenta de nuevo.».
+- Si algún día hay avalanchas legítimas (p. ej. una preventa muy esperada), subir los topes de `POST /api/compras` en `serverless.yml`; si el abuso se vuelve real, reevaluar WAF con el precio verificado ese día.
+
+**Alternativas descartadas:** WAF con regla basada en tasa por IP (costo fijo); `reservedConcurrency` en la función de compras (un tope bajo deja sin servicio a compradores legítimos y no limita por visitante).
+
+### ADR-017 — `xlsx` se mantiene en 0.18.5; esperar una versión corregida antes de migrar
+
+**Fecha:** 10/10/2026 · **Estado:** Aceptada (decisión de OCM), a revisar
+
+**Decisión:** no migrar de `xlsx` por ahora ni instalar SheetJS desde su CDN. Se espera «un tiempo prudencial» a ver si el paquete de npm publica una versión corregida.
+
+**Contexto:** `xlsx@0.18.5` es la última versión publicada en npm y `npm audit` la marca (prototype pollution y ReDoS al *leer* archivos). El proyecto SheetJS distribuye las versiones nuevas solo desde su CDN, lo que rompería la regla de `CLAUDE.md` §5 de instalar únicamente desde npm con `package-lock.json`.
+
+**Consecuencias:**
+- Ágora solo usa `XLSX.write` (`server/api/handlers/reportes.ts`) para generar el reporte; **nunca parsea un archivo**, así que las rutas afectadas no son alcanzables. Si algún día se lee un `.xlsx` subido por un usuario, esta decisión deja de valer y hay que migrar antes.
+- **Revisión:** cada vez que se actualicen dependencias, y como máximo el 09/11/2026, comprobar `npm view xlsx version`. Opciones cuando se decida migrar: `exceljs` o la versión del CDN oficial de SheetJS (con excepción escrita a la regla de instalación).
+
 ## 4. Dependencias instaladas
 
 Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` en la rama `feature/andamiaje-angular-primeng-tailwind` (nombre de rama desactualizado tras ADR-012 — se conserva por no romper el PR abierto). Las marcadas "prevista" aún no existen — se agregan en tareas posteriores (backend, AWS SDK, WhatsApp/QR).
 
 | Paquete | Versión | Uso | Estado |
 |---|---|---|---|
-| `@angular/core`, `common`, `router`, `forms`, `animations` | ^22.1.0 | Framework (`animations` requerido por `provideAnimationsAsync`, usado por Angular Material para ripples/transiciones) | ✅ Instalada |
-| `@angular/ssr` | ^22.1.2 | Renderizado en servidor | ✅ Instalada |
-| `@angular/platform-server` | ^22.1.0 | SSR | ✅ Instalada |
-| `@angular/material` | ^22.1.0 | Componentes UI. MIT — ver ADR-012 (reemplaza a `primeng`, que pasó a licencia comercial) | ✅ Instalada |
-| `@angular/cdk` | ^22.1.0 | Peer dependency de Angular Material | ✅ Instalada |
+| `@angular/core`, `common`, `router`, `forms`, `animations` | ^22.2.2 | Framework (`animations` requerido por `provideAnimationsAsync`, usado por Angular Material para ripples/transiciones) | ✅ Instalada |
+| `@angular/ssr` | ^22.2.2 | Renderizado en servidor | ✅ Instalada |
+| `@angular/platform-server` | ^22.2.2 | SSR | ✅ Instalada |
+| `@angular/material` | ^22.2.2 | Componentes UI. MIT — ver ADR-012 (reemplaza a `primeng`, que pasó a licencia comercial) | ✅ Instalada |
+| `@angular/cdk` | ^22.2.2 | Peer dependency de Angular Material | ✅ Instalada |
 | `tailwindcss` + `@tailwindcss/postcss` | ^4.3.3 | Utilidades CSS, vía `.postcssrc.json` | ✅ Instalada |
 | `express` | ^5.1.0 | Servidor SSR | ✅ Instalada |
 | `vitest` | ^4.0.8 | Pruebas (frontend, vía `@angular/build:unit-test`) | ✅ Instalada |
@@ -358,11 +387,11 @@ Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` e
 | `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.1104.0 | URL prefirmada de subida de activos de evento (`server/api/handlers/eventos.ts`); comprobantes de pago reutilizarán el mismo cliente cuando se implementen | ✅ Instalada (06/08/2026) |
 | `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional | ⬜ Prevista |
 | `firebase` | ^12.16.0 (instalada 12.17.0) | SDK cliente de autenticación (`core/auth/servicio-auth.ts`) | ✅ Instalada (02/08/2026) |
-| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas (`server/api/lib/verificar-token.ts`) | ✅ Instalada (02/08/2026) |
+| `firebase-admin` | ^14.5.0 | `verifyIdToken` en Lambdas (`server/api/lib/verificar-token.ts`) | ✅ Instalada (02/08/2026) |
 | `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta | ⬜ Prevista |
 | `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) | ⬜ Prevista |
-| `xlsx` | ^0.18.5 | Exportación de reportes (v2) | ⬜ Prevista |
-| `serverless` | 4.x | IaC | ⬜ Prevista — Tarea 2 |
+| `xlsx` | ^0.18.5 | Exportación de reportes, solo escritura — ver ADR-017 | ✅ Instalada |
+| `serverless` | 4.43.0 (fijada) | IaC | ✅ Instalada |
 | `esbuild` | ^0.28.1 | Empaqueta en un único archivo las Lambdas que dependen de `firebase-admin` (`server/bundle-lambdas.mjs`, `npm run bundle:api`) — evita las exclusiones manuales de `node_modules/**` que fallaron en vivo en staging, ver §7 | ✅ Instalada (02/08/2026) |
 
 ---
