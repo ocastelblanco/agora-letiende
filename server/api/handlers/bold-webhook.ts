@@ -287,7 +287,13 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
     const verificacion = await verificarPagoAprobado(compra, payload);
     // Solo el compraId en los logs, nunca datos del cliente (CLAUDE.md §5, A09).
     if (verificacion === 'monto_no_coincide') {
-      console.error('Webhook de Bold: el monto o la moneda no coinciden con la compra', { compraId: compra.compraId });
+      // `amount` (total, moneda, impuestos, propina) y el monto esperado son
+      // datos monetarios, no personales: sirven para diagnosticar sin exponer al cliente.
+      console.error('Webhook de Bold: el monto o la moneda no coinciden con la compra', {
+        compraId: compra.compraId,
+        montoRecibido: payload.data?.amount,
+        montoEsperado: compra.montoTotal,
+      });
       return respuestaJson(422, { mensaje: 'El monto no coincide con la compra' });
     }
     if (verificacion === 'no_conciliado') {
