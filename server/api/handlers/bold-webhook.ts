@@ -72,7 +72,7 @@ function leerFirmaRecibida(evento: APIGatewayProxyEventV2): string | undefined {
  */
 const TIMEOUT_CONCILIACION_MS = 4000;
 
-type ResultadoVerificacionPago = 'ok' | 'monto_no_coincide' | 'no_conciliado' | 'bold_no_disponible';
+type ResultadoVerificacionPago = 'ok' | 'ok_sin_conciliar' | 'monto_no_coincide' | 'no_conciliado' | 'bold_no_disponible';
 
 /**
  * Verificaciones previas a aprobar un pago (`CLAUDE.md` §5, A08): una firma
@@ -81,7 +81,13 @@ type ResultadoVerificacionPago = 'ok' | 'monto_no_coincide' | 'no_conciliado' | 
  * coincidir con `montoTotal` de la compra, calculado en el backend. (2) Se
  * concilia contra la API de Bold: debe existir un `SALE_APPROVED` de esa
  * referencia, con el mismo `payment_id` y el mismo monto. Falla cerrado: si
- * Bold no responde, no se aprueba (el webhook responde 5xx y Bold reintenta).
+ * Bold no responde (red, tiempo, 5xx), no se aprueba (el webhook responde 503
+ * y Bold reintenta). **Excepción deliberada (decisión de OCM, 10/10/2026):** si
+ * Bold responde 401/403, las llaves de Ágora (Botón de pagos) no tienen acceso
+ * al servicio de consulta, que exige llaves de API Datáfono; en ese caso la
+ * conciliación se omite con un error visible en el log y la compra se aprueba
+ * con la firma HMAC y la comparación de monto. En cuanto las llaves sirvan para
+ * consultar, la conciliación vuelve a ser obligatoria sin tocar código.
  */
 async function verificarPagoAprobado(
   compra: CompraParaWebhookBold,
@@ -106,7 +112,7 @@ async function verificarPagoAprobado(
     if (error instanceof ErrorConsultaBold) {
       // El mensaje solo lleva el código HTTP o el tipo de error: sin llaves ni datos del cliente.
       console.error('Webhook de Bold: falló la consulta de conciliación', { compraId: compra.compraId, motivo: error.message });
-      return 'bold_no_disponible';
+      return error.esDeAutorizacion ? 'ok_sin_conciliar' : 'bold_no_disponible';
     }
     throw error;
   }

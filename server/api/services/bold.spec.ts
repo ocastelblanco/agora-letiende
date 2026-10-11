@@ -169,10 +169,13 @@ describe('consultarNotificacionesBold', () => {
 
   it('lanza ErrorConsultaBold si Bold responde con error, falla la red o vence el tiempo', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) });
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toBeInstanceOf(ErrorConsultaBold);
+    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toMatchObject({ estadoHttp: 401, esDeAutorizacion: true });
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toMatchObject({ estadoHttp: 500, esDeAutorizacion: false });
 
     fetchMock.mockRejectedValueOnce(new Error('red caída'));
-    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toBeInstanceOf(ErrorConsultaBold);
+    await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toMatchObject({ estadoHttp: undefined, esDeAutorizacion: false });
 
     fetchMock.mockRejectedValueOnce(new DOMException('Tiempo agotado', 'TimeoutError'));
     await expect(consultarNotificacionesBold('compra-1', 3000)).rejects.toBeInstanceOf(ErrorConsultaBold);

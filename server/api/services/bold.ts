@@ -92,7 +92,25 @@ export interface NotificacionBold {
 const BASE_URL_API_BOLD = 'https://integrations.api.bold.co';
 
 /** La consulta de conciliación no se pudo completar (red, timeout, credenciales o respuesta no válida). */
-export class ErrorConsultaBold extends Error {}
+export class ErrorConsultaBold extends Error {
+  constructor(
+    mensaje: string,
+    /** Código HTTP de Bold si respondió; ausente en errores de red o de tiempo. */
+    readonly estadoHttp?: number,
+  ) {
+    super(mensaje);
+  }
+
+  /**
+   * Bold rechazó las credenciales (401/403): las llaves de Ágora no tienen
+   * acceso al servicio de consulta. La documentación exige llaves de API
+   * Datáfono para él (https://developers.bold.co/webhook) y Ágora usa las del
+   * Botón de pagos. Es un problema de configuración, no una caída de Bold.
+   */
+  get esDeAutorizacion(): boolean {
+    return this.estadoHttp === 401 || this.estadoHttp === 403;
+  }
+}
 
 /**
  * Consulta de conciliación de Bold (`GET /payments/webhook/notifications/
@@ -118,7 +136,7 @@ export async function consultarNotificacionesBold(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!respuesta.ok) {
-      throw new ErrorConsultaBold(`Bold respondió ${respuesta.status}`);
+      throw new ErrorConsultaBold(`Bold respondió ${respuesta.status}`, respuesta.status);
     }
     const cuerpo = (await respuesta.json()) as { notifications?: NotificacionBold[] };
     return Array.isArray(cuerpo.notifications) ? cuerpo.notifications : [];

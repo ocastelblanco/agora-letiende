@@ -339,12 +339,44 @@ describe('POST /api/pagos/bold/webhook — verificación del monto y conciliaci�
     expect((await invocarYVerificarQueNoSeAprueba(pagoAprobadoBold)).statusCode).toBe(409);
   });
 
-  it('responde 503 sin aprobar si Bold no responde, para que Bold reintente', async () => {
-    consultarNotificacionesBoldMock.mockRejectedValue(new ErrorConsultaBold('Bold respondió 500'));
+  it('responde 503 sin aprobar si Bold falla (5xx), para que Bold reintente', async () => {
+    consultarNotificacionesBoldMock.mockRejectedValue(new ErrorConsultaBold('Bold respondió 500', 500));
 
     const respuesta = await invocarYVerificarQueNoSeAprueba(pagoAprobadoBold);
 
     expect(respuesta.statusCode).toBe(503);
+  });
+
+  it('responde 503 sin aprobar si la consulta a Bold vence el tiempo o falla la red (sin código HTTP)', async () => {
+    consultarNotificacionesBoldMock.mockRejectedValue(new ErrorConsultaBold('No se pudo consultar a Bold (TimeoutError)'));
+
+    const respuesta = await invocarYVerificarQueNoSeAprueba(pagoAprobadoBold);
+
+    expect(respuesta.statusCode).toBe(503);
+  });
+
+  it.each([401, 403])(
+    'si Bold responde %i (las llaves no sirven para consultar) aprueba con firma y monto, y deja un error visible en el log',
+    async (estado) => {
+      const consola = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      consultarNotificacionesBoldMock.mockRejectedValue(new ErrorConsultaBold(`Bold respondió ${estado}`, estado));
+      sendMock.mockResolvedValueOnce({ Item: compraEsperandoPago }).mockResolvedValueOnce({}).mockResolvedValueOnce({ Item: { nombre: 'Concierto' } });
+
+      const respuesta = await invocar({ cuerpo: pagoAprobadoBold, firma: 'firma-valida' });
+
+      expect(respuesta.statusCode).toBe(200);
+      expect(emitirBoletasMock).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(consola.mock.calls)).toContain(`Bold respondió ${estado}`);
+      consola.mockRestore();
+    },
+  );
+
+  it('con 403 de Bold sigue rechazando un monto que no coincide (la comparación no depende de la conciliación)', async () => {
+    consultarNotificacionesBoldMock.mockRejectedValue(new ErrorConsultaBold('Bold respondió 403', 403));
+
+    const respuesta = await invocarYVerificarQueNoSeAprueba(cuerpoAprobado({ amount: { total: 1000, currency: 'COP' } }));
+
+    expect(respuesta.statusCode).toBe(422);
   });
 
   it('en modo pruebas (sandbox, que informa total 0) omite la comparación de monto pero sigue exigiendo la conciliación', async () => {
