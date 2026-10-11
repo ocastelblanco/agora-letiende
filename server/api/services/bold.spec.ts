@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { firmarBoton, verificarFirmaWebhook } from './bold';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ErrorConsultaBold, consultarPagoBold, firmarBoton, montoCoincide, verificarFirmaWebhook } from './bold';
 
 const LLAVE_SECRETA_ORIGINAL = process.env['BOLD_LLAVE_SECRETA'];
 
@@ -104,5 +104,87 @@ describe('verificarFirmaWebhook', () => {
     process.env['BOLD_LLAVE_SECRETA'] = 'llave-secreta';
 
     expect(verificarFirmaWebhook(cuerpo, 'corta', false)).toBe(false);
+  });
+});
+
+describe('montoCoincide', () => {
+  it('acepta el monto exacto en COP, o sin moneda informada', () => {
+    expect(montoCoincide({ total: 90000, currency: 'COP' }, 90000)).toBe(true);
+    expect(montoCoincide({ total: 90000 }, 90000)).toBe(true);
+  });
+
+  it('rechaza montos distintos, otra moneda, texto o datos ausentes', () => {
+    expect(montoCoincide({ total: 89999, currency: 'COP' }, 90000)).toBe(false);
+    expect(montoCoincide({ total: 90000, currency: 'USD' }, 90000)).toBe(false);
+    expect(montoCoincide({ total: '90000', currency: 'COP' }, 90000)).toBe(false);
+    expect(montoCoincide({ currency: 'COP' }, 90000)).toBe(false);
+    expect(montoCoincide(undefined, 90000)).toBe(false);
+  });
+});
+
+describe('consultarPagoBold (consulta de transacciones del Botón de pagos)', () => {
+  const fetchOriginal = globalThis.fetch;
+  const llaveOriginal = process.env['BOLD_LLAVE_IDENTIDAD'];
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    process.env['BOLD_LLAVE_IDENTIDAD'] = 'llave-identidad-de-prueba';
+  });
+
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+    if (llaveOriginal === undefined) {
+      delete process.env['BOLD_LLAVE_IDENTIDAD'];
+    } else {
+      process.env['BOLD_LLAVE_IDENTIDAD'] = llaveOriginal;
+    }
+  });
+
+  it('consulta payment-voucher por el identificador de la venta, con host fijo y la llave de identidad', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ payment_status: 'APPROVED', total: 90000, reference_id: 'compra-1', transaction_id: 'TX1', payer_email: 'pagador@correo.com' }),
+    });
+
+    const comprobante = await consultarPagoBold('compra/../1', 1500);
+
+    const [url, opciones] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string>; signal: AbortSignal }];
+    expect(url).toBe('https://payments.api.bold.co/v2/payment-voucher/compra%2F..%2F1');
+    expect(opciones.headers['Authorization']).toBe('x-api-key llave-identidad-de-prueba');
+    expect(opciones.signal).toBeInstanceOf(AbortSignal);
+    // Solo los campos que Ágora usa: nunca el correo del pagador.
+    expect(comprobante).toEqual({ payment_status: 'APPROVED', total: 90000, reference_id: 'compra-1', transaction_id: 'TX1' });
+  });
+
+  it('lanza ErrorConsultaBold si la respuesta no trae payment_status', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ total: 90000 }) });
+
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toBeInstanceOf(ErrorConsultaBold);
+  });
+
+  it('lanza ErrorConsultaBold sin llamar a Bold si falta la llave de identidad', async () => {
+    delete process.env['BOLD_LLAVE_IDENTIDAD'];
+
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toBeInstanceOf(ErrorConsultaBold);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('distingue credenciales rechazadas (401/403) de caídas de Bold (5xx, red, tiempo)', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 401, esDeAutorizacion: true });
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({}) });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 403, esDeAutorizacion: true });
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 500, esDeAutorizacion: false });
+
+    fetchMock.mockRejectedValueOnce(new Error('red caída'));
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: undefined, esDeAutorizacion: false });
+
+    fetchMock.mockRejectedValueOnce(new DOMException('Tiempo agotado', 'TimeoutError'));
+    await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ message: 'No se pudo consultar a Bold (TimeoutError)' });
   });
 });

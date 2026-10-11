@@ -5,7 +5,14 @@ import type {
 } from 'aws-lambda';
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
-import { verificarFirmaWebhook, type NotificacionBold } from '../services/bold';
+import {
+  ErrorConsultaBold,
+  consultarPagoBold,
+  montoCoincide,
+  verificarFirmaWebhook,
+  type ComprobantePagoBold,
+  type NotificacionBold,
+} from '../services/bold';
 import { ErrorAforo, confirmarSillas, liberarSillas } from '../services/aforo';
 import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
@@ -58,6 +65,94 @@ function leerCuerpoCrudo(evento: APIGatewayProxyEventV2): string {
 function leerFirmaRecibida(evento: APIGatewayProxyEventV2): string | undefined {
   const encabezados = evento.headers ?? {};
   return encabezados['x-bold-signature'] ?? encabezados['X-Bold-Signature'];
+}
+
+/**
+ * Timeout de la consulta de conciliación. Bold exige que el webhook responda
+ * en máximo 2 s (https://developers.bold.co/webhook); si se pasa, reintenta a
+ * los 15 min y la escritura condicional responde 200 sin emitir dos veces.
+ */
+const TIMEOUT_CONCILIACION_MS = 1500;
+
+/** La venta todavía no aparece en la consulta: Bold advierte hasta 10 min de demora. */
+const ESTADOS_BOLD_AUN_NO_VISIBLE = new Set(['NO_TRANSACTION_FOUND', 'PROCESSING', 'PENDING']);
+
+type ResultadoVerificacionPago = 'ok' | 'ok_sin_conciliar' | 'monto_no_coincide' | 'no_conciliado' | 'bold_no_disponible';
+
+/**
+ * Verificaciones previas a aprobar un pago (`CLAUDE.md` §5, A08, ADR-018): una
+ * firma válida prueba que la notificación viene de Bold, no que el monto sea el
+ * de la compra ni que el pago exista.
+ *
+ * 1. El monto y la moneda del payload deben coincidir con `montoTotal` de la
+ *    compra (estricto en producción; omitido en modo pruebas porque el sandbox
+ *    informa `total: 0`).
+ * 2. Conciliación con la consulta del Botón de pagos (`consultarPagoBold`):
+ *    - `APPROVED` con la misma referencia y el mismo total → se aprueba.
+ *    - `REJECTED`, `FAILED`, `VOIDED`, un estado desconocido, o `APPROVED` con
+ *      otro total o referencia → Bold contradice el webhook: no se aprueba (409).
+ *    - `NO_TRANSACTION_FOUND`, `PROCESSING`, `PENDING` → la venta aún no es
+ *      visible (hasta 10 min según Bold). Bloquear dejaría al cliente que pagó
+ *      sin boletas hasta el reintento de los 15 min, con la reserva vencida en
+ *      pantalla; se aprueba con firma y monto y queda un error en el log.
+ *    - 401/403 → las llaves no sirven para consultar: igual que el caso anterior.
+ *    - Red, tiempo o 5xx → falla cerrado (503) y Bold reintenta.
+ */
+async function verificarPagoAprobado(
+  compra: CompraParaWebhookBold,
+  payload: NotificacionBold,
+  modoPruebas: boolean,
+): Promise<ResultadoVerificacionPago> {
+  // El sandbox de Bold informa `amount.total: 0` en sus webhooks aunque la
+  // compra sea de 30.000 (observado con el webhook real en staging el
+  // 10/10/2026: `{ currency: 'COP', total: 0, taxes: [], tip: 0 }`, no
+  // documentado). Solo en modo pruebas se omite la comparación de monto. En
+  // producción (`BOLD_MODO_PRUEBAS=false`) la comparación es estricta.
+  const comparaMonto = !modoPruebas;
+  if (comparaMonto && !montoCoincide(payload.data?.amount, compra.montoTotal)) {
+    return 'monto_no_coincide';
+  }
+
+  let comprobante: ComprobantePagoBold;
+  try {
+    comprobante = await consultarPagoBold(compra.compraId, TIMEOUT_CONCILIACION_MS);
+  } catch (error) {
+    if (error instanceof ErrorConsultaBold) {
+      // El mensaje solo lleva el código HTTP o el tipo de error: sin llaves ni datos del cliente.
+      console.error('Webhook de Bold: falló la consulta de conciliación', { compraId: compra.compraId, motivo: error.message });
+      return error.esDeAutorizacion ? 'ok_sin_conciliar' : 'bold_no_disponible';
+    }
+    throw error;
+  }
+
+  // Nunca se registra el comprobante completo: trae `payer_email`.
+  const estado = comprobante.payment_status;
+  if (estado === 'APPROVED') {
+    const referenciaCoincide = comprobante.reference_id === undefined || comprobante.reference_id === compra.compraId;
+    const totalCoincide = !comparaMonto || montoCoincide({ total: comprobante.total }, compra.montoTotal);
+    if (referenciaCoincide && totalCoincide) {
+      return 'ok';
+    }
+    console.error('Webhook de Bold: la consulta de Bold no coincide con la compra', {
+      compraId: compra.compraId,
+      referenciaConsultada: comprobante.reference_id,
+      totalConsultado: comprobante.total,
+      montoEsperado: compra.montoTotal,
+    });
+    return 'no_conciliado';
+  }
+  if (ESTADOS_BOLD_AUN_NO_VISIBLE.has(estado)) {
+    console.error('Webhook de Bold: la venta aún no aparece en la consulta; se aprueba sin conciliar', {
+      compraId: compra.compraId,
+      estadoConsultado: estado,
+    });
+    return 'ok_sin_conciliar';
+  }
+  console.error('Webhook de Bold: la consulta de Bold contradice el pago aprobado', {
+    compraId: compra.compraId,
+    estadoConsultado: estado,
+  });
+  return 'no_conciliado';
 }
 
 /**
@@ -225,6 +320,33 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
   }
 
   if (payload.type === 'SALE_APPROVED') {
+    // Reintento de Bold sobre una compra ya resuelta: 200 sin gastar una
+    // consulta a Bold (la escritura condicional de más abajo sigue siendo la
+    // autoridad contra la doble emisión).
+    if (compra.estado !== 'esperando_pago_bold') {
+      return respuestaJson(200, { recibido: true });
+    }
+
+    const verificacion = await verificarPagoAprobado(compra, payload, modoPruebas);
+    // Solo el compraId en los logs, nunca datos del cliente (CLAUDE.md §5, A09).
+    if (verificacion === 'monto_no_coincide') {
+      // `amount` (total, moneda, impuestos, propina) y el monto esperado son
+      // datos monetarios, no personales: sirven para diagnosticar sin exponer al cliente.
+      console.error('Webhook de Bold: el monto o la moneda no coinciden con la compra', {
+        compraId: compra.compraId,
+        montoRecibido: payload.data?.amount,
+        montoEsperado: compra.montoTotal,
+      });
+      return respuestaJson(422, { mensaje: 'El monto no coincide con la compra' });
+    }
+    if (verificacion === 'no_conciliado') {
+      console.error('Webhook de Bold: el pago no aparece aprobado en la conciliación', { compraId: compra.compraId });
+      return respuestaJson(409, { mensaje: 'El pago no pudo conciliarse' });
+    }
+    if (verificacion === 'bold_no_disponible') {
+      console.error('Webhook de Bold: no se pudo consultar a Bold para conciliar', { compraId: compra.compraId });
+      return respuestaJson(503, { mensaje: 'No se pudo conciliar el pago, reintenta' });
+    }
     return await procesarPagoAprobado(compra);
   }
   if (payload.type === 'SALE_REJECTED') {

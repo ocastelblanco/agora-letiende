@@ -418,7 +418,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | POST | `/api/usuarios` | Administrador | Crea usuario | `{ email, nombre, rol }` |
 | PUT | `/api/usuarios/:email` | Administrador | Edita usuario | `{ nombre?, rol?, activo? }` |
 | DELETE | `/api/usuarios/:email` | Administrador | Elimina usuario | — |
-| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago, **con firma verificada y reconciliada** | Payload de Bold |
+| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago: firma HMAC verificada; en `SALE_APPROVED`, además el monto y la moneda deben coincidir con la compra y el pago se concilia con la consulta de transacciones del Botón de pagos (`GET payments.api.bold.co/v2/payment-voucher/{compraId}`). `422` monto distinto, `409` Bold contradice el pago, `503` Bold no responde (reintenta); si la venta aún no aparece o Bold responde 401/403, se aprueba con firma y monto y queda un error en el log — ver ADR-018 | Payload de Bold |
 
 ### 5.2 Tablas de DynamoDB
 
@@ -709,7 +709,7 @@ Ningún secreto vive en el repositorio. Todos se inyectan como variables de ento
 | `SECRETO_ENLACES_MAGICOS` | Llave de derivación/hash de tokens de enlace | Lambdas |
 | `SES_REMITENTE` | `taquilla@letiende.co` | Lambdas |
 | `URL_BASE_APP` | URL pública del stage, para construir enlaces en los correos | Lambdas |
-| `BOLD_LLAVE_IDENTIDAD` (v2) | Llave de identidad de Bold | Lambdas |
+| `BOLD_LLAVE_IDENTIDAD` (v2) | Llave de identidad del Botón de pagos: el botón y la consulta de transacciones (`compras`, `boldWebhook`) | Lambdas |
 | `BOLD_LLAVE_SECRETA` (v2) | Verificación de firma del webhook de Bold | Lambdas |
 | `GOOGLE_CALENDAR_SERVICE_ACCOUNT` (v2) | Sincronización con el calendario de Le Tiende | Lambdas |
 | `WHATSAPP_PHONE_NUMBER_ID` (v2) | Identificador del número de WhatsApp Business | Lambdas |

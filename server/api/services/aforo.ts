@@ -1,6 +1,6 @@
 import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from './dynamodb';
-import type { NotificacionBold } from './bold';
+import { consultarPagoBold } from './bold';
 
 /**
  * Las tres primitivas de escritura condicional del ciclo de vida del aforo
@@ -159,8 +159,6 @@ async function expirarYLiberar(
   }
 }
 
-const BASE_URL_RECONCILIACION_BOLD = 'https://integrations.api.bold.co';
-
 /**
  * Bold (roadmap #19, Sub-tarea 1, decisión 4 del plan aprobado en
  * `.omc/plans/bold-pagos.md`) — antes de expirar una compra
@@ -169,20 +167,16 @@ const BASE_URL_RECONCILIACION_BOLD = 'https://integrations.api.bold.co';
  * que el webhook (`handlers/bold-webhook.ts`) no logró entregar (reintentos
  * agotados, falla de red, etc.).
  *
- * **Hallazgo que cierra el bloqueo que el plan anticipaba** ("¿Ágora tiene
- * el `payment_id` de Bold antes de que llegue el webhook?"): verificado hoy
- * (25/08/2026) contra la documentación oficial
- * (https://developers.bold.co/webhook) — el propio endpoint acepta
- * consultar por la REFERENCIA EXTERNA en vez del `payment_id` de Bold, con
- * el parámetro `is_external_reference=true`. La referencia externa es
- * exactamente el `compraId` que Ágora ya le envía a Bold como
- * `data-order-id` al renderizar el botón (`firmarBoton`, `services/bold.ts`)
- * — Ágora nunca necesita guardar el `payment_id` de Bold de antemano, el
- * bloqueo no existe.
+ * **Consulta (11/10/2026):** `consultarPagoBold` (`services/bold.ts`), la
+ * consulta de transacciones propia del Botón de pagos, por el `compraId` que
+ * Ágora envía como `data-order-id`. Reemplaza al «servicio de fallback» de
+ * `integrations.api.bold.co`, que es de API Integrations (datáfono) y respondía
+ * 403 con las llaves del botón. Solo se expira con `NO_TRANSACTION_FOUND`,
+ * `REJECTED`, `FAILED` o `VOIDED` (`ESTADOS_BOLD_SIN_PAGO`).
  *
  * **Decisión de diseño explícita, más allá de lo que el plan detalló** (se
  * documenta aquí porque es una bifurcación real, no algo que deba asumirse
- * en silencio): si la reconciliación encuentra un `SALE_APPROVED`, esta
+ * en silencio): si la consulta devuelve `APPROVED`, `PROCESSING` o `PENDING`, esta
  * función NO completa la aprobación (no llama `confirmarSillas`/
  * `emitirBoletas`/notifica al cliente desde aquí) — hacerlo duplicaría la
  * lógica de negocio completa de `handlers/bold-webhook.ts` dentro de
@@ -200,10 +194,15 @@ const BASE_URL_RECONCILIACION_BOLD = 'https://integrations.api.bold.co';
  * `tech-specs.md` §5.4 punto 4) sigue siendo la red de seguridad final si
  * esto queda colgado más de lo esperado.
  */
+/**
+ * Estados de la consulta del Botón de pagos en los que no hay un pago que
+ * proteger. `APPROVED`, `PROCESSING` y `PENDING` (PSE) retienen la reserva, igual
+ * que cualquier estado desconocido o un fallo de la consulta.
+ */
+const ESTADOS_BOLD_SIN_PAGO = new Set(['NO_TRANSACTION_FOUND', 'REJECTED', 'FAILED', 'VOIDED']);
+
 async function esSeguroExpirarReservaBold(compraId: string): Promise<boolean> {
   try {
-    const llaveIdentidad = process.env['BOLD_LLAVE_IDENTIDAD'] ?? '';
-    const url = `${BASE_URL_RECONCILIACION_BOLD}/payments/webhook/notifications/${encodeURIComponent(compraId)}?is_external_reference=true`;
     // Timeout corto y explícito (hallazgo de revisión de seguridad,
     // 25/08/2026): esta consulta ocurre en el camino síncrono de
     // reservarSillas() — sin límite propio, una API de Bold lenta o caída
@@ -212,18 +211,8 @@ async function esSeguroExpirarReservaBold(compraId: string): Promise<boolean> {
     // estaba compitiendo por la misma silla. Es un chequeo best-effort (el
     // catch de abajo ya trata cualquier fallo como "no seguro expirar"), así
     // que 3s deja margen de sobra sin arriesgar el resto de la función.
-    const respuesta = await fetch(url, {
-      headers: { Authorization: `x-api-key ${llaveIdentidad}` },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!respuesta.ok) {
-      return false;
-    }
-    const cuerpo = (await respuesta.json()) as { notifications?: Pick<NotificacionBold, 'type'>[] };
-    const hayPagoAprobado = (cuerpo.notifications ?? []).some(
-      (notificacion) => notificacion.type === 'SALE_APPROVED',
-    );
-    return !hayPagoAprobado;
+    const comprobante = await consultarPagoBold(compraId, 3000);
+    return ESTADOS_BOLD_SIN_PAGO.has(comprobante.payment_status);
   } catch {
     return false;
   }
