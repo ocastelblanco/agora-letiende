@@ -104,6 +104,8 @@ async function verificarPagoAprobado(
     notificaciones = await consultarNotificacionesBold(compra.compraId, TIMEOUT_CONCILIACION_MS);
   } catch (error) {
     if (error instanceof ErrorConsultaBold) {
+      // El mensaje solo lleva el código HTTP o el tipo de error: sin llaves ni datos del cliente.
+      console.error('Webhook de Bold: falló la consulta de conciliación', { compraId: compra.compraId, motivo: error.message });
       return 'bold_no_disponible';
     }
     throw error;

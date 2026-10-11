@@ -123,7 +123,10 @@ export async function consultarNotificacionesBold(
     const cuerpo = (await respuesta.json()) as { notifications?: NotificacionBold[] };
     return Array.isArray(cuerpo.notifications) ? cuerpo.notifications : [];
   } catch (error) {
-    throw error instanceof ErrorConsultaBold ? error : new ErrorConsultaBold('No se pudo consultar a Bold');
+    // Solo el tipo de error (TimeoutError, TypeError…), nunca su mensaje: podría incluir la URL.
+    throw error instanceof ErrorConsultaBold
+      ? error
+      : new ErrorConsultaBold(`No se pudo consultar a Bold (${error instanceof Error ? error.name : 'desconocido'})`);
   }
 }
 
