@@ -338,17 +338,45 @@ Se presentaron cuatro opciones al usuario (Angular Material, solo Tailwind sin s
 
 ---
 
+### ADR-016 — Límite de tasa por ruta, sin WAF; se acepta una interrupción temporal
+
+**Fecha:** 10/10/2026 · **Estado:** Aceptada (decisión de OCM)
+
+**Decisión:** el límite de tasa de la API pública es **por ruta y por stage** (`DefaultRouteSettings`/`RouteSettings` en `resources.extensions.HttpApiStage`, `serverless.yml`), no por IP. No se contrata AWS WAF.
+
+**Contexto:** `CLAUDE.md` §5 A07 pedía originalmente «límite de tasa por IP». Una HTTP API de API Gateway no puede limitar por IP por sí sola; eso exige una web ACL de WAF, con costo fijo mensual que rompe el objetivo de < US$1/mes <!-- SIN VERIFICAR: confirmar el precio en calculator.aws antes de reabrir esta decisión -->. No hay presupuesto para WAF.
+
+**Consecuencias:**
+- Un abuso sostenido a una ruta (p. ej. `POST /api/compras`) agota el cupo compartido y **interrumpe temporalmente la compra para todos**; la ruta se recupera sola unos 25 s después de que cesa (medido en producción el 10/10/2026). OCM acepta esa interrupción: los eventos son de un teatro pequeño con artistas de nicho, no se prevén avalanchas legítimas, y prefiere una interrupción temporal antes que sobreventa o costo.
+- El aforo sigue protegido por la escritura condicional (A04), y un `429` no consume aforo ni crea compras.
+- Un `429` de API Gateway llega sin `mensaje`; la pantalla de compra muestra el texto genérico «No se pudo iniciar la compra. Intenta de nuevo.».
+- Si algún día hay avalanchas legítimas (p. ej. una preventa muy esperada), subir los topes de `POST /api/compras` en `serverless.yml`; si el abuso se vuelve real, reevaluar WAF con el precio verificado ese día.
+
+**Alternativas descartadas:** WAF con regla basada en tasa por IP (costo fijo); `reservedConcurrency` en la función de compras (un tope bajo deja sin servicio a compradores legítimos y no limita por visitante).
+
+### ADR-017 — `xlsx` se mantiene en 0.18.5; esperar una versión corregida antes de migrar
+
+**Fecha:** 10/10/2026 · **Estado:** Aceptada (decisión de OCM), a revisar
+
+**Decisión:** no migrar de `xlsx` por ahora ni instalar SheetJS desde su CDN. Se espera «un tiempo prudencial» a ver si el paquete de npm publica una versión corregida.
+
+**Contexto:** `xlsx@0.18.5` es la última versión publicada en npm y `npm audit` la marca (prototype pollution y ReDoS al *leer* archivos). El proyecto SheetJS distribuye las versiones nuevas solo desde su CDN, lo que rompería la regla de `CLAUDE.md` §5 de instalar únicamente desde npm con `package-lock.json`.
+
+**Consecuencias:**
+- Ágora solo usa `XLSX.write` (`server/api/handlers/reportes.ts`) para generar el reporte; **nunca parsea un archivo**, así que las rutas afectadas no son alcanzables. Si algún día se lee un `.xlsx` subido por un usuario, esta decisión deja de valer y hay que migrar antes.
+- **Revisión:** cada vez que se actualicen dependencias, y como máximo el 09/11/2026, comprobar `npm view xlsx version`. Opciones cuando se decida migrar: `exceljs` o la versión del CDN oficial de SheetJS (con excepción escrita a la regla de instalación).
+
 ## 4. Dependencias instaladas
 
 Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` en la rama `feature/andamiaje-angular-primeng-tailwind` (nombre de rama desactualizado tras ADR-012 — se conserva por no romper el PR abierto). Las marcadas "prevista" aún no existen — se agregan en tareas posteriores (backend, AWS SDK, WhatsApp/QR).
 
 | Paquete | Versión | Uso | Estado |
 |---|---|---|---|
-| `@angular/core`, `common`, `router`, `forms`, `animations` | ^22.1.0 | Framework (`animations` requerido por `provideAnimationsAsync`, usado por Angular Material para ripples/transiciones) | ✅ Instalada |
-| `@angular/ssr` | ^22.1.2 | Renderizado en servidor | ✅ Instalada |
-| `@angular/platform-server` | ^22.1.0 | SSR | ✅ Instalada |
-| `@angular/material` | ^22.1.0 | Componentes UI. MIT — ver ADR-012 (reemplaza a `primeng`, que pasó a licencia comercial) | ✅ Instalada |
-| `@angular/cdk` | ^22.1.0 | Peer dependency de Angular Material | ✅ Instalada |
+| `@angular/core`, `common`, `router`, `forms`, `animations` | ^22.2.2 | Framework (`animations` requerido por `provideAnimationsAsync`, usado por Angular Material para ripples/transiciones) | ✅ Instalada |
+| `@angular/ssr` | ^22.2.2 | Renderizado en servidor | ✅ Instalada |
+| `@angular/platform-server` | ^22.2.2 | SSR | ✅ Instalada |
+| `@angular/material` | ^22.2.2 | Componentes UI. MIT — ver ADR-012 (reemplaza a `primeng`, que pasó a licencia comercial) | ✅ Instalada |
+| `@angular/cdk` | ^22.2.2 | Peer dependency de Angular Material | ✅ Instalada |
 | `tailwindcss` + `@tailwindcss/postcss` | ^4.3.3 | Utilidades CSS, vía `.postcssrc.json` | ✅ Instalada |
 | `express` | ^5.1.0 | Servidor SSR | ✅ Instalada |
 | `vitest` | ^4.0.8 | Pruebas (frontend, vía `@angular/build:unit-test`) | ✅ Instalada |
@@ -359,11 +387,11 @@ Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` e
 | `@aws-sdk/client-s3`, `s3-request-presigner` | ^3.1104.0 | URL prefirmada de subida de activos de evento (`server/api/handlers/eventos.ts`); comprobantes de pago reutilizarán el mismo cliente cuando se implementen | ✅ Instalada (06/08/2026) |
 | `@aws-sdk/client-sesv2` | ^3.x | Correo transaccional | ⬜ Prevista |
 | `firebase` | ^12.16.0 (instalada 12.17.0) | SDK cliente de autenticación (`core/auth/servicio-auth.ts`) | ✅ Instalada (02/08/2026) |
-| `firebase-admin` | ^14.2.0 | `verifyIdToken` en Lambdas (`server/api/lib/verificar-token.ts`) | ✅ Instalada (02/08/2026) |
+| `firebase-admin` | ^14.5.0 | `verifyIdToken` en Lambdas (`server/api/lib/verificar-token.ts`) | ✅ Instalada (02/08/2026) |
 | `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta | ⬜ Prevista |
 | `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) | ⬜ Prevista |
-| `xlsx` | ^0.18.5 | Exportación de reportes (v2) | ⬜ Prevista |
-| `serverless` | 4.x | IaC | ⬜ Prevista — Tarea 2 |
+| `xlsx` | ^0.18.5 | Exportación de reportes, solo escritura — ver ADR-017 | ✅ Instalada |
+| `serverless` | 4.43.0 (fijada) | IaC | ✅ Instalada |
 | `esbuild` | ^0.28.1 | Empaqueta en un único archivo las Lambdas que dependen de `firebase-admin` (`server/bundle-lambdas.mjs`, `npm run bundle:api`) — evita las exclusiones manuales de `node_modules/**` que fallaron en vivo en staging, ver §7 | ✅ Instalada (02/08/2026) |
 
 ---

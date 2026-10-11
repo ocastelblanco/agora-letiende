@@ -97,7 +97,7 @@ Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cua
 | Correo | AWS SES | — | Envío desde `taquilla@letiende.co` | https://docs.aws.amazon.com/ses |
 | Escaneo de QR | `@zxing/browser` | 0.2.x | Lectura de QR con la cámara en la puerta | https://github.com/zxing-js/browser |
 | Generación de QR | `qrcode` (servidor) | latest | QR de boleta y de evento, en SVG y PNG | https://github.com/soldair/node-qrcode |
-| Reportes XLSX | `xlsx` | 0.18.x | Exportación del panel; mismo paquete que Babel | https://sheetjs.com |
+| Reportes XLSX | `xlsx` | 0.18.x | Exportación del panel; mismo paquete que Babel. Solo escritura (`XLSX.write`), nunca lectura de archivos subidos — ver ADR-017 | https://sheetjs.com |
 | Pruebas frontend | Angular test runner | 22.x | Pruebas unitarias de componentes y servicios | https://angular.dev/guide/testing |
 | Pruebas backend | Vitest | 4.x | Pruebas unitarias de handlers y servicios | https://vitest.dev |
 | Formato de código | Prettier | 3.x | Formato consistente | https://prettier.io |
