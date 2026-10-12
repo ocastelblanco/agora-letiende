@@ -30,8 +30,12 @@ function obtenerAppFirebase() {
 }
 
 /**
- * Verifica el header `Authorization: Bearer <token>` con `verifyIdToken`
- * (valida firma, expiración y revocación) y devuelve el correo verificado.
+ * Verifica el header `Authorization: Bearer <token>` con
+ * `verifyIdToken(token, true)` y devuelve el correo verificado. Valida
+ * firma y expiración; con `checkRevoked` consulta además a Firebase si la
+ * sesión fue revocada o la cuenta deshabilitada (una llamada extra por
+ * petición). Exige `email_verified`: el proyecto Firebase es compartido y
+ * un proveedor que no verifique el correo permitiría usar el de otra persona.
  * Estar autenticado en el proyecto Firebase compartido no implica ninguna
  * autorización en Ágora — eso lo resuelve `resolver-permisos.ts`.
  */
@@ -50,8 +54,8 @@ export async function verificarToken(encabezadoAuthorization: string | undefined
   const auth = getAuth(obtenerAppFirebase());
 
   try {
-    const tokenDecodificado = await auth.verifyIdToken(token);
-    if (!tokenDecodificado.email) {
+    const tokenDecodificado = await auth.verifyIdToken(token, true);
+    if (!tokenDecodificado.email || tokenDecodificado.email_verified !== true) {
       throw new ErrorAutenticacion('El token no contiene un correo verificado');
     }
     return tokenDecodificado.email;
