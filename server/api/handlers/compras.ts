@@ -296,6 +296,12 @@ async function crearCompraBold(
   clienteDatos: Record<string, unknown>,
   ahora: Date,
 ): Promise<APIGatewayProxyResultV2> {
+  const montoTotal = etapa.precio * cantidad;
+  const compraId = randomUUID();
+  // La firma se calcula antes de reservar: si no se puede firmar, la
+  // petición falla sin dejar sillas apartadas.
+  const bold = configuracionBold(compraId, montoTotal);
+
   try {
     await reservarSillas(eventoEncontrado.eventoId, cantidad);
   } catch (error) {
@@ -308,8 +314,6 @@ async function crearCompraBold(
     throw error;
   }
 
-  const montoTotal = etapa.precio * cantidad;
-  const compraId = randomUUID();
   const expiraEnFecha = new Date(ahora.getTime() + eventoEncontrado.plazoComprobanteMinutos * 60_000);
   // TTL de DynamoDB exige epoch-segundos (Number) — mismo criterio que el
   // flujo de transferencia, más abajo.
@@ -358,7 +362,7 @@ async function crearCompraBold(
     cantidad,
     montoTotal,
     expiraEn: expiraEnFecha.toISOString(),
-    bold: configuracionBold(compraId, montoTotal),
+    bold,
   });
 }
 
@@ -483,6 +487,10 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return await crearCompraBold(eventoEncontrado, etapa, datos['cantidad'], clienteDatos, ahora);
   }
 
+  // El token se genera antes de reservar: si no se puede generar, la
+  // petición falla sin dejar sillas apartadas.
+  const { token, hash } = generarTokenEnlace();
+
   try {
     await reservarSillas(eventoEncontrado.eventoId, datos['cantidad']);
   } catch (error) {
@@ -496,7 +504,6 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
   }
 
   const montoTotal = etapa.precio * datos['cantidad'];
-  const { token, hash } = generarTokenEnlace();
   const compraId = randomUUID();
   const expiraEnFecha = new Date(ahora.getTime() + eventoEncontrado.plazoComprobanteMinutos * 60_000);
   // TTL de DynamoDB exige epoch-segundos (Number), nunca ISO 8601 — excepción

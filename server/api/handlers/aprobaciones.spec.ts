@@ -106,6 +106,7 @@ async function invocar(metodo: string, opciones?: Parameters<typeof crearPeticio
 }
 
 beforeEach(() => {
+  process.env['SECRETO_FIRMA_BOLETAS'] = 'secreto-de-prueba';
   vi.useFakeTimers();
   vi.setSystemTime(new Date(AHORA_EPOCH * 1000));
   sendMock.mockReset();

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SecretoNoConfigurado } from '../lib/secretos';
 
 const {
   sendMock,
@@ -172,6 +173,28 @@ describe('POST /api/compras', () => {
       'enlace_comprobante',
       expect.objectContaining({ nombreEvento: 'Concierto de jazz', urlComprobante: expect.stringContaining('token-en-claro') }),
     );
+  });
+
+  it.each([
+    ['transferencia', 'concierto-jazz', eventoPublicado, 'SECRETO_ENLACES_MAGICOS'],
+    ['bold', 'concierto-bold', eventoConBold, 'BOLD_LLAVE_SECRETA'],
+  ] as const)('con medio %s, si falta la llave responde 500 sin reservar sillas', async (medioPago, slug, evento, variable) => {
+    sendMock.mockResolvedValueOnce({ Items: [evento] });
+    const error = new SecretoNoConfigurado(variable);
+    generarTokenEnlaceMock.mockImplementation(() => {
+      throw error;
+    });
+    firmarBotonMock.mockImplementation(() => {
+      throw error;
+    });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug, cantidad: 1, cliente: clienteValido, autorizacionDatos: true, medioPago },
+    });
+
+    expect(respuesta.statusCode).toBe(500);
+    expect(respuesta.body).not.toContain(variable);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
   });
 
   it('nunca acepta el precio/total del payload — siempre lo calcula del backend', async () => {

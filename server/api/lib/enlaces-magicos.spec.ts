@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generarTokenEnlace, hashearToken } from './enlaces-magicos';
+import { SecretoNoConfigurado } from './secretos';
 
 beforeEach(() => {
   process.env['SECRETO_ENLACES_MAGICOS'] = 'secreto-de-prueba';
@@ -34,5 +35,18 @@ describe('hashearToken', () => {
     const { token, hash } = generarTokenEnlace();
     process.env['SECRETO_ENLACES_MAGICOS'] = 'otro-secreto';
     expect(hashearToken(token)).not.toBe(hash);
+  });
+});
+
+describe('sin SECRETO_ENLACES_MAGICOS', () => {
+  it.each([undefined, ''])('con %j lanza SecretoNoConfigurado al generar y al hashear', (valor) => {
+    if (valor === undefined) {
+      delete process.env['SECRETO_ENLACES_MAGICOS'];
+    } else {
+      process.env['SECRETO_ENLACES_MAGICOS'] = valor;
+    }
+
+    expect(() => generarTokenEnlace()).toThrow(SecretoNoConfigurado);
+    expect(() => hashearToken('token-cualquiera')).toThrow(SecretoNoConfigurado);
   });
 });

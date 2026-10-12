@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { leerSecreto } from './secretos';
 
 /**
  * Firma del código de boleta (`tech-specs.md` §5.5, `TODO.md` Tarea 2) — a
@@ -16,7 +17,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 const LONGITUD_FIRMA = 16;
 
 function hmacCompleto(boletaId: string): string {
-  const secreto = process.env['SECRETO_FIRMA_BOLETAS'] ?? '';
+  const secreto = leerSecreto('SECRETO_FIRMA_BOLETAS');
   return createHmac('sha256', secreto).update(boletaId).digest('hex');
 }
 
