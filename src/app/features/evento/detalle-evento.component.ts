@@ -225,7 +225,14 @@ export class DetalleEventoComponent {
     const script = this.documento.createElement('script');
     script.id = ID_SCRIPT_JSON_LD;
     script.type = 'application/ld+json';
-    script.textContent = JSON.stringify(jsonLd);
+    // `nombre` y `descripcion` son texto libre dentro de un <script>: se
+    // escapan `<`, `>` y `&` como `<`/`>`/`&` para que el
+    // parser HTML no interprete nada del contenido. `JSON.parse` devuelve
+    // el mismo texto.
+    script.textContent = JSON.stringify(jsonLd)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026');
     this.documento.head.appendChild(script);
   }
 }

@@ -315,6 +315,21 @@ describe('DetalleEventoComponent', () => {
     expect(jsonLd.offers[0]).toMatchObject({ name: 'Preventa', price: 45000, priceCurrency: 'COP' });
   });
 
+  it('escapa <, > y & en el JSON-LD sin alterar el texto del evento', async () => {
+    const textoHostil = 'Jazz </script><script>alert(1)</script> <!--<script> & más';
+    const eventoHostil: EventoPublico = { ...eventoEjemplo, nombre: textoHostil, descripcion: textoHostil };
+    const cargarEventoPorSlugMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoHostil });
+    const { fixture } = configurarPrueba(cargarEventoPorSlugMock);
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const contenido = document.getElementById('app-json-ld-evento')!.textContent!;
+    expect(contenido).not.toMatch(/[<>&]/);
+    const jsonLd = JSON.parse(contenido);
+    expect(jsonLd.name).toBe(textoHostil);
+    expect(jsonLd.description).toBe(textoHostil);
+  });
+
   it('reemplaza el <script> JSON-LD anterior en vez de acumular uno por cada slug (reutilización de instancia)', async () => {
     const otroEvento: EventoPublico = { ...eventoEjemplo, eventoId: 'e2', slug: 'otro-evento', nombre: 'Otro evento' };
     const cargarEventoPorSlugMock = vi
