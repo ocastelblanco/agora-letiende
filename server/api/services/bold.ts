@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { leerSecreto } from '../lib/secretos';
 
 /**
  * Pago con Bold (roadmap #19, Sub-tarea 1 — `.omc/plans/bold-pagos.md`) —
@@ -30,7 +31,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
  * alfanuméricos que exige Bold.
  */
 export function firmarBoton(compraId: string, monto: number, moneda: string): string {
-  const secreto = process.env['BOLD_LLAVE_SECRETA'] ?? '';
+  const secreto = leerSecreto('BOLD_LLAVE_SECRETA');
   return createHash('sha256').update(`${compraId}${monto}${moneda}${secreto}`).digest('hex');
 }
 
@@ -53,7 +54,7 @@ export function verificarFirmaWebhook(
   firmaRecibida: string,
   modoPruebas: boolean,
 ): boolean {
-  const secreto = modoPruebas ? '' : (process.env['BOLD_LLAVE_SECRETA'] ?? '');
+  const secreto = modoPruebas ? '' : leerSecreto('BOLD_LLAVE_SECRETA');
   const cuerpoBase64 = Buffer.from(cuerpoCrudo, 'utf8').toString('base64');
   const firmaEsperada = createHmac('sha256', secreto).update(cuerpoBase64).digest('hex');
 

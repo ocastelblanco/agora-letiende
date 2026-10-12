@@ -1,5 +1,7 @@
+import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { firmarCodigoBoleta, verificarFirmaBoleta } from './firma-boletas';
+import { SecretoNoConfigurado } from './secretos';
 
 beforeEach(() => {
   process.env['SECRETO_FIRMA_BOLETAS'] = 'secreto-de-prueba';
@@ -50,5 +52,19 @@ describe('verificarFirmaBoleta', () => {
 
   it('rechaza una firma vacía', () => {
     expect(verificarFirmaBoleta('boleta-1', '')).toBe(false);
+  });
+});
+
+describe('sin SECRETO_FIRMA_BOLETAS', () => {
+  it.each([undefined, ''])('con %j lanza SecretoNoConfigurado al firmar y al verificar, nunca acepta la firma', (valor) => {
+    const firmaConLlaveVacia = createHmac('sha256', '').update('boleta-1').digest('hex').slice(0, 16);
+    if (valor === undefined) {
+      delete process.env['SECRETO_FIRMA_BOLETAS'];
+    } else {
+      process.env['SECRETO_FIRMA_BOLETAS'] = valor;
+    }
+
+    expect(() => firmarCodigoBoleta('boleta-1')).toThrow(SecretoNoConfigurado);
+    expect(() => verificarFirmaBoleta('boleta-1', firmaConLlaveVacia)).toThrow(SecretoNoConfigurado);
   });
 });

@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SecretoNoConfigurado } from '../lib/secretos';
 import { ErrorConsultaBold, consultarPagoBold, firmarBoton, montoCoincide, verificarFirmaWebhook } from './bold';
 
 const LLAVE_SECRETA_ORIGINAL = process.env['BOLD_LLAVE_SECRETA'];
@@ -44,11 +45,14 @@ describe('firmarBoton', () => {
     expect(firmarBoton('compra-1', 45000, 'COP')).toBe(esperada);
   });
 
-  it('usa una cadena vacía si BOLD_LLAVE_SECRETA no está definida', () => {
-    delete process.env['BOLD_LLAVE_SECRETA'];
-    const esperada = createHash('sha256').update('compra-1' + '1000' + 'COP').digest('hex');
+  it.each([undefined, ''])('lanza SecretoNoConfigurado si BOLD_LLAVE_SECRETA es %j, en vez de firmar con llave vacía', (valor) => {
+    if (valor === undefined) {
+      delete process.env['BOLD_LLAVE_SECRETA'];
+    } else {
+      process.env['BOLD_LLAVE_SECRETA'] = valor;
+    }
 
-    expect(firmarBoton('compra-1', 1000, 'COP')).toBe(esperada);
+    expect(() => firmarBoton('compra-1', 1000, 'COP')).toThrow(SecretoNoConfigurado);
   });
 
   it('produce firmas distintas si cambia cualquiera de los tres datos', () => {
@@ -98,6 +102,19 @@ describe('verificarFirmaWebhook', () => {
     // pruebas, debe rechazarse — son ramas de llave distintas.
     const firmaConLlaveReal = firmarComoBold(cuerpo, 'llave-secreta-de-produccion');
     expect(verificarFirmaWebhook(cuerpo, firmaConLlaveReal, true)).toBe(false);
+  });
+
+  it('modo producción: lanza SecretoNoConfigurado si BOLD_LLAVE_SECRETA falta, en vez de aceptar firmas con llave vacía', () => {
+    delete process.env['BOLD_LLAVE_SECRETA'];
+    const firmaConLlaveVacia = firmarComoBold(cuerpo, '');
+
+    expect(() => verificarFirmaWebhook(cuerpo, firmaConLlaveVacia, false)).toThrow(SecretoNoConfigurado);
+  });
+
+  it('modo pruebas: verifica con llave vacía aunque BOLD_LLAVE_SECRETA no esté definida', () => {
+    delete process.env['BOLD_LLAVE_SECRETA'];
+
+    expect(verificarFirmaWebhook(cuerpo, firmarComoBold(cuerpo, ''), true)).toBe(true);
   });
 
   it('rechaza sin lanzar cuando la firma recibida tiene una longitud distinta a la esperada', () => {

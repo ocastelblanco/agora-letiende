@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
+import { leerSecreto } from './secretos';
 
 /**
  * Enlaces mágicos (`tech-specs.md` §8.2, `CLAUDE.md` §5 A07): otorgan una
@@ -15,7 +16,7 @@ import { createHmac, randomBytes } from 'node:crypto';
  */
 
 function hmacToken(token: string): string {
-  const secreto = process.env['SECRETO_ENLACES_MAGICOS'] ?? '';
+  const secreto = leerSecreto('SECRETO_ENLACES_MAGICOS');
   return createHmac('sha256', secreto).update(token).digest('hex');
 }
 
