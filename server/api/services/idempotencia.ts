@@ -117,7 +117,7 @@ export async function ejecutarIdempotente(
     if (item['estado'] === 'completada') {
       return {
         statusCode: item['statusCode'] as number,
-        headers: { 'Content-Type': 'application/json', 'Idempotent-Replayed': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'Idempotent-Replayed': 'true' },
         body: item['respuesta'] as string,
       };
     }
@@ -125,7 +125,7 @@ export async function ejecutarIdempotente(
     if (ahora - iniciadaEn <= UMBRAL_RECLAMACION_VENCIDA_SEGUNDOS) {
       return {
         statusCode: 409,
-        headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
+        headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'Retry-After': '5' },
         body: JSON.stringify({ mensaje: 'La operación anterior sigue en proceso, espera unos segundos' }),
       };
     }

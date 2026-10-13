@@ -5,12 +5,15 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { MARCADOR_NONCE, politicaCsp, politicaReferer } from './cabeceras-seguridad';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 const angularApp = new AngularNodeAppEngine();
+app.disable('x-powered-by');
 
 /**
  * Example Express Rest API endpoints can be defined here.
@@ -76,6 +79,22 @@ app.use((req, res, next) => {
 });
 
 /**
+ * Cabeceras de seguridad para toda respuesta del SSR (`cabeceras-seguridad.ts`).
+ * Detrás del proxy de `letiende.co/cartelera/*`, CloudFront sobrescribe HSTS,
+ * `nosniff`, `Referrer-Policy` y `X-Frame-Options` con los suyos; la CSP sí
+ * pasa (esa política de CloudFront no define una). La CSP va en modo
+ * `Report-Only` hasta revisar sus avisos en la compra con Bold y el login.
+ */
+app.use((req, res, next) => {
+  res.locals['nonce'] = randomBytes(16).toString('base64');
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', politicaReferer(req.path));
+  next();
+});
+
+/**
  * Serve static files from /browser.
  *
  * El build genera los archivos en una carpeta plana (sin subcarpeta
@@ -98,9 +117,30 @@ app.use(express.static(browserDistFolder, opcionesEstatico));
 app.use((req, res, next) => {
   angularApp
     .handle(req)
-    .then((response) => (response ? writeResponseToNodeResponse(response, res) : next()))
+    .then(async (response) => {
+      if (!response) {
+        next();
+        return;
+      }
+      await writeResponseToNodeResponse(await conNonce(response, String(res.locals['nonce'])), res);
+    })
     .catch(next);
 });
+
+/**
+ * Reemplaza el marcador de `ngCspNonce` por el nonce de esta petición en las
+ * respuestas HTML y agrega la CSP con ese mismo nonce.
+ */
+async function conNonce(respuesta: Response, nonce: string): Promise<Response> {
+  if (!respuesta.headers.get('content-type')?.includes('text/html')) {
+    return respuesta;
+  }
+  const html = (await respuesta.text()).replaceAll(MARCADOR_NONCE, nonce);
+  const encabezados = new Headers(respuesta.headers);
+  encabezados.delete('content-length');
+  encabezados.set('Content-Security-Policy-Report-Only', politicaCsp(nonce));
+  return new Response(html, { status: respuesta.status, statusText: respuesta.statusText, headers: encabezados });
+}
 
 /**
  * Start the server if this module is the main entry point, or it is ran via PM2.
