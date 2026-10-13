@@ -1583,6 +1583,7 @@ async function generarQrEvento(
       statusCode: 200,
       headers: {
         'Content-Type': 'image/png',
+        'X-Content-Type-Options': 'nosniff',
         'Content-Disposition': `attachment; filename="qr-${slug}.png"`,
       },
       body: png.toString('base64'),
@@ -1595,6 +1596,7 @@ async function generarQrEvento(
     statusCode: 200,
     headers: {
       'Content-Type': 'image/svg+xml',
+      'X-Content-Type-Options': 'nosniff',
       'Content-Disposition': `attachment; filename="qr-${slug}.svg"`,
     },
     body: svg,

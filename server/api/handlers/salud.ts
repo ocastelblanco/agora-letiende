@@ -21,6 +21,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (): Promise<APIGatewayPro
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
     },
     body: JSON.stringify(cuerpoRespuesta),
   };

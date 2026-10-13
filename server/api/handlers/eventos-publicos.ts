@@ -230,7 +230,7 @@ async function generarSitemap(): Promise<APIGatewayProxyResultV2> {
 
   return {
     statusCode: 200,
-    headers: { 'Content-Type': 'application/xml' },
+    headers: { 'Content-Type': 'application/xml', 'X-Content-Type-Options': 'nosniff' },
     body: xml,
   };
 }
