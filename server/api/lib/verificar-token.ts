@@ -30,12 +30,47 @@ function obtenerAppFirebase() {
 }
 
 /**
- * Verifica el header `Authorization: Bearer <token>` con
- * `verifyIdToken(token, true)` y devuelve el correo verificado. Valida
- * firma y expiración; con `checkRevoked` consulta además a Firebase si la
- * sesión fue revocada o la cuenta deshabilitada (una llamada extra por
- * petición). Exige `email_verified`: el proyecto Firebase es compartido y
- * un proveedor que no verifique el correo permitiría usar el de otra persona.
+ * La revisión de revocación (`checkRevoked`) es una llamada a Firebase que
+ * en staging sumó 150–380 ms por petición. Su resultado se guarda en memoria
+ * del contenedor, por token, durante 5 minutos: en una ráfaga de escaneos
+ * en la puerta solo la primera petición la paga. Revocar o deshabilitar una
+ * cuenta corta el acceso en ≤ 5 minutos.
+ */
+export const VIGENCIA_REVISION_REVOCACION_MS = 5 * 60_000;
+const MAX_TOKENS_EN_CACHE = 500;
+const revisionesVigentes = new Map<string, number>();
+
+function revocacionRevisadaHace(token: string, ahora: number): boolean {
+  const revisadoEn = revisionesVigentes.get(token);
+  return revisadoEn !== undefined && ahora - revisadoEn < VIGENCIA_REVISION_REVOCACION_MS;
+}
+
+function recordarRevision(token: string, ahora: number): void {
+  if (revisionesVigentes.size >= MAX_TOKENS_EN_CACHE) {
+    for (const [llave, revisadoEn] of revisionesVigentes) {
+      if (ahora - revisadoEn >= VIGENCIA_REVISION_REVOCACION_MS) {
+        revisionesVigentes.delete(llave);
+      }
+    }
+    if (revisionesVigentes.size >= MAX_TOKENS_EN_CACHE) {
+      revisionesVigentes.clear();
+    }
+  }
+  revisionesVigentes.set(token, ahora);
+}
+
+/** Solo para pruebas: vacía el caché de revisiones de revocación. */
+export function reiniciarCacheRevocacion(): void {
+  revisionesVigentes.clear();
+}
+
+/**
+ * Verifica el header `Authorization: Bearer <token>` con `verifyIdToken` y
+ * devuelve el correo verificado. Valida firma y expiración siempre, y con
+ * `checkRevoked` que la sesión no fue revocada ni la cuenta deshabilitada
+ * (ver el caché de arriba). Exige `email_verified`: el proyecto Firebase es
+ * compartido y un proveedor que no verifique el correo permitiría usar el
+ * de otra persona.
  * Estar autenticado en el proyecto Firebase compartido no implica ninguna
  * autorización en Ágora — eso lo resuelve `resolver-permisos.ts`.
  */
@@ -54,9 +89,14 @@ export async function verificarToken(encabezadoAuthorization: string | undefined
   const auth = getAuth(obtenerAppFirebase());
 
   try {
-    const tokenDecodificado = await auth.verifyIdToken(token, true);
+    const ahora = Date.now();
+    const revisarRevocacion = !revocacionRevisadaHace(token, ahora);
+    const tokenDecodificado = await auth.verifyIdToken(token, revisarRevocacion);
     if (!tokenDecodificado.email || tokenDecodificado.email_verified !== true) {
       throw new ErrorAutenticacion('El token no contiene un correo verificado');
+    }
+    if (revisarRevocacion) {
+      recordarRevision(token, ahora);
     }
     return tokenDecodificado.email;
   } catch (error) {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { verifyIdTokenMock } = vi.hoisted(() => ({ verifyIdTokenMock: vi.fn() }));
 
@@ -12,7 +12,12 @@ vi.mock('firebase-admin/auth', () => ({
   getAuth: () => ({ verifyIdToken: verifyIdTokenMock }),
 }));
 
-import { ErrorAutenticacion, verificarToken } from './verificar-token';
+import {
+  ErrorAutenticacion,
+  VIGENCIA_REVISION_REVOCACION_MS,
+  reiniciarCacheRevocacion,
+  verificarToken,
+} from './verificar-token';
 
 function errorFirebase(code: string): Error {
   return Object.assign(new Error(code), { code });
@@ -20,6 +25,11 @@ function errorFirebase(code: string): Error {
 
 beforeEach(() => {
   verifyIdTokenMock.mockReset();
+  reiniciarCacheRevocacion();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('verificarToken', () => {
@@ -67,4 +77,65 @@ describe('verificarToken', () => {
       expect(verifyIdTokenMock).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('caché de la revisión de revocación', () => {
+  const tokenValido = { email: 'portero@letiende.co', email_verified: true };
+
+  it('revisa la revocación la primera vez y la omite con el mismo token dentro de la vigencia', async () => {
+    vi.useFakeTimers();
+    verifyIdTokenMock.mockResolvedValue(tokenValido);
+
+    await verificarToken('Bearer token-a');
+    vi.advanceTimersByTime(VIGENCIA_REVISION_REVOCACION_MS - 1);
+    await verificarToken('Bearer token-a');
+
+    expect(verifyIdTokenMock.mock.calls).toEqual([
+      ['token-a', true],
+      ['token-a', false],
+    ]);
+  });
+
+  it('vuelve a revisar al vencer la vigencia', async () => {
+    vi.useFakeTimers();
+    verifyIdTokenMock.mockResolvedValue(tokenValido);
+
+    await verificarToken('Bearer token-a');
+    vi.advanceTimersByTime(VIGENCIA_REVISION_REVOCACION_MS);
+    await verificarToken('Bearer token-a');
+
+    expect(verifyIdTokenMock.mock.calls[1]).toEqual(['token-a', true]);
+  });
+
+  it('cada token se revisa por separado', async () => {
+    verifyIdTokenMock.mockResolvedValue(tokenValido);
+
+    await verificarToken('Bearer token-a');
+    await verificarToken('Bearer token-b');
+
+    expect(verifyIdTokenMock.mock.calls).toEqual([
+      ['token-a', true],
+      ['token-b', true],
+    ]);
+  });
+
+  it('no guarda en caché un token rechazado: la siguiente petición vuelve a revisar', async () => {
+    verifyIdTokenMock.mockRejectedValueOnce(errorFirebase('auth/id-token-revoked'));
+    verifyIdTokenMock.mockResolvedValueOnce(tokenValido);
+
+    await expect(verificarToken('Bearer token-a')).rejects.toBeInstanceOf(ErrorAutenticacion);
+    await verificarToken('Bearer token-a');
+
+    expect(verifyIdTokenMock.mock.calls[1]).toEqual(['token-a', true]);
+  });
+
+  it('no guarda en caché un token sin correo verificado', async () => {
+    verifyIdTokenMock.mockResolvedValueOnce({ email: 'x@correo.com', email_verified: false });
+    verifyIdTokenMock.mockResolvedValueOnce(tokenValido);
+
+    await expect(verificarToken('Bearer token-a')).rejects.toBeInstanceOf(ErrorAutenticacion);
+    await verificarToken('Bearer token-a');
+
+    expect(verifyIdTokenMock.mock.calls[1]).toEqual(['token-a', true]);
+  });
 });
