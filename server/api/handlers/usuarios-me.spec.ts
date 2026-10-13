@@ -51,7 +51,7 @@ describe('handler de GET /api/usuarios/me', () => {
   });
 
   it('responde 403 si el correo no existe en agora-usuarios', async () => {
-    verificarIdTokenMock.mockResolvedValue({ email: 'desconocido@letiende.co' });
+    verificarIdTokenMock.mockResolvedValue({ email: 'desconocido@letiende.co', email_verified: true });
     sendMock.mockResolvedValue({ Item: undefined });
 
     const respuesta = await invocar('Bearer token-valido');
@@ -60,7 +60,7 @@ describe('handler de GET /api/usuarios/me', () => {
   });
 
   it('responde 403 si el correo existe pero está inactivo', async () => {
-    verificarIdTokenMock.mockResolvedValue({ email: 'inactivo@letiende.co' });
+    verificarIdTokenMock.mockResolvedValue({ email: 'inactivo@letiende.co', email_verified: true });
     sendMock.mockResolvedValue({
       Item: {
         email: 'inactivo@letiende.co',
@@ -76,7 +76,7 @@ describe('handler de GET /api/usuarios/me', () => {
   });
 
   it('responde 200 con email, nombre y rol si el correo es válido y activo', async () => {
-    verificarIdTokenMock.mockResolvedValue({ email: 'admin@letiende.co' });
+    verificarIdTokenMock.mockResolvedValue({ email: 'admin@letiende.co', email_verified: true });
     sendMock.mockResolvedValue({
       Item: {
         email: 'admin@letiende.co',
