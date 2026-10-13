@@ -4,6 +4,7 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
+import { isDevMode } from '@angular/core';
 import express from 'express';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
@@ -139,7 +140,12 @@ async function conNonce(respuesta: Response, nonce: string): Promise<Response> {
   const html = (await respuesta.text()).replaceAll(MARCADOR_NONCE, nonce);
   const encabezados = new Headers(respuesta.headers);
   encabezados.delete('content-length');
-  encabezados.set('Content-Security-Policy', politicaCsp(nonce));
+  // `ng serve` inyecta `/@vite/client` sin nonce: en desarrollo no se envía
+  // la CSP (la suite simulada de Playwright corre ahí). La suite real contra
+  // staging sí la ejercita con el build de producción.
+  if (!isDevMode()) {
+    encabezados.set('Content-Security-Policy', politicaCsp(nonce));
+  }
   return new Response(html, { status: respuesta.status, statusText: respuesta.statusText, headers: encabezados });
 }
 
