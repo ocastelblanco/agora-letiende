@@ -82,8 +82,9 @@ app.use((req, res, next) => {
  * Cabeceras de seguridad para toda respuesta del SSR (`cabeceras-seguridad.ts`).
  * Detrás del proxy de `letiende.co/cartelera/*`, CloudFront sobrescribe HSTS,
  * `nosniff`, `Referrer-Policy` y `X-Frame-Options` con los suyos; la CSP sí
- * pasa (esa política de CloudFront no define una). La CSP va en modo
- * `Report-Only` hasta revisar sus avisos en la compra con Bold y el login.
+ * pasa (esa política de CloudFront no define una). La CSP se aplicó tras
+ * correr en modo `Report-Only` sin avisos en la compra con Bold, el checkout
+ * del sandbox y el login, en staging y en producción.
  */
 app.use((req, res, next) => {
   res.locals['nonce'] = randomBytes(16).toString('base64');
@@ -138,7 +139,7 @@ async function conNonce(respuesta: Response, nonce: string): Promise<Response> {
   const html = (await respuesta.text()).replaceAll(MARCADOR_NONCE, nonce);
   const encabezados = new Headers(respuesta.headers);
   encabezados.delete('content-length');
-  encabezados.set('Content-Security-Policy-Report-Only', politicaCsp(nonce));
+  encabezados.set('Content-Security-Policy', politicaCsp(nonce));
   return new Response(html, { status: respuesta.status, statusText: respuesta.statusText, headers: encabezados });
 }
 
