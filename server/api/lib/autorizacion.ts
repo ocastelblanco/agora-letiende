@@ -1,11 +1,32 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { ErrorAutenticacion, verificarToken } from './verificar-token';
+import { ErrorAutenticacion, MotivoAutenticacion, verificarToken } from './verificar-token';
 import { PermisosUsuario, Rol, cumpleRolMinimo, resolverPermisos } from './resolver-permisos';
 import { obtenerEncabezadoAuthorization, respuestaJson } from './http';
 
 export type ResultadoAutorizacion =
   | { autorizado: true; permisos: PermisosUsuario }
   | { autorizado: false; respuesta: APIGatewayProxyResultV2 };
+
+export type MotivoRechazo = MotivoAutenticacion | 'no_registrado' | 'inactivo' | 'rol_insuficiente';
+
+/**
+ * Deja en el log cada 401/403 de una ruta protegida (`CLAUDE.md` §5 A09),
+ * para poder reconstruir intentos de acceso. Solo datos del personal: el
+ * correo cuando ya fue verificado y el rol. Nunca el token ni datos de
+ * clientes.
+ */
+export function registrarRechazo(
+  evento: APIGatewayProxyEventV2,
+  motivo: MotivoRechazo,
+  detalle: { email?: string; rol?: Rol; rolMinimo?: Rol } = {},
+): void {
+  console.warn('Acceso rechazado', {
+    motivo,
+    metodo: evento.requestContext?.http?.method,
+    ruta: evento.rawPath,
+    ...detalle,
+  });
+}
 
 /**
  * Encadena `verificar-token` + `resolver-permisos` + `cumpleRolMinimo`
@@ -22,6 +43,7 @@ export async function exigirRol(
     email = await verificarToken(obtenerEncabezadoAuthorization(evento));
   } catch (error) {
     if (error instanceof ErrorAutenticacion) {
+      registrarRechazo(evento, error.motivo);
       return { autorizado: false, respuesta: respuestaJson(401, { mensaje: 'No autenticado' }) };
     }
     console.error('verificarToken falló de forma inesperada', {
@@ -42,11 +64,17 @@ export async function exigirRol(
     return { autorizado: false, respuesta: respuestaJson(500, { mensaje: 'Error interno' }) };
   }
 
-  if (!permisos || !permisos.activo || !cumpleRolMinimo(permisos.rol, rolMinimo)) {
-    return {
-      autorizado: false,
-      respuesta: respuestaJson(403, { mensaje: 'No autorizado en Ágora' }),
-    };
+  if (!permisos) {
+    registrarRechazo(evento, 'no_registrado', { email });
+    return { autorizado: false, respuesta: respuestaJson(403, { mensaje: 'No autorizado en Ágora' }) };
+  }
+  if (!permisos.activo) {
+    registrarRechazo(evento, 'inactivo', { email });
+    return { autorizado: false, respuesta: respuestaJson(403, { mensaje: 'No autorizado en Ágora' }) };
+  }
+  if (!cumpleRolMinimo(permisos.rol, rolMinimo)) {
+    registrarRechazo(evento, 'rol_insuficiente', { email, rol: permisos.rol, rolMinimo });
+    return { autorizado: false, respuesta: respuestaJson(403, { mensaje: 'No autorizado en Ágora' }) };
   }
 
   return { autorizado: true, permisos };

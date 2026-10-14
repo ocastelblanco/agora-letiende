@@ -59,6 +59,23 @@ describe('handler de GET /api/usuarios/me', () => {
     expect(respuesta.statusCode).toBe(403);
   });
 
+  it('registra el motivo del rechazo sin el token', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    verificarIdTokenMock.mockResolvedValue({ email: 'desconocido@letiende.co', email_verified: true });
+    sendMock.mockResolvedValue({ Item: undefined });
+
+    await invocar('Bearer token-valido');
+    await invocar(undefined);
+
+    expect(warnSpy.mock.calls.map(([, datos]) => (datos as { motivo: string }).motivo)).toEqual([
+      'no_registrado',
+      'sin_token',
+    ]);
+    expect(warnSpy.mock.calls[0]![1]).toMatchObject({ email: 'desconocido@letiende.co' });
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('token-valido');
+    warnSpy.mockRestore();
+  });
+
   it('responde 403 si el correo existe pero está inactivo', async () => {
     verificarIdTokenMock.mockResolvedValue({ email: 'inactivo@letiende.co', email_verified: true });
     sendMock.mockResolvedValue({
