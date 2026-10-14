@@ -146,4 +146,14 @@ export class UsuariosService {
       };
     }
   }
+
+  /**
+   * El listado de usuarios contiene los correos y roles del personal.
+   * Se limpia al cerrar sesión (`CLAUDE.md` §5, A07), desde
+   * `BarraNavegacionComponent.cerrarSesion()`; ver `PanelService.limpiar()`.
+   */
+  limpiar(): void {
+    this.usuariosSignal.set([]);
+    this.errorSignal.set(false);
+  }
 }

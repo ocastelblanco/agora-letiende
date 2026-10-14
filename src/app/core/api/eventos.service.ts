@@ -255,4 +255,14 @@ export class EventosService {
     const coincidencia = /filename="([^"]+)"/.exec(contentDisposition);
     return coincidencia ? coincidencia[1] : null;
   }
+
+  /**
+   * Los eventos del personal incluyen borradores y la configuración interna.
+   * Se limpia al cerrar sesión (`CLAUDE.md` §5, A07), desde
+   * `BarraNavegacionComponent.cerrarSesion()`; ver `PanelService.limpiar()`.
+   */
+  limpiar(): void {
+    this.eventosSignal.set([]);
+    this.errorSignal.set(false);
+  }
 }

@@ -22,6 +22,34 @@ describe('AprobacionesService', () => {
     TestBed.resetTestingModule();
   });
 
+  describe('limpiar', () => {
+    it('vacía las compras pendientes (datos de clientes) al cerrar sesión', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+      const promesa = servicio.cargarPendientes();
+      await Promise.resolve();
+      httpMock.expectOne('/api/aprobaciones').flush([
+        { compraId: 'c1', nombreEvento: 'Concierto de jazz', cantidad: 2, montoTotal: 90000, creadaEn: '2026-08-08T00:00:00.000Z' },
+      ]);
+      await promesa;
+      expect(servicio.pendientes().length).toBe(1);
+
+      servicio.limpiar();
+
+      expect(servicio.pendientes()).toEqual([]);
+      expect(servicio.error()).toBe(false);
+    });
+
+    it('apaga la bandera de error', async () => {
+      const { servicio } = configurarPrueba(null);
+      await servicio.cargarPendientes();
+      expect(servicio.error()).toBe(true);
+
+      servicio.limpiar();
+
+      expect(servicio.error()).toBe(false);
+    });
+  });
+
   describe('cargarPendientes', () => {
     it('deja pendientes en [] y marca error si no hay ID Token', async () => {
       const { servicio } = configurarPrueba(null);
