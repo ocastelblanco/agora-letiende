@@ -2,7 +2,10 @@ import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import type { User } from 'firebase/auth';
+import { AprobacionesService } from '../../core/api/aprobaciones.service';
+import { EventosService } from '../../core/api/eventos.service';
 import { PanelService } from '../../core/api/panel.service';
+import { UsuariosService } from '../../core/api/usuarios.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
 import { EmbebidoService } from '../../core/embebido/embebido.service';
 import type { Rol } from '../../core/models/usuario.model';
@@ -37,6 +40,17 @@ const RUTAS_PERSONAL: Routes = [
   { path: 'mis-eventos/aprobaciones', component: ComponenteRutaDummy },
 ];
 
+/** Los servicios con datos que `cerrarSesion()` limpia, además de `PanelService`. */
+function serviciosConDatosMock() {
+  const limpiezas = { eventos: vi.fn(), usuarios: vi.fn(), aprobaciones: vi.fn() };
+  const proveedores = [
+    { provide: EventosService, useValue: { limpiar: limpiezas.eventos } },
+    { provide: UsuariosService, useValue: { limpiar: limpiezas.usuarios } },
+    { provide: AprobacionesService, useValue: { limpiar: limpiezas.aprobaciones } },
+  ];
+  return { limpiezas, proveedores };
+}
+
 function configurarPrueba(
   usuarioActual: User | null,
   rol: Rol | null,
@@ -44,6 +58,7 @@ function configurarPrueba(
   limpiarPanelMock = vi.fn(),
   rutas: Routes = [],
 ) {
+  const { limpiezas, proveedores } = serviciosConDatosMock();
   TestBed.configureTestingModule({
     providers: [
       provideRouter(rutas),
@@ -56,6 +71,7 @@ function configurarPrueba(
         },
       },
       { provide: PanelService, useValue: { limpiar: limpiarPanelMock } },
+      ...proveedores,
     ],
   });
 
@@ -63,7 +79,7 @@ function configurarPrueba(
     TestBed.createComponent(BarraNavegacionComponent);
   fixture.detectChanges();
 
-  return { fixture, cerrarSesionMock, limpiarPanelMock };
+  return { fixture, cerrarSesionMock, limpiarPanelMock, limpiezas };
 }
 
 describe('BarraNavegacionComponent', () => {
@@ -241,9 +257,9 @@ describe('BarraNavegacionComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/login');
   });
 
-  it('"Cerrar sesión" también limpia PanelService (datos personales de clientes, CLAUDE.md §5 A07)', async () => {
+  it('"Cerrar sesión" también limpia los servicios con datos (CLAUDE.md §5 A07)', async () => {
     const usuario = { displayName: 'Ana Admin', email: 'ana@letiende.co', photoURL: null } as User;
-    const { fixture, limpiarPanelMock } = configurarPrueba(usuario, 'administrador');
+    const { fixture, limpiarPanelMock, limpiezas } = configurarPrueba(usuario, 'administrador');
     const router = TestBed.inject(Router);
     vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
@@ -255,6 +271,9 @@ describe('BarraNavegacionComponent', () => {
     await Promise.resolve();
 
     expect(limpiarPanelMock).toHaveBeenCalledTimes(1);
+    expect(limpiezas.eventos).toHaveBeenCalledTimes(1);
+    expect(limpiezas.usuarios).toHaveBeenCalledTimes(1);
+    expect(limpiezas.aprobaciones).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -275,6 +294,7 @@ function configurarPruebaEmbebida(
         },
       },
       { provide: PanelService, useValue: { limpiar: vi.fn() } },
+      ...serviciosConDatosMock().proveedores,
       { provide: EmbebidoService, useValue: { embebido: true } },
     ],
   });

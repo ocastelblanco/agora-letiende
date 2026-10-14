@@ -113,4 +113,14 @@ export class AprobacionesService {
       return { exito: false, error: mensajeError(error, 'No se pudo rechazar la compra. Intenta de nuevo.') };
     }
   }
+
+  /**
+   * Las compras pendientes contienen datos personales de clientes.
+   * Se limpia al cerrar sesión (`CLAUDE.md` §5, A07), desde
+   * `BarraNavegacionComponent.cerrarSesion()`; ver `PanelService.limpiar()`.
+   */
+  limpiar(): void {
+    this.pendientesSignal.set([]);
+    this.errorSignal.set(false);
+  }
 }

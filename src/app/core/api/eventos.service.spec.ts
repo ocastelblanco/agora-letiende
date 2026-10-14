@@ -61,6 +61,32 @@ describe('EventosService', () => {
     httpMock.verify();
   });
 
+  describe('limpiar', () => {
+    it('vacía el listado y la bandera de error (cierre de sesión)', async () => {
+      const servicio = configurarPrueba('token-valido');
+      const promesa = servicio.cargarEventos();
+      await Promise.resolve();
+      httpMock.expectOne('/api/eventos').flush([eventoEjemplo]);
+      await promesa;
+      expect(servicio.eventos().length).toBe(1);
+
+      servicio.limpiar();
+
+      expect(servicio.eventos()).toEqual([]);
+      expect(servicio.error()).toBe(false);
+    });
+
+    it('apaga la bandera de error', async () => {
+      const servicio = configurarPrueba(null);
+      await servicio.cargarEventos();
+      expect(servicio.error()).toBe(true);
+
+      servicio.limpiar();
+
+      expect(servicio.error()).toBe(false);
+    });
+  });
+
   describe('cargarEventos', () => {
     it('deja eventos en [] y marca error cuando no hay ID Token', async () => {
       const servicio = configurarPrueba(null);

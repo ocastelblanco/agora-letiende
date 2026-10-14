@@ -2,7 +2,10 @@ import { Component, ElementRef, computed, effect, inject, signal, viewChild } fr
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, map } from 'rxjs';
+import { AprobacionesService } from '../../core/api/aprobaciones.service';
+import { EventosService } from '../../core/api/eventos.service';
 import { PanelService } from '../../core/api/panel.service';
+import { UsuariosService } from '../../core/api/usuarios.service';
 import { ServicioAuth } from '../../core/auth/servicio-auth';
 import { EmbebidoService } from '../../core/embebido/embebido.service';
 import { GRUPOS_NAVEGACION, tabsVisiblesDeGrupo } from './secciones-navegacion';
@@ -38,6 +41,9 @@ import { GRUPOS_NAVEGACION, tabsVisiblesDeGrupo } from './secciones-navegacion';
 export class BarraNavegacionComponent {
   private readonly servicioAuth = inject(ServicioAuth);
   private readonly panelService = inject(PanelService);
+  private readonly eventosService = inject(EventosService);
+  private readonly usuariosService = inject(UsuariosService);
+  private readonly aprobacionesService = inject(AprobacionesService);
   private readonly router = inject(Router);
 
   /**
@@ -141,16 +147,20 @@ export class BarraNavegacionComponent {
 
   /**
    * Cierra sesión (primer consumidor real de `ServicioAuth.cerrarSesion()`)
-   * y vuelve a `/login`. También limpia `PanelService` (`detalle()` guarda
-   * datos personales de clientes) — `CLAUDE.md` §5, A07: "limpia todo el
-   * estado reactivo (Signals) del cliente". No se limpia dentro de
-   * `ServicioAuth` porque `PanelService` ya lo inyecta a él, y la inyección
+   * y vuelve a `/login`. También limpia los servicios con datos del
+   * personal o de clientes (`PanelService`, `EventosService`,
+   * `UsuariosService`, `AprobacionesService`) — `CLAUDE.md` §5, A07: "limpia
+   * todo el estado reactivo (Signals) del cliente". No se limpian dentro de
+   * `ServicioAuth` porque esos servicios ya lo inyectan a él, y la inyección
    * inversa crearía una dependencia circular en el DI de Angular.
    */
   protected async cerrarSesion(): Promise<void> {
     this.cerrarMenu();
     await this.servicioAuth.cerrarSesion();
     this.panelService.limpiar();
+    this.eventosService.limpiar();
+    this.usuariosService.limpiar();
+    this.aprobacionesService.limpiar();
     await this.router.navigateByUrl('/login');
   }
 }
