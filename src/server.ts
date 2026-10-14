@@ -8,7 +8,7 @@ import { isDevMode } from '@angular/core';
 import express from 'express';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { MARCADOR_NONCE, politicaCsp, politicaReferer } from './cabeceras-seguridad';
+import { conMetaReferer, MARCADOR_NONCE, politicaCsp, politicaReferer } from './cabeceras-seguridad';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -27,6 +27,24 @@ app.disable('x-powered-by');
  * });
  * ```
  */
+
+/**
+ * Cabeceras de seguridad para toda respuesta del SSR (`cabeceras-seguridad.ts`).
+ * Detrás del proxy de `letiende.co/cartelera/*`, CloudFront sobrescribe HSTS,
+ * `nosniff`, `Referrer-Policy` y `X-Frame-Options` con los suyos; la CSP sí
+ * pasa (esa política de CloudFront no define una). La CSP se aplicó tras
+ * correr en modo `Report-Only` sin avisos en la compra con Bold, el checkout
+ * del sandbox y el login, en staging y en producción. Va antes de la
+ * redirección de `agora.letiende.co` para que el 301 también lleve HSTS.
+ */
+app.use((req, res, next) => {
+  res.locals['nonce'] = randomBytes(16).toString('base64');
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', politicaReferer(req.path));
+  next();
+});
 
 /**
  * Redirección 301 desde el dominio antiguo (`agora.letiende.co`).
@@ -80,23 +98,6 @@ app.use((req, res, next) => {
 });
 
 /**
- * Cabeceras de seguridad para toda respuesta del SSR (`cabeceras-seguridad.ts`).
- * Detrás del proxy de `letiende.co/cartelera/*`, CloudFront sobrescribe HSTS,
- * `nosniff`, `Referrer-Policy` y `X-Frame-Options` con los suyos; la CSP sí
- * pasa (esa política de CloudFront no define una). La CSP se aplicó tras
- * correr en modo `Report-Only` sin avisos en la compra con Bold, el checkout
- * del sandbox y el login, en staging y en producción.
- */
-app.use((req, res, next) => {
-  res.locals['nonce'] = randomBytes(16).toString('base64');
-  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('Referrer-Policy', politicaReferer(req.path));
-  next();
-});
-
-/**
  * Serve static files from /browser.
  *
  * El build genera los archivos en una carpeta plana (sin subcarpeta
@@ -124,20 +125,21 @@ app.use((req, res, next) => {
         next();
         return;
       }
-      await writeResponseToNodeResponse(await conNonce(response, String(res.locals['nonce'])), res);
+      await writeResponseToNodeResponse(await conNonce(response, String(res.locals['nonce']), req.path), res);
     })
     .catch(next);
 });
 
 /**
  * Reemplaza el marcador de `ngCspNonce` por el nonce de esta petición en las
- * respuestas HTML y agrega la CSP con ese mismo nonce.
+ * respuestas HTML, agrega la CSP con ese mismo nonce y, en las rutas con
+ * token, el `<meta name="referrer">`.
  */
-async function conNonce(respuesta: Response, nonce: string): Promise<Response> {
+async function conNonce(respuesta: Response, nonce: string, ruta: string): Promise<Response> {
   if (!respuesta.headers.get('content-type')?.includes('text/html')) {
     return respuesta;
   }
-  const html = (await respuesta.text()).replaceAll(MARCADOR_NONCE, nonce);
+  const html = conMetaReferer((await respuesta.text()).replaceAll(MARCADOR_NONCE, nonce), ruta);
   const encabezados = new Headers(respuesta.headers);
   encabezados.delete('content-length');
   // `ng serve` inyecta `/@vite/client` sin nonce: en desarrollo no se envía
