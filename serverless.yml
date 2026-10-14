@@ -10,7 +10,17 @@ provider:
   memorySize: 256
   timeout: 10
   httpApi:
-    cors: true
+    # Solo los orígenes que llaman a esta API desde el navegador. La app usa
+    # rutas relativas (mismo origen, directo o tras el proxy de
+    # `letiende.co/cartelera/*`); el inicio de `letiende.co` (y su staging)
+    # pide `/api/eventos-publicos` a `agora.letiende.co`. El webhook de Bold
+    # es servidor a servidor y no depende de CORS.
+    cors:
+      allowedOrigins:
+        - https://agora.letiende.co
+        - https://letiende.co
+        - https://www.letiende.co
+        - https://staging.letiende.co
     # Límite de tasa: ver `resources.extensions.HttpApiStage` más abajo
     # (`provider.httpApi.throttle` no existe para HTTP API).
   deploymentBucket:
