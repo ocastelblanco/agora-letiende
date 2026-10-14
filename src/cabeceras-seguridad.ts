@@ -49,3 +49,16 @@ const RUTA_CON_TOKEN = /^(\/cartelera)?\/(comprobante|aprobaciones|boleta)\/[^/]
 export function politicaReferer(ruta: string): string {
   return RUTA_CON_TOKEN.test(ruta) ? 'no-referrer' : 'strict-origin-when-cross-origin';
 }
+
+/**
+ * Detrás de `letiende.co/cartelera/*`, CloudFront reemplaza la cabecera
+ * `Referrer-Policy` por la suya, así que en las rutas con token también va
+ * un `<meta name="referrer">` al inicio del `<head>`: el navegador lo aplica
+ * por encima de la cabecera.
+ */
+export function conMetaReferer(html: string, ruta: string): string {
+  if (politicaReferer(ruta) !== 'no-referrer') {
+    return html;
+  }
+  return html.replace(/<head(\s[^>]*)?>/i, (etiqueta) => `${etiqueta}<meta name="referrer" content="no-referrer">`);
+}

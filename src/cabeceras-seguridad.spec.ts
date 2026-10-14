@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { politicaCsp, politicaReferer } from './cabeceras-seguridad';
+import { conMetaReferer, politicaCsp, politicaReferer } from './cabeceras-seguridad';
 
 describe('politicaCsp', () => {
   const csp = politicaCsp('abc123');
@@ -44,4 +44,24 @@ describe('politicaReferer', () => {
       expect(politicaReferer(ruta)).toBe('strict-origin-when-cross-origin');
     },
   );
+});
+
+describe('conMetaReferer', () => {
+  const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"></head><body></body></html>';
+
+  it('agrega el meta no-referrer al inicio del head en las rutas con token', () => {
+    expect(conMetaReferer(html, '/cartelera/comprobante/tok123')).toContain(
+      '<head><meta name="referrer" content="no-referrer"><meta charset="utf-8">',
+    );
+  });
+
+  it('respeta los atributos del head', () => {
+    expect(conMetaReferer('<head lang="es"></head>', '/boleta/b.f')).toBe(
+      '<head lang="es"><meta name="referrer" content="no-referrer"></head>',
+    );
+  });
+
+  it('no toca el HTML de las demás rutas', () => {
+    expect(conMetaReferer(html, '/cartelera/evento/jazz')).toBe(html);
+  });
 });
