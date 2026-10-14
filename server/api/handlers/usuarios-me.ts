@@ -6,6 +6,7 @@ import type {
 import { ErrorAutenticacion, verificarToken } from '../lib/verificar-token';
 import { resolverPermisos } from '../lib/resolver-permisos';
 import { obtenerEncabezadoAuthorization, respuestaJson } from '../lib/http';
+import { registrarRechazo } from '../lib/autorizacion';
 
 /**
  * `GET /api/usuarios/me` — encadena `verificar-token` + `resolver-permisos`
@@ -22,6 +23,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (
     email = await verificarToken(obtenerEncabezadoAuthorization(evento));
   } catch (error) {
     if (error instanceof ErrorAutenticacion) {
+      registrarRechazo(evento, error.motivo);
       return respuestaJson(401, { mensaje: 'No autenticado' });
     }
     return respuestaJson(500, { mensaje: 'Error interno' });
@@ -35,6 +37,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (
   }
 
   if (!permisos || !permisos.activo) {
+    registrarRechazo(evento, permisos ? 'inactivo' : 'no_registrado', { email });
     return respuestaJson(403, { mensaje: 'No autorizado en Ágora' });
   }
 

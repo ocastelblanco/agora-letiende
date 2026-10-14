@@ -5,7 +5,16 @@ import { getAuth } from 'firebase-admin/auth';
  * Error tipado de autenticación: el handler que lo capture debe traducirlo
  * a 401, nunca filtrar el mensaje interno de Firebase (CLAUDE.md §5, A05).
  */
-export class ErrorAutenticacion extends Error {}
+export type MotivoAutenticacion = 'sin_token' | 'token_invalido';
+
+export class ErrorAutenticacion extends Error {
+  readonly motivo: MotivoAutenticacion;
+
+  constructor(mensaje: string, motivo: MotivoAutenticacion = 'token_invalido') {
+    super(mensaje);
+    this.motivo = motivo;
+  }
+}
 
 /**
  * Inicializa la app de `firebase-admin` una sola vez por contenedor de
@@ -76,12 +85,12 @@ export function reiniciarCacheRevocacion(): void {
  */
 export async function verificarToken(encabezadoAuthorization: string | undefined): Promise<string> {
   if (!encabezadoAuthorization?.startsWith('Bearer ')) {
-    throw new ErrorAutenticacion('Falta el encabezado Authorization');
+    throw new ErrorAutenticacion('Falta el encabezado Authorization', 'sin_token');
   }
 
   const token = encabezadoAuthorization.slice('Bearer '.length).trim();
   if (!token) {
-    throw new ErrorAutenticacion('Falta el encabezado Authorization');
+    throw new ErrorAutenticacion('Falta el encabezado Authorization', 'sin_token');
   }
 
   // Fuera del try: un error de configuración (credencial ausente/inválida)
