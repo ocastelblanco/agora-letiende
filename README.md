@@ -33,14 +33,14 @@ The goal is to replace the manual process — WhatsApp conversations, receipts c
 * Door validation by QR scan, with a clear verdict (valid / already used / nonexistent / from another event)
 * Cash sales from the door or in person
 * Ticketing stages (early bird, box office, etc.) with automatic closing by date
-* Event dashboard (sold, available, checked in, seats pending confirmation) with Excel report export
+* Event dashboard (sold, available, checked in, seats pending confirmation) with Excel and PDF report export
 * Ágora-specific user and role management (`administrator` / `producer` / `gatekeeper`), authorization per assigned event
 * Google sign-in (Firebase Authentication), a project shared with Comandante and Babel
 * Optional ticketing for free events (capacity control only) and events ticketed by a third party (announced on the listing with an external link)
 * Automatic sync of every event to Google Calendar
 * Automatic online payment by card or PSE via **Bold** (embedded checkout, no leaving the site), as an alternative to manual bank transfer — confirmed by a signed, reconciled webhook, never by whatever the customer's browser reports
 
-What comes after v1 — WhatsApp notifications and PDF report export — is described for a non-technical audience in [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
+What comes after v1 — WhatsApp notifications — is described for a non-technical audience in [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
 
 ## Project status
 

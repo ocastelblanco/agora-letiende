@@ -145,6 +145,18 @@ describe('PanelService', () => {
       expect(resultado).toEqual({ exito: true, url: 'https://s3.amazonaws.com/reportes-presignada' });
     });
 
+    it('con formato pdf llama la misma ruta con ?formato=pdf', async () => {
+      const { httpMock, servicio } = configurarPrueba('token-valido');
+
+      const promesa = servicio.descargarReporte('evt-1', 'pdf');
+      await Promise.resolve();
+      const peticion = httpMock.expectOne((req) => req.url === '/api/eventos/evt-1/reportes');
+      expect(peticion.request.params.get('formato')).toBe('pdf');
+      peticion.flush({ url: 'https://s3.amazonaws.com/reportes-presignada' });
+
+      expect(await promesa).toEqual({ exito: true, url: 'https://s3.amazonaws.com/reportes-presignada' });
+    });
+
     it('devuelve el mensaje del backend si la petición falla', async () => {
       const { httpMock, servicio } = configurarPrueba('token-valido');
 

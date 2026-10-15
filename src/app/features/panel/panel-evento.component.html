@@ -12,14 +12,24 @@
           <h1 class="mb-1 text-2xl font-bold text-primary">Panel — {{ detalle()!.nombreEvento }}</h1>
         </div>
         <div class="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            class="h-12 rounded-2xl bg-primary px-6 uppercase text-neutral disabled:opacity-60"
-            [disabled]="descargandoReporte()"
-            (click)="descargarReporte()"
-          >
-            {{ descargandoReporte() ? 'Generando reporte…' : 'Descargar reporte' }}
-          </button>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              class="h-12 rounded-2xl bg-primary px-6 uppercase text-neutral disabled:opacity-60"
+              [disabled]="descargandoReporte()"
+              (click)="descargarReporte('xlsx')"
+            >
+              {{ descargandoReporte() ? 'Generando reporte…' : 'Descargar Excel' }}
+            </button>
+            <button
+              type="button"
+              class="h-12 rounded-2xl bg-primary px-6 uppercase text-neutral disabled:opacity-60"
+              [disabled]="descargandoReporte()"
+              (click)="descargarReporte('pdf')"
+            >
+              {{ descargandoReporte() ? 'Generando reporte…' : 'Descargar PDF' }}
+            </button>
+          </div>
           @if (errorReporte()) {
             <p class="text-sm text-danger">{{ errorReporte() }}</p>
           }

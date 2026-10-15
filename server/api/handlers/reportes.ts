@@ -12,6 +12,7 @@ import { documentoDynamoDB } from '../services/dynamodb';
 import { clienteS3 } from '../services/s3';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
+import { generarReportePdf, type FilaReporte } from '../lib/reporte-pdf';
 
 // v2 (roadmap #24) — etiqueta de una compra/boleta de un evento sin etapas
 // de boletería, distinta de 'Etapa eliminada' (que sí implica una etapa que
@@ -285,10 +286,10 @@ async function obtenerPanelEvento(
  * agrupar boletas de una misma compra), cliente, fecha/hora de compra,
  * medio de pago, valor, etapa y fecha/hora de ingreso.
  *
- * `?formato=pdf` responde `501` explícito — mismo criterio que las boletas
- * gratuitas en `compras.ts`/`ventas-efectivo.ts`: nunca se decidió librería
- * ni diseño de PDF (`docs/tech-specs.md` §2, "PDF por definir"), mejor un
- * 501 claro que una implementación a medias.
+ * `?formato=pdf` genera el mismo reporte en PDF (`lib/reporte-pdf.ts`,
+ * carta apaisada: resumen por etapa + una fila por boleta). Mismas reglas de
+ * acceso, mismos datos y mismo mecanismo de descarga que el `.xlsx`: solo
+ * cambian el generador del archivo, su `ContentType` y la extensión.
  *
  * La descarga nunca va en el cuerpo de la respuesta ni por URL pública
  * (`CLAUDE.md` §5, A02: el archivo contiene datos personales de clientes) —
@@ -314,10 +315,7 @@ async function generarReporteEvento(
   }
 
   const formato = evento.queryStringParameters?.['formato'];
-  if (formato === 'pdf') {
-    return respuestaJson(501, { mensaje: 'La exportación de reportes en PDF todavía no está soportada' });
-  }
-  if (formato !== 'xlsx') {
+  if (formato !== 'xlsx' && formato !== 'pdf') {
     return respuestaJson(400, { mensaje: "formato debe ser 'xlsx' o 'pdf'" });
   }
 
@@ -348,40 +346,81 @@ async function generarReporteEvento(
   // directo (la llave foránea real de la boleta hacia su compra), nunca
   // 'N/D' aunque la compra no se encuentre — permite agrupar en el .xlsx
   // las boletas de una misma compra incluso en ese caso.
-  const filas = boletas.map((boleta) => {
+  const filas: FilaReporte[] = boletas.map((boleta) => {
     const compra = comprasPorId.get(boleta.compraId);
     return {
-      ID: boleta.compraId,
-      Cliente: compra?.cliente?.nombre ?? 'N/D',
-      Teléfono: compra?.cliente?.telefono ?? 'N/D',
-      Correo: compra?.cliente?.correo ?? 'N/D',
-      'Fecha y hora de compra': compra ? fechaLegibleBogota(compra.creadaEn) : 'N/D',
-      'Medio de pago': compra?.medioPago ?? 'N/D',
-      Valor: boleta.valorUnitario,
-      'Etapa de boletería':
+      compraId: boleta.compraId,
+      cliente: compra?.cliente?.nombre ?? 'N/D',
+      telefono: compra?.cliente?.telefono ?? 'N/D',
+      correo: compra?.cliente?.correo ?? 'N/D',
+      fechaCompra: compra ? fechaLegibleBogota(compra.creadaEn) : 'N/D',
+      medioPago: compra?.medioPago ?? 'N/D',
+      valor: boleta.valorUnitario,
+      etapa:
         boleta.etapaId === undefined
           ? NOMBRE_SIN_ETAPA
           : (nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada'),
-      'Fecha y hora de ingreso': boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
+      ingreso: boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
     };
   });
 
-  // Mismo patrón exacto que Babel (server/api/handlers/ventas.ts):
-  // book_new() + json_to_sheet() + book_append_sheet(). `type: 'buffer'`
-  // en vez de 'base64' porque acá el resultado sube a S3 (PutObjectCommand
-  // recibe un Buffer directo), no viaja en el cuerpo de la respuesta.
-  const libro = XLSX.utils.book_new();
-  const hoja = XLSX.utils.json_to_sheet(filas);
-  XLSX.utils.book_append_sheet(libro, hoja, 'Boletas');
-  const contenido = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  let contenido: Buffer;
+  let extension: 'xlsx' | 'pdf';
+  let tipoContenido: string;
+  if (formato === 'pdf') {
+    extension = 'pdf';
+    tipoContenido = 'application/pdf';
+    // Resumen por etapa a partir de las propias boletas (misma fuente que las
+    // filas), en el orden en que cada etapa aparece por primera vez.
+    const porEtapa = new Map<string, { nombre: string; vendidas: number; recaudado: number }>();
+    for (const fila of filas) {
+      const acumulado = porEtapa.get(fila.etapa) ?? { nombre: fila.etapa, vendidas: 0, recaudado: 0 };
+      acumulado.vendidas += 1;
+      acumulado.recaudado += fila.valor;
+      porEtapa.set(fila.etapa, acumulado);
+    }
+    contenido = await generarReportePdf({
+      nombreEvento: String(eventoItem['nombre'] ?? ''),
+      fechaEvento: eventoItem['fechaHora'] ? fechaLegibleBogota(String(eventoItem['fechaHora'])) : 'N/D',
+      generadoEn: fechaLegibleBogota(new Date().toISOString()),
+      totalBoletas: boletas.length,
+      ingresadas: boletas.filter((boleta) => boleta.estado === 'usada').length,
+      totalRecaudado: filas.reduce((total, fila) => total + fila.valor, 0),
+      porEtapa: Array.from(porEtapa.values()),
+      filas,
+    });
+  } else {
+    extension = 'xlsx';
+    tipoContenido = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    // Mismo patrón exacto que Babel (server/api/handlers/ventas.ts):
+    // book_new() + json_to_sheet() + book_append_sheet(). `type: 'buffer'`
+    // en vez de 'base64' porque acá el resultado sube a S3 (PutObjectCommand
+    // recibe un Buffer directo), no viaja en el cuerpo de la respuesta.
+    const libro = XLSX.utils.book_new();
+    const hoja = XLSX.utils.json_to_sheet(
+      filas.map((fila) => ({
+        ID: fila.compraId,
+        Cliente: fila.cliente,
+        Teléfono: fila.telefono,
+        Correo: fila.correo,
+        'Fecha y hora de compra': fila.fechaCompra,
+        'Medio de pago': fila.medioPago,
+        Valor: fila.valor,
+        'Etapa de boletería': fila.etapa,
+        'Fecha y hora de ingreso': fila.ingreso,
+      })),
+    );
+    XLSX.utils.book_append_sheet(libro, hoja, 'Boletas');
+    contenido = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  }
 
-  const key = `reportes/${eventoId}/${randomUUID()}.xlsx`;
+  const key = `reportes/${eventoId}/${randomUUID()}.${extension}`;
   await clienteS3.send(
     new PutObjectCommand({
       Bucket: process.env['BUCKET_COMPROBANTES'],
       Key: key,
       Body: contenido,
-      ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ContentType: tipoContenido,
     }),
   );
 
@@ -390,7 +429,7 @@ async function generarReporteEvento(
   // la `key` de S3 — el slug del evento ya es texto seguro para un nombre
   // de archivo (kebab-case, sin espacios ni tildes, `handlers/eventos.ts`),
   // así que no hace falta sanitizarlo aparte.
-  const nombreArchivo = `reporte-${eventoItem['slug'] ?? eventoId}.xlsx`;
+  const nombreArchivo = `reporte-${eventoItem['slug'] ?? eventoId}.${extension}`;
   const url = await getSignedUrl(
     clienteS3,
     new GetObjectCommand({

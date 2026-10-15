@@ -145,19 +145,15 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Exportación de reportes en PDF (roadmap #21, resto)
+## Tarea 1 — Sin tarea iniciable (decisión de OCM)
 
-**Prioridad Media**, v2. Vuelve al motor JIT el 01/10/2026, al cerrarse la segunda fase de Playwright (estaba en el backlog por decisión de OCM del 30/09, detrás de Playwright y del endurecimiento). Nota de alcance: es el único ítem de v2 sin prerrequisito externo además de las pruebas E2E (WhatsApp, #20, sigue bloqueado por la Verificación de Negocio de Meta). La Exportación XLSX (roadmap #21) ya está implementada y fusionada desde v1; el PDF nunca se inició.
-
-**Alcance:** `docs/PRD.md` §6 (tabla de roadmap v2) lista "Exportación de reportes en XLSX y PDF". El motor de generación de PDF queda por definir (`CLAUDE.md` §2 lo deja explícitamente "por definir"). Ampliación prevista de `handlers/reportes.ts` (`docs/tech-specs.md` §11, endpoint `GET /api/eventos/:eventoId/reportes`, hoy responde `501` explícito para `?formato=pdf`), reutilizando el patrón ya probado de exportación XLSX (autorización por rol/pertenencia al evento, enlace de descarga prefirmado y de vida corta — datos personales, `CLAUDE.md` §5 sección Habeas Data).
-
-**Primer paso probable, no implementación directa:** al no haber una librería de PDF ni un diseño de layout decididos, la primera sesión empieza por una investigación corta (opciones de generación de PDF viables en Node 24/Lambda — tamaño de paquete, cold start, si hace falta un binario nativo tipo Chromium que complicaría el empaquetado — y qué columnas/formato debe llevar el reporte) antes de escribir código, mismo criterio que se usó para Google Calendar (`.omc/plans/google-calendar-sync.md` como formato de referencia).
+**La Exportación de reportes en PDF (roadmap #21) quedó completa el 15/10/2026** (ADR-019, resumen en `docs/MEMORY.md` §2; pendiente solo de fusionar su PR). Con ella no queda ningún ítem de v2 sin prerrequisito externo: el único restante es WhatsApp (Tarea 2, bloqueada por la Verificación de Negocio de Meta). Para tener un segundo ítem activo hay que promover uno de v3 (`PRD.md` §6: validación en puerta sin conexión, devoluciones y transferencia de boletas, códigos de descuento y cortesías, historial de compras por correo) — **decisión de OCM, no del agente**.
 
 ---
 
 ## Tarea 2 — Notificaciones por WhatsApp (roadmap #20) — 🔒 bloqueada por prerrequisito externo
 
-**Prioridad Alta, pero no iniciable hoy.** Depende de la Verificación de Negocio de Meta y de un número de teléfono nuevo que no esté en uso en la app de WhatsApp (ver "Pendientes que no son de código" abajo y `docs/tareas-a-realizar.md` §8). Ocupa el segundo slot del motor JIT porque es el único ítem de v2 que queda tras cerrar el endurecimiento (roadmap #32); **no hay ningún otro ítem de v2 sin prerrequisito externo además del PDF.** Mientras siga bloqueada, el trabajo disponible es la Tarea 1. Si OCM quiere otro ítem activo, hay que promover uno de v3 (`PRD.md` §6: validación en puerta sin conexión, devoluciones y transferencia de boletas, códigos de descuento y cortesías, historial de compras por correo) — decisión de OCM, no del agente.
+**Prioridad Alta, pero no iniciable hoy.** Depende de la Verificación de Negocio de Meta y de un número de teléfono nuevo que no esté en uso en la app de WhatsApp (ver "Pendientes que no son de código" abajo y `docs/tareas-a-realizar.md` §8). Es el único ítem de v2 que queda: ya no hay ningún otro sin prerrequisito externo (el PDF se completó el 15/10/2026). Mientras siga bloqueada, no hay trabajo de desarrollo disponible hasta que OCM promueva un ítem de v3 (ver Tarea 1).
 
 ---
 

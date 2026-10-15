@@ -484,14 +484,73 @@ describe('GET /api/eventos/:eventoId/reportes', () => {
     expect(respuesta.statusCode).toBe(400);
   });
 
-  it('responde 501 explícito para formato=pdf, sin tocar DynamoDB ni S3', async () => {
+  it('formato=pdf sube un PDF real a reportes/{eventoId}/ y responde la URL prefirmada con nombre .pdf', async () => {
     exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({ Items: boletasParaReporte })
+      .mockResolvedValueOnce({ Items: comprasAprobadas });
+    clienteS3SendMock.mockResolvedValueOnce({});
 
     const respuesta = await invocarReportes('evt-1', 'pdf');
 
-    expect(respuesta.statusCode).toBe(501);
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(respuesta.statusCode).toBe(200);
+    expect(JSON.parse(respuesta.body ?? '{}')).toEqual({ url: 'https://s3.amazonaws.com/reportes-presignada' });
+
+    const comandoSubida = clienteS3SendMock.mock.calls[0]?.[0];
+    expect(comandoSubida.input.Key).toMatch(/^reportes\/evt-1\/[0-9a-f-]{36}\.pdf$/);
+    expect(comandoSubida.input.ContentType).toBe('application/pdf');
+    // Archivo PDF real (no un marcador): cabecera y marca de fin de archivo.
+    const cuerpo = comandoSubida.input.Body as Buffer;
+    expect(Buffer.isBuffer(cuerpo)).toBe(true);
+    expect(cuerpo.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(cuerpo.subarray(-6).toString('latin1')).toContain('%%EOF');
+
+    const [, comandoDescarga, opciones] = getSignedUrlMock.mock.calls[0] as [
+      unknown,
+      { input: { Key: string; ResponseContentDisposition?: string } },
+      { expiresIn: number },
+    ];
+    expect(comandoDescarga.input.Key).toBe(comandoSubida.input.Key);
+    expect(comandoDescarga.input.ResponseContentDisposition).toBe(
+      'attachment; filename="reporte-concierto-jazz.pdf"',
+    );
+    expect(opciones.expiresIn).toBe(900);
+  });
+
+  it('formato=pdf responde 403 sin generar nada si el productor no está asignado al evento', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock.mockResolvedValueOnce({ Item: { ...eventoItem, productores: ['otro@letiende.co'] } });
+
+    const respuesta = await invocarReportes('evt-1', 'pdf');
+
+    expect(respuesta.statusCode).toBe(403);
+    expect(sendMock).toHaveBeenCalledTimes(1);
     expect(clienteS3SendMock).not.toHaveBeenCalled();
+  });
+
+  it('formato=pdf pagina un evento con muchas boletas y no descarta ninguna', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosAdministrador });
+    const muchasBoletas = Array.from({ length: 120 }, (_, n) => ({
+      boletaId: `b${n}`,
+      compraId: 'c1',
+      etapaId: 'et-1',
+      valorUnitario: 45000,
+      estado: 'valida',
+    }));
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({ Items: muchasBoletas })
+      .mockResolvedValueOnce({ Items: comprasAprobadas });
+    clienteS3SendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocarReportes('evt-1', 'pdf');
+
+    expect(respuesta.statusCode).toBe(200);
+    const cuerpo = clienteS3SendMock.mock.calls[0]?.[0].input.Body as Buffer;
+    // 120 filas no caben en una sola página carta apaisada.
+    const paginas = cuerpo.toString('latin1').match(/\/Type \/Page\b/g) ?? [];
+    expect(paginas.length).toBeGreaterThan(1);
   });
 
   it('responde 404 si el evento no existe', async () => {

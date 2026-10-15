@@ -1,6 +1,6 @@
 import { Component, effect, inject, input, signal } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
-import { PanelService } from '../../core/api/panel.service';
+import { PanelService, type FormatoReporte } from '../../core/api/panel.service';
 import { PrecioPipe } from '../../shared/pipes/precio.pipe';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
 
@@ -91,7 +91,7 @@ export class PanelEventoComponent {
   }
 
   /**
-   * Pide la URL prefirmada del `.xlsx` (`PanelService.descargarReporte()`) y
+   * Pide la URL prefirmada del reporte en `.xlsx` o `.pdf` (`PanelService.descargarReporte()`) y
    * dispara la descarga con un `<a>` temporal — mismo patrón ya establecido
    * en `EditarEventoComponent.descargarQr()`. No `window.open()`: si el
    * navegador bloquea el popup, `window.open()` devuelve `null` sin ningún
@@ -103,7 +103,7 @@ export class PanelEventoComponent {
    * navegar a esa URL. Un fallo se muestra como mensaje de error sin romper
    * el resto del panel (sigue siendo mayormente de solo lectura).
    */
-  protected async descargarReporte(): Promise<void> {
+  protected async descargarReporte(formato: FormatoReporte): Promise<void> {
     const eventoId = this.eventoIdSignal();
     if (!eventoId || this.descargandoReporte()) {
       return;
@@ -112,7 +112,7 @@ export class PanelEventoComponent {
     this.descargandoReporte.set(true);
     this.errorReporte.set(null);
 
-    const resultado = await this.panelService.descargarReporte(eventoId);
+    const resultado = await this.panelService.descargarReporte(eventoId, formato);
 
     if (resultado.exito) {
       const enlace = document.createElement('a');

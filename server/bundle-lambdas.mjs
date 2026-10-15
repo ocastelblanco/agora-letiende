@@ -71,7 +71,15 @@ const entradas = [
   // reportes.ts (TODO.md Tarea 2, Panel de control básico) depende de
   // firebase-admin (vía exigirRol) y documentoDynamoDB — mismo motivo de
   // bundle que aprobaciones.ts/ventas-efectivo.ts.
-  { entrada: 'dist-server/api/handlers/reportes.js', salida: `${OUT_DIR}/reportes.js` },
+  // También depende de pdfkit (reporte en PDF, roadmap #21): se empaqueta su
+  // build `standalone` (fuentes .afm embebidas) vía `alias` — la versión
+  // normal las lee del disco con `fs` y esbuild no las incluye (verificado en
+  // un spike, 15/10/2026). Ver `server/api/lib/reporte-pdf.ts`.
+  {
+    entrada: 'dist-server/api/handlers/reportes.js',
+    salida: `${OUT_DIR}/reportes.js`,
+    alias: { pdfkit: 'pdfkit/js/pdfkit.standalone.js' },
+  },
   // bold-webhook.ts (roadmap #19, Sub-tarea 1) depende de documentoDynamoDB
   // y @aws-sdk/client-ses (vía notificaciones.ts) — mismo motivo de bundle
   // que compras.ts, sin firebase-admin (endpoint público, nunca usa
@@ -79,7 +87,7 @@ const entradas = [
   { entrada: 'dist-server/api/handlers/bold-webhook.js', salida: `${OUT_DIR}/bold-webhook.js` },
 ];
 
-for (const { entrada, salida } of entradas) {
+for (const { entrada, salida, alias } of entradas) {
   await build({
     entryPoints: [entrada],
     outfile: salida,
@@ -87,6 +95,7 @@ for (const { entrada, salida } of entradas) {
     platform: 'node',
     target: 'node24',
     format: 'cjs',
+    alias,
     logLevel: 'warning',
   });
   console.log(`esbuild: ${entrada} -> ${salida}`);
