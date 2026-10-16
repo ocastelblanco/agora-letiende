@@ -278,7 +278,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Sincronización con Google Calendar | Media | ✅ Fusionado y verificado en producción (roadmap #22, PR #48) |
 | Pago automático con Bold | **Alta** | ✅ Fusionado y validado de punta a punta en staging real, con tarjetas de prueba (aprobado/rechazado/error/abandono) (roadmap #19, PR #50/#51/#52) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
-| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · 🟡 PDF no iniciado, siguiente tarea activa (cerrado el endurecimiento) |
+| Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · ✅ PDF entregado (15/10/2026, ADR-019) |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
 | Enlace (slug) único por función | **Alta** | ✅ Hotfix fusionado y datos de producción corregidos (PR #77, 30/09/2026) |
 | Duración de eventos | **Alta** | ✅ Fusionado; eventos existentes de producción rellenados a 3 h (roadmap #26, PR #79) |

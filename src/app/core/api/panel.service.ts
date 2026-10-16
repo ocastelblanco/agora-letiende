@@ -3,7 +3,10 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ServicioAuth } from '../auth/servicio-auth';
 
-/** Respuesta de `GET /api/eventos/:eventoId/reportes?formato=xlsx`. */
+/** Formatos de `GET /api/eventos/:eventoId/reportes?formato=`. */
+export type FormatoReporte = 'xlsx' | 'pdf';
+
+/** Respuesta de `GET /api/eventos/:eventoId/reportes`. */
 export type ResultadoReporte = { exito: true; url: string } | { exito: false; error: string };
 
 /** Fila de `GET /api/eventos/panel` (server/api/handlers/reportes.ts). */
@@ -142,7 +145,7 @@ export class PanelService {
   }
 
   /**
-   * Llama `GET /api/eventos/:eventoId/reportes?formato=xlsx` y devuelve la
+   * Llama `GET /api/eventos/:eventoId/reportes?formato=xlsx|pdf` y devuelve la
    * URL prefirmada que ya arma el backend (`handlers/reportes.ts`,
    * `TODO.md` Tarea 2) — a diferencia de `EventosService.descargarQr()`, acá
    * no se pide `responseType: 'blob'`: la respuesta es JSON (`{ url }`), y
@@ -152,7 +155,7 @@ export class PanelService {
    * (`CLAUDE.md` §5, A02: la autorización real la dio ya la firma de la
    * URL, no un segundo chequeo del cliente).
    */
-  async descargarReporte(eventoId: string): Promise<ResultadoReporte> {
+  async descargarReporte(eventoId: string, formato: FormatoReporte = 'xlsx'): Promise<ResultadoReporte> {
     const idToken = await this.servicioAuth.obtenerIdToken();
     if (!idToken) {
       return { exito: false, error: 'No se pudo generar el reporte. Intenta de nuevo.' };
@@ -161,7 +164,7 @@ export class PanelService {
     try {
       const respuesta = await firstValueFrom(
         this.http.get<{ url: string }>(`/api/eventos/${eventoId}/reportes`, {
-          params: { formato: 'xlsx' },
+          params: { formato },
           headers: { Authorization: `Bearer ${idToken}` },
         }),
       );

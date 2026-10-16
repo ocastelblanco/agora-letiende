@@ -21,7 +21,7 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | **Repositorio remoto** | `ocastelblanco/agora-letiende`, rama `main` protegida — ✅ confirmado |
 | **Cuenta AWS** | Compartida con Babel y Comandante, región `us-east-1` |
 | **Proyecto Firebase** | Compartido con Comandante y Babel (identidad); autorización propia en `agora-usuarios` |
-| **Última sesión** | 14/10/2026 — Registro de los rechazos 401/403 (PR #104), CloudTrail de la cuenta y bloqueo de ACL públicas en el bucket `letiende.co`. |
+| **Última sesión** | 15/10/2026 — Exportación de reportes en PDF (roadmap #21, ADR-019). Antes, 14/10/2026: registro de los rechazos 401/403 (PR #104), CloudTrail de la cuenta y bloqueo de ACL públicas. |
 
 ---
 
@@ -84,6 +84,7 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 - [x] Registro de los rechazos 401/403 (14/10/2026, **PR #104**): `registrarRechazo()` en `server/api/lib/autorizacion.ts`, usado por `exigirRol` y `GET /api/usuarios/me`, escribe `console.warn('Acceso rechazado', { motivo, metodo, ruta, ... })`. Motivos: `sin_token`, `token_invalido` (llega en `ErrorAutenticacion.motivo`), `no_registrado`, `inactivo` y `rol_insuficiente` (con `rol` y `rolMinimo`). Incluye el correo del personal cuando ya fue verificado; nunca el token ni datos de clientes. Verificado en producción: sin token y con token falso dejan su motivo en CloudWatch y el token no aparece.
 - [x] Registro de auditoría de la cuenta (14/10/2026): trail de CloudTrail `letiende-auditoria` (stack `letiende-auditoria-cuenta`) con validación de integridad, hacia un bucket privado con expiración a 365 días. Solo eventos de administración, la copia gratuita.
 - [x] Bloqueo de ACL públicas en el bucket `letiende.co` (14/10/2026): `BlockPublicAcls` e `IgnorePublicAcls`. No cambia lo que sirve (ya tenía `BucketOwnerEnforced`); los demás buckets de Le Tiende ya lo tenían.
+- [x] Exportación de reportes en PDF (15/10/2026, roadmap #21, cierra la Tarea 1): `GET /api/eventos/:eventoId/reportes?formato=pdf` ya no responde `501`; genera un PDF carta apaisada (`server/api/lib/reporte-pdf.ts`, módulo puro sobre `pdfkit`) con encabezado, resumen por etapa (boletas y recaudado) y una fila por boleta (ID corto, cliente, teléfono, correo, compra, medio de pago, valor, etapa, ingreso) con paginación y numeración. Mismas reglas de acceso, mismos datos y mismo mecanismo de descarga que el `.xlsx` (sube a `reportes/{eventoId}/{uuid}.pdf` en el bucket privado, URL prefirmada de 15 min, `ResponseContentDisposition` con nombre `reporte-{slug}.pdf`); `handlers/reportes.ts` arma las filas una sola vez y solo cambia el generador. Frontend: `PanelService.descargarReporte(eventoId, formato)` y dos botones («Descargar Excel» / «Descargar PDF») en `PanelEventoComponent`. Librería elegida tras un spike: ver ADR-019. 580 pruebas backend + 448 frontend en verde, build de producción y `bundle:api` sin errores; el PDF de muestra se renderizó y revisó a ojo.
 
 ### Pendiente (v1 — MVP)
 
@@ -400,6 +401,20 @@ Se presentaron cuatro opciones al usuario (Angular Material, solo Tailwind sin s
 - **Riesgo abierto, a verificar con el primer pago real pequeño tras el despliegue:** nunca se ha visto un payload de producción. Si Bold informara un `total` distinto del cobrado, el webhook respondería `422`; el log muestra `montoRecibido` y `montoEsperado`.
 - Contar en el log de producción los «aún no aparece» y los «Bold respondió 403»: son aprobaciones sin conciliar.
 
+### ADR-019 — Reportes en PDF con `pdfkit` fijado en 0.17.2 (build standalone)
+
+**Fecha:** 15/10/2026 · **Estado:** Aceptada
+
+**Decisión:** el PDF del reporte se genera con `pdfkit@0.17.2` (MIT, versión exacta, sin `^`), empaquetado en la Lambda con su build `pdfkit/js/pdfkit.standalone.js` mediante `alias` de esbuild en `server/bundle-lambdas.mjs`. Fuentes estándar de PDF (Helvetica), sin archivos de fuente.
+
+**Contexto:** `CLAUDE.md` §2 dejaba el motor de PDF «por definir». Se probó en un spike (empaquetado real con esbuild, PDF con tildes/ñ/¿ y revisión visual) y se descartó lo demás: Chromium/Puppeteer (binario nativo, cold start y tamaño inaceptables para el objetivo < US$1/mes), `pdfmake` (~15 MB y exige empaquetar fuentes), `jspdf` (~30 MB, pensado para el navegador) y `pdf-lib` (sin tablas).
+
+**Consecuencias:**
+- **No subir `pdfkit` a 0.20.x sin repetir el spike:** esa versión carga las fuentes con importaciones dinámicas (`#standard-fonts/*`) que esbuild no resuelve; el bundle se genera pero la Lambda falla al arrancar con `Cannot find module '#standard-fonts/Helvetica'`. La versión normal de 0.17.x tampoco sirve empaquetada (lee los `.afm` del disco con `fs`); por eso el alias al build `standalone`.
+- El bundle de `reportes.js` pasa de ~5 MB a ~7,8 MB (+2,7 MB de `pdfkit`). Sin costo recurrente nuevo.
+- Los textos de clientes son entrada hostil: se recortan los caracteres de control antes de dibujarlos y cada celda se trunca con «…» según su ancho medido (`ellipsis` de pdfkit no aplica con `lineBreak: false`; sin recortar, el texto se montaba sobre la fila siguiente).
+- `0 vulnerabilidades` en `npm audit --omit=dev` de `pdfkit@0.17.2` el 15/10/2026.
+
 ## 4. Dependencias instaladas
 
 Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` en la rama `feature/andamiaje-angular-primeng-tailwind` (nombre de rama desactualizado tras ADR-012 — se conserva por no romper el PR abierto). Las marcadas "prevista" aún no existen — se agregan en tareas posteriores (backend, AWS SDK, WhatsApp/QR).
@@ -425,6 +440,7 @@ Instaladas por la Tarea 1 (01-02/08/2026); versiones exactas de `package.json` e
 | `@zxing/browser` | ^0.2.1 | Escaneo de QR en puerta | ⬜ Prevista |
 | `qrcode` | ^1.5.x | Generación de QR (SVG/PNG) | ⬜ Prevista |
 | `xlsx` | ^0.18.5 | Exportación de reportes, solo escritura — ver ADR-017 | ✅ Instalada |
+| `pdfkit` (+ `@types/pdfkit` en desarrollo) | 0.17.2 (fijada) | Exportación de reportes en PDF — ver ADR-019; no subir a 0.20.x | ✅ Instalada (15/10/2026) |
 | `serverless` | 4.43.0 (fijada) | IaC | ✅ Instalada |
 | `esbuild` | ^0.28.1 | Empaqueta en un único archivo las Lambdas que dependen de `firebase-admin` (`server/bundle-lambdas.mjs`, `npm run bundle:api`) — evita las exclusiones manuales de `node_modules/**` que fallaron en vivo en staging, ver §7 | ✅ Instalada (02/08/2026) |
 

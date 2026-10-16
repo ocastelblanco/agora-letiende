@@ -145,14 +145,15 @@ describe('PanelEventoComponent', () => {
     expect(tarjetas[1].textContent).toContain('1'); // faltan por ingresar
   });
 
-  it('el único botón de la pantalla es "Descargar reporte" — ninguna acción muta el evento', async () => {
+  it('los únicos botones de la pantalla descargan el reporte (Excel y PDF) — ninguna acción muta el evento', async () => {
     const { fixture } = configurarPrueba({ misEventos: [eventoPropio], detalle: detalleEjemplo });
 
     await activarConSlug(fixture, 'concierto-jazz');
 
     const botones = fixture.nativeElement.querySelectorAll('button');
-    expect(botones.length).toBe(1);
-    expect(botones[0].textContent).toContain('Descargar reporte');
+    expect(botones.length).toBe(2);
+    expect(botones[0].textContent).toContain('Descargar Excel');
+    expect(botones[1].textContent).toContain('Descargar PDF');
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 
@@ -171,11 +172,30 @@ describe('PanelEventoComponent', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(descargarReporteMock).toHaveBeenCalledWith('evt-1');
+      expect(descargarReporteMock).toHaveBeenCalledWith('evt-1', 'xlsx');
       expect(clicSpy).toHaveBeenCalledTimes(1);
       // El <a> se crea con la URL prefirmada como href y se remueve del DOM
       // después del click — no queda un elemento huérfano.
       expect(fixture.nativeElement.ownerDocument.querySelectorAll('a[href="https://s3.amazonaws.com/reporte"]').length).toBe(0);
+      clicSpy.mockRestore();
+    });
+
+    it('el botón de PDF pide el reporte con formato pdf', async () => {
+      const descargarReporteMock = vi.fn().mockResolvedValue({ exito: true, url: 'https://s3.amazonaws.com/reporte.pdf' });
+      const clicSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const { fixture } = configurarPrueba({
+        misEventos: [eventoPropio],
+        detalle: detalleEjemplo,
+        descargarReporteMock,
+      });
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      fixture.nativeElement.querySelectorAll('button')[1].click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(descargarReporteMock).toHaveBeenCalledWith('evt-1', 'pdf');
+      expect(clicSpy).toHaveBeenCalledTimes(1);
       clicSpy.mockRestore();
     });
 

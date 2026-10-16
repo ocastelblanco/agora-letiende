@@ -46,7 +46,7 @@ El problema fundacional que resuelve es la operación manual actual —conversac
 - **WhatsApp:** AWS End User Messaging Social — **fase 2**, no bloquea el MVP (ver ADR-003 en `docs/MEMORY.md`)
 - **Pasarela de pagos:** Bold (Botón de pagos / API link de pagos) — **fase 2**
 - **Generación de QR:** librería web del lado servidor para emisión (SVG + PNG) y `@zxing/browser` para el escaneo en puerta
-- **Generación de reportes:** `xlsx` (mismo paquete que Babel y Comandante) para XLSX, **solo para escribir** (`XLSX.write`), nunca para leer archivos subidos — ver ADR-017; PDF por definir
+- **Generación de reportes:** `xlsx` (mismo paquete que Babel y Comandante) para XLSX, **solo para escribir** (`XLSX.write`), nunca para leer archivos subidos — ver ADR-017; `pdfkit` **fijado en 0.17.2** para PDF (build standalone, no subir a 0.20.x) — ver ADR-019
 - **Objetivo de costo de infraestructura:** **< US$1/mes**, objetivo explícito y medido — no una aspiración vaga de "$0". No incluye el piso fijo compartido de la cuenta (Route 53, ~US$3,58/mes entre ~7 zonas para todo el ecosistema Le Tiende), que no es atribuible a Ágora. Ver §5-bis (Costos de infraestructura, disciplina de verificación de precios) y `docs/advertencia-urgente-costos-aws.md`.
 
 ---

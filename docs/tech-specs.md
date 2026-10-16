@@ -413,7 +413,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | POST | `/api/eventos/:eventoId/duplicar` | Administrador | Crea otra función del evento en `borrador`, a partir del ítem guardado (sin payload): mismo nombre, aforo reiniciado, `etapaId` nuevos, imágenes copiadas en S3 (`CopyObject`), slug con contador (roadmap #28) | — |
 | POST | `/api/eventos/:eventoId/activos/url-carga` | Administrador | URL prefirmada para imagen/logotipo | `{ tipo, tipoMime, tamano }` |
 | GET | `/api/eventos/:eventoId/panel` | Productor del evento | Métricas del panel de control | — |
-| GET | `/api/eventos/:eventoId/reportes` | Productor del evento | URL prefirmada del `.xlsx` (una fila por boleta, `PRD.md` §5.6, roadmap #21). `?formato=pdf` responde `501` explícito — sin librería ni diseño de PDF decidido, no implementado | `?formato=xlsx\|pdf` |
+| GET | `/api/eventos/:eventoId/reportes` | Productor del evento | URL prefirmada del `.xlsx` (una fila por boleta, `PRD.md` §5.6, roadmap #21) o del `.pdf` (carta apaisada con resumen por etapa y la misma fila por boleta, `lib/reporte-pdf.ts`, ADR-019) | `?formato=xlsx\|pdf` |
 | GET | `/api/usuarios` | Administrador | Lista de usuarios | — |
 | POST | `/api/usuarios` | Administrador | Crea usuario | `{ email, nombre, rol }` |
 | PUT | `/api/usuarios/:email` | Administrador | Edita usuario | `{ nombre?, rol?, activo? }` |
