@@ -249,6 +249,8 @@ functions:
       cuando el TTL borra una reserva vencida (TODO.md Tarea 2).
     environment:
       TABLA_EVENTOS: ${self:custom.nombresTablas.eventos}
+      # Archiva la compra que borra el TTL (incidente del 16/10/2026).
+      TABLA_COMPRAS: ${self:custom.nombresTablas.compras}
     package:
       # Depende de documentoDynamoDB y de @aws-sdk/util-dynamodb
       # (unmarshall) — mismo motivo de bundle que eventos-publicos.ts
@@ -854,6 +856,13 @@ resources:
                   Action:
                     - dynamodb:UpdateItem
                   Resource: !GetAtt AgoraEventos.Arn
+                # PutItem condicional (attribute_not_exists) sobre agora-compras:
+                # vuelve a escribir archivada la compra que borró el TTL, para
+                # que nunca se pierda su rastro (incidente del 16/10/2026).
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                  Resource: !GetAtt AgoraCompras.Arn
           # Permisos de lectura del propio Stream de agora-compras — no dan
           # acceso a los ítems de la tabla (ni Query ni Scan ni GetItem
           # aquí), solo a leer los registros de cambio que el trigger ya

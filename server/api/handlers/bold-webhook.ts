@@ -13,7 +13,7 @@ import {
   type ComprobantePagoBold,
   type NotificacionBold,
 } from '../services/bold';
-import { ErrorAforo, confirmarSillas, liberarSillas } from '../services/aforo';
+import { ErrorAforo, confirmarSillas, liberarSillas, reservarSillas } from '../services/aforo';
 import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { CanalCorreoSes } from '../services/notificaciones';
@@ -41,6 +41,7 @@ interface CompraParaWebhookBold {
   cantidad: number;
   cliente?: ClienteCompra;
   montoTotal: number;
+  medioPago?: string;
   estado: string;
 }
 
@@ -281,6 +282,59 @@ async function procesarPagoRechazado(compra: CompraParaWebhookBold): Promise<API
 }
 
 /**
+ * Aviso tardío de Bold (incidente del 16/10/2026): la compra ya expiró y
+ * devolvió su aforo, pero el pago está aprobado y verificado. Se vuelve a
+ * tomar el aforo con la misma escritura condicional de una compra nueva y la
+ * compra vuelve a `esperando_pago_bold` para aprobarse por el camino normal.
+ * Si ya no hay sillas, el cliente pagó y no hay boletas que emitir: queda un
+ * error en el log para atenderlo a mano (devolución o cupo extra), y 200 para
+ * que Bold no reintente algo que no se resuelve solo.
+ */
+async function recuperarCompraExpirada(compra: CompraParaWebhookBold): Promise<APIGatewayProxyResultV2> {
+  try {
+    await reservarSillas(compra.eventoId, compra.cantidad);
+  } catch (error) {
+    if (!(error instanceof ErrorAforo)) {
+      throw error;
+    }
+    console.error('Webhook de Bold: pago aprobado de una compra expirada sin aforo para recuperarla; requiere atención manual', {
+      compraId: compra.compraId,
+      eventoId: compra.eventoId,
+      motivo: error.message,
+    });
+    return respuestaJson(200, { recibido: true });
+  }
+
+  try {
+    await documentoDynamoDB.send(
+      new UpdateCommand({
+        TableName: process.env['TABLA_COMPRAS'],
+        Key: { compraId: compra.compraId },
+        UpdateExpression: 'SET estado = :esperandoPago, recuperadaEn = :ahora',
+        ConditionExpression: 'estado = :expirada',
+        ExpressionAttributeValues: {
+          ':esperandoPago': 'esperando_pago_bold',
+          ':expirada': 'expirada',
+          ':ahora': new Date().toISOString(),
+        },
+      }),
+    );
+  } catch (error) {
+    // Otro aviso de Bold ganó la carrera: se devuelve el aforo recién tomado.
+    await liberarSillas(compra.eventoId, compra.cantidad).catch(() => undefined);
+    if (esErrorCondicionFallida(error)) {
+      return respuestaJson(200, { recibido: true });
+    }
+    throw error;
+  }
+
+  console.error('Webhook de Bold: aviso tardío sobre una compra expirada; se recupera y aprueba', {
+    compraId: compra.compraId,
+  });
+  return procesarPagoAprobado({ ...compra, estado: 'esperando_pago_bold' });
+}
+
+/**
  * `POST /api/pagos/bold/webhook` — sin autenticación de usuario (Bold no
  * manda un ID Token de Firebase): la única credencial es la firma HMAC
  * verificada por `verificarFirmaWebhook()` (`CLAUDE.md` §5, A08 — nunca
@@ -308,6 +362,7 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
 
   const compraId = payload?.data?.metadata?.reference;
   if (typeof compraId !== 'string' || compraId.length === 0) {
+    console.error('Webhook de Bold: notificación sin referencia de compra', { tipo: payload?.type });
     return respuestaJson(404, { mensaje: 'No existe una compra con ese identificador' });
   }
 
@@ -316,14 +371,24 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
   );
   const compra = resultado.Item as CompraParaWebhookBold | undefined;
   if (!compra) {
+    // Antes era un 404 silencioso: así pasaron inadvertidos dos semanas de
+    // avisos rechazados (incidente del 16/10/2026).
+    console.error('Webhook de Bold: no existe la compra de la notificación', { compraId, tipo: payload.type });
     return respuestaJson(404, { mensaje: 'No existe una compra con ese identificador' });
   }
 
   if (payload.type === 'SALE_APPROVED') {
+    const esExpiradaDeBold = compra.estado === 'expirada' && compra.medioPago === 'bold';
     // Reintento de Bold sobre una compra ya resuelta: 200 sin gastar una
     // consulta a Bold (la escritura condicional de más abajo sigue siendo la
     // autoridad contra la doble emisión).
-    if (compra.estado !== 'esperando_pago_bold') {
+    if (compra.estado !== 'esperando_pago_bold' && !esExpiradaDeBold) {
+      if (compra.estado !== 'aprobada') {
+        console.error('Webhook de Bold: pago aprobado sobre una compra que no lo esperaba', {
+          compraId: compra.compraId,
+          estado: compra.estado,
+        });
+      }
       return respuestaJson(200, { recibido: true });
     }
 
@@ -346,6 +411,9 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
     if (verificacion === 'bold_no_disponible') {
       console.error('Webhook de Bold: no se pudo consultar a Bold para conciliar', { compraId: compra.compraId });
       return respuestaJson(503, { mensaje: 'No se pudo conciliar el pago, reintenta' });
+    }
+    if (esExpiradaDeBold) {
+      return await recuperarCompraExpirada(compra);
     }
     return await procesarPagoAprobado(compra);
   }

@@ -9,6 +9,7 @@ const {
   firmarCodigoBoletaMock,
   enviarMock,
   consultarPagoBoldMock,
+  reservarSillasMock,
 } = vi.hoisted(() => ({
   sendMock: vi.fn(),
   verificarFirmaWebhookMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   firmarCodigoBoletaMock: vi.fn(),
   enviarMock: vi.fn(),
   consultarPagoBoldMock: vi.fn(),
+  reservarSillasMock: vi.fn(),
 }));
 
 vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
@@ -43,7 +45,7 @@ vi.mock('../services/notificaciones', () => ({
 // reemplazan, mismo criterio que aprobaciones.spec.ts.
 vi.mock('../services/aforo', async () => {
   const real = await vi.importActual<typeof import('../services/aforo')>('../services/aforo');
-  return { ...real, confirmarSillas: confirmarSillasMock, liberarSillas: liberarSillasMock };
+  return { ...real, confirmarSillas: confirmarSillasMock, liberarSillas: liberarSillasMock, reservarSillas: reservarSillasMock };
 });
 
 const { handler } = await import('./bold-webhook');
@@ -116,6 +118,8 @@ beforeEach(() => {
   firmarCodigoBoletaMock.mockReset();
   enviarMock.mockReset();
   consultarPagoBoldMock.mockReset();
+  reservarSillasMock.mockReset();
+  reservarSillasMock.mockResolvedValue(undefined);
   verificarFirmaWebhookMock.mockReturnValue(true);
   consultarPagoBoldMock.mockResolvedValue(comprobanteAprobado);
   confirmarSillasMock.mockResolvedValue(undefined);
@@ -537,5 +541,95 @@ describe('POST /api/pagos/bold/webhook — otros casos', () => {
 
     expect(respuesta.statusCode).toBe(404);
     expect(sendMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/pagos/bold/webhook — aviso tardío sobre una compra expirada (incidente del 16/10/2026)', () => {
+  const compraExpirada = { ...compraEsperandoPago, estado: 'expirada', medioPago: 'bold' };
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    process.env['BOLD_MODO_PRUEBAS'] = 'false';
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    delete process.env['BOLD_MODO_PRUEBAS'];
+    errorSpy.mockRestore();
+  });
+
+  it('vuelve a tomar el aforo, recupera la compra y la aprueba emitiendo las boletas', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Item: compraExpirada }) // GetItem
+      .mockResolvedValueOnce({}) // expirada → esperando_pago_bold
+      .mockResolvedValueOnce({}) // → aprobada
+      .mockResolvedValueOnce({ Item: { nombre: 'Concierto' } }); // nombre del evento
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(consultarPagoBoldMock).toHaveBeenCalledTimes(1);
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    const recuperar = sendMock.mock.calls[1]?.[0];
+    expect(recuperar.input.ConditionExpression).toBe('estado = :expirada');
+    expect(recuperar.input.ExpressionAttributeValues[':esperandoPago']).toBe('esperando_pago_bold');
+    expect(sendMock.mock.calls[2]?.[0].input.ExpressionAttributeValues[':aprobada']).toBe('aprobada');
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(emitirBoletasMock).toHaveBeenCalledTimes(1);
+    expect(enviarMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin aforo para recuperarla, no aprueba, deja un error para atención manual y responde 200', async () => {
+    const { AforoInsuficienteError } = await import('../services/aforo');
+    sendMock.mockResolvedValueOnce({ Item: compraExpirada });
+    reservarSillasMock.mockRejectedValueOnce(new AforoInsuficienteError(0));
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain('requiere atención manual');
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('ana@correo.com');
+  });
+
+  it('si otro aviso ya la recuperó, devuelve el aforo recién tomado y no emite dos veces', async () => {
+    sendMock.mockResolvedValueOnce({ Item: compraExpirada }).mockRejectedValueOnce(new ConditionalCheckFailedException());
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
+  });
+
+  it('sigue exigiendo el monto exacto antes de recuperar nada', async () => {
+    sendMock.mockResolvedValueOnce({ Item: compraExpirada });
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado({ amount: { total: 1000, currency: 'COP' } }), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(422);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('no recupera una compra expirada que no era de Bold (transferencia)', async () => {
+    sendMock.mockResolvedValueOnce({ Item: { ...compraExpirada, medioPago: 'transferencia' } });
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain('no lo esperaba');
+  });
+
+  it('registra en el log un aviso sobre una compra que no existe (antes era un 404 silencioso)', async () => {
+    sendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(404);
+    expect(errorSpy).toHaveBeenCalledWith('Webhook de Bold: no existe la compra de la notificación', {
+      compraId: 'compra-1',
+      tipo: 'SALE_APPROVED',
+    });
   });
 });
