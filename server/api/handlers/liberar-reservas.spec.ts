@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DynamoDBStreamEvent } from 'aws-lambda';
 
-const { liberarSillasMock } = vi.hoisted(() => ({ liberarSillasMock: vi.fn() }));
+const { liberarSillasMock, sendMock } = vi.hoisted(() => ({ liberarSillasMock: vi.fn(), sendMock: vi.fn() }));
+
+vi.mock('../services/dynamodb', () => ({ documentoDynamoDB: { send: sendMock } }));
 
 vi.mock('../services/aforo', async () => {
   const real = await vi.importActual<typeof import('../services/aforo')>('../services/aforo');
@@ -36,6 +38,84 @@ function evento(records: DynamoDBStreamEvent['Records']): DynamoDBStreamEvent {
 
 beforeEach(() => {
   liberarSillasMock.mockReset();
+  sendMock.mockReset();
+});
+
+/** Mismo registro, pero borrado por el TTL de DynamoDB (`userIdentity` de servicio). */
+function registroTtl(estado: string, extra: Record<string, { S: string } | { N: string }> = {}) {
+  const registro = registroRemove(estado);
+  return {
+    ...registro,
+    userIdentity: { type: 'Service', principalId: 'dynamodb.amazonaws.com' },
+    dynamodb: {
+      OldImage: {
+        ...registro.dynamodb!.OldImage!,
+        expiraEn: { N: '1792160120' },
+        medioPago: { S: 'bold' },
+        cliente: { M: { correo: { S: 'cliente@correo.com' } } },
+        ...extra,
+      },
+    },
+  } as DynamoDBStreamEvent['Records'][number];
+}
+
+describe('borrado por TTL (incidente del 16/10/2026)', () => {
+  it('archiva la compra como expirada, sin expiraEn y con sus datos, y luego libera el aforo', async () => {
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await handler(evento([registroTtl('esperando_pago_bold')]), {} as never, () => {});
+
+    const comando = sendMock.mock.calls[0]?.[0];
+    expect(comando.input.ConditionExpression).toBe('attribute_not_exists(compraId)');
+    const item = comando.input.Item;
+    expect(item.estado).toBe('expirada');
+    expect(item.estadoAlExpirar).toBe('esperando_pago_bold');
+    expect(item.expiraEn).toBeUndefined();
+    expect(item.cliente).toEqual({ correo: 'cliente@correo.com' });
+    expect(typeof item.archivadaPorTtlEn).toBe('string');
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    // Alerta en el log, solo con identificadores (nunca el correo del cliente).
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(errorSpy.mock.calls[0])).not.toContain('cliente@correo.com');
+    errorSpy.mockRestore();
+  });
+
+  it('un registro duplicado del Stream no vuelve a liberar el aforo', async () => {
+    const yaArchivada = Object.assign(new Error('condición'), { name: 'ConditionalCheckFailedException' });
+    sendMock.mockRejectedValueOnce(yaArchivada);
+
+    await handler(evento([registroTtl('esperando_comprobante')]), {} as never, () => {});
+
+    expect(liberarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('archiva sin cambiar el estado una compra que ya no retenía aforo', async () => {
+    sendMock.mockResolvedValueOnce({});
+
+    await handler(evento([registroTtl('expirada')]), {} as never, () => {});
+
+    expect(sendMock.mock.calls[0]?.[0].input.Item.estado).toBe('expirada');
+    expect(sendMock.mock.calls[0]?.[0].input.Item.estadoAlExpirar).toBeUndefined();
+    expect(liberarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('un error al archivar se propaga para que Lambda reintente el lote', async () => {
+    sendMock.mockRejectedValueOnce(new Error('ProvisionedThroughputExceeded'));
+
+    await expect(handler(evento([registroTtl('esperando_pago_bold')]), {} as never, () => {})).rejects.toThrow();
+    expect(liberarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('un borrado hecho por la aplicación (no por TTL) no se archiva', async () => {
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+
+    await handler(evento([registroRemove('esperando_comprobante')]), {} as never, () => {});
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+  });
 });
 
 it('libera el aforo de una reserva vencida en estado iniciada', async () => {
