@@ -12,6 +12,20 @@ export function esEmbebido(hostname: string): boolean {
   return hostname === 'letiende.co' || hostname === 'staging.letiende.co';
 }
 
+/**
+ * Copia del criterio de `carta-visibilidad.ts` de letiende.co (ADR-024): la
+ * carta (`/carta`) responde 404 en producción mientras no esté publicada.
+ * AL PUBLICAR LA CARTA hay que cambiar `CARTA_PUBLICADA` aquí, en letiende.co
+ * y en Babel.
+ */
+export const CARTA_PUBLICADA = false;
+
+const HOSTS_CARTA_VISIBLE = ['staging.letiende.co', 'localhost', '127.0.0.1'];
+
+export function cartaVisibleEnHost(hostname: string, publicada = CARTA_PUBLICADA): boolean {
+  return publicada || HOSTS_CARTA_VISIBLE.includes(hostname);
+}
+
 @Injectable({ providedIn: 'root' })
 export class EmbebidoService {
   private readonly platformId = inject(PLATFORM_ID);
@@ -39,13 +53,18 @@ export class EmbebidoService {
    * seguro por defecto) y el navegador lo corrige en el primer bootstrap
    * del lado cliente.
    */
-  readonly embebido: boolean = this.calcular();
+  private readonly hostname: string = this.obtenerHostname();
 
-  private calcular(): boolean {
+  readonly embebido: boolean = esEmbebido(this.hostname);
+
+  /** Si el enlace "Carta" del menú embebido debe mostrarse (mismo criterio que letiende.co). */
+  readonly cartaVisible: boolean = cartaVisibleEnHost(this.hostname);
+
+  private obtenerHostname(): string {
     if (isPlatformBrowser(this.platformId)) {
-      return esEmbebido(window.location.hostname);
+      return window.location.hostname;
     }
     const host = this.request?.headers.get('x-le-tiende-host') ?? '';
-    return esEmbebido(host.split(':')[0]);
+    return host.split(':')[0];
   }
 }

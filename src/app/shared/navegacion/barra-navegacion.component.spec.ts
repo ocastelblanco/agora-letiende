@@ -281,6 +281,7 @@ describe('BarraNavegacionComponent', () => {
 function configurarPruebaEmbebida(
   usuarioActual: User | null = null,
   rol: Rol | null = null,
+  cartaVisible = false,
 ) {
   TestBed.configureTestingModule({
     providers: [
@@ -295,7 +296,7 @@ function configurarPruebaEmbebida(
       },
       { provide: PanelService, useValue: { limpiar: vi.fn() } },
       ...serviciosConDatosMock().proveedores,
-      { provide: EmbebidoService, useValue: { embebido: true } },
+      { provide: EmbebidoService, useValue: { embebido: true, cartaVisible } },
     ],
   });
 
@@ -307,6 +308,33 @@ function configurarPruebaEmbebida(
 }
 
 describe('embebido (letiende.co)', () => {
+  it('con la carta visible (staging) muestra "Carta" entre Librería y Nosotros en ambas listas', () => {
+    const { fixture } = configurarPruebaEmbebida(null, null, true);
+    const textos = (lista: Element) =>
+      Array.from(lista.querySelectorAll('a')).map((a) => a.textContent?.trim());
+    const esperado = ['Cartelera', 'Librería', 'Carta', 'Nosotros', 'Contacto', 'Preguntas frecuentes'];
+
+    const escritorio = fixture.nativeElement.querySelector('ul.md\\:flex') as HTMLElement;
+    expect(textos(escritorio)).toEqual(esperado);
+    expect(escritorio.querySelector('a[href="/carta"]')?.hasAttribute('routerLink')).toBe(false);
+
+    (fixture.nativeElement.querySelector(
+      'button[aria-controls="panel-menu-movil-embebido"]',
+    ) as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const movil = fixture.nativeElement.querySelector('#panel-menu-movil-embebido ul') as HTMLElement;
+    expect(textos(movil)).toEqual(esperado);
+  });
+
+  it('sin la carta visible (letiende.co en producción) no muestra "Carta" en ninguna lista', () => {
+    const { fixture } = configurarPruebaEmbebida();
+    (fixture.nativeElement.querySelector(
+      'button[aria-controls="panel-menu-movil-embebido"]',
+    ) as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[href="/carta"]')).toBeNull();
+  });
+
   it('renderiza la barra común del contenedor con los 5 enlaces planos (no routerLink), sin "Ingresar" ni contenido del panel autenticado, aunque haya sesión', () => {
     const usuario = { displayName: 'Ana Admin', email: 'ana@letiende.co', photoURL: null } as User;
     const { fixture } = configurarPruebaEmbebida(usuario, 'administrador');
