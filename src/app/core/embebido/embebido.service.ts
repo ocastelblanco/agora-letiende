@@ -15,10 +15,10 @@ export function esEmbebido(hostname: string): boolean {
 /**
  * Copia del criterio de `carta-visibilidad.ts` de letiende.co (ADR-024): la
  * carta (`/carta`) responde 404 en producción mientras no esté publicada.
- * AL PUBLICAR LA CARTA hay que cambiar `CARTA_PUBLICADA` aquí, en letiende.co
- * y en Babel.
+ * Publicada el 19/10/2026 (T-0040 de letiende.co): `CARTA_PUBLICADA` es `true`
+ * aquí, en letiende.co y en Babel; los tres cambian a la vez.
  */
-export const CARTA_PUBLICADA = false;
+export const CARTA_PUBLICADA = true;
 
 const HOSTS_CARTA_VISIBLE = ['staging.letiende.co', 'localhost', '127.0.0.1'];
 
