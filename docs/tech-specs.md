@@ -711,6 +711,7 @@ Ningún secreto vive en el repositorio. Todos se inyectan como variables de ento
 | `URL_BASE_APP` | URL pública del stage, para construir enlaces en los correos | Lambdas |
 | `BOLD_LLAVE_IDENTIDAD` (v2) | Llave de identidad del Botón de pagos: el botón y la consulta de transacciones (`compras`, `boldWebhook`) | Lambdas |
 | `BOLD_LLAVE_SECRETA` (v2) | Verificación de firma del webhook de Bold | Lambdas |
+| `EMAIL_ALERTAS` | Correo que recibe las alarmas de producción vía SNS (`agora-alertas-production`); la suscripción debe confirmarse desde el correo de AWS | GitHub Actions |
 | `GOOGLE_CALENDAR_SERVICE_ACCOUNT` (v2) | Sincronización con el calendario de Le Tiende | Lambdas |
 | `WHATSAPP_PHONE_NUMBER_ID` (v2) | Identificador del número de WhatsApp Business | Lambdas |
 
