@@ -231,7 +231,7 @@ describe('POST /api/pagos/bold/webhook — SALE_APPROVED', () => {
     expect(emitirBoletasMock).not.toHaveBeenCalled();
   });
 
-  it('responde 404 si no existe una compra con ese compraId', async () => {
+  it('responde 200 si no existe una compra con ese compraId (venta de otro canal)', async () => {
     sendMock.mockResolvedValueOnce({}); // GetItem sin Item
 
     const respuesta = await invocar({
@@ -239,7 +239,10 @@ describe('POST /api/pagos/bold/webhook — SALE_APPROVED', () => {
       firma: 'firma-valida',
     });
 
-    expect(respuesta.statusCode).toBe(404);
+    expect(respuesta.statusCode).toBe(200);
+    expect(JSON.parse(respuesta.body as string)).toEqual({ recibido: true });
+    expect(confirmarSillasMock).not.toHaveBeenCalled();
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
   });
 
   it('responde 200 igual si confirmarSillas falla con un ErrorAforo (best-effort)', async () => {
@@ -533,13 +536,13 @@ describe('POST /api/pagos/bold/webhook — otros casos', () => {
     expect(respuesta.statusCode).toBe(405);
   });
 
-  it('responde 404 si data.metadata.reference no viene en el payload', async () => {
+  it('responde 200 si data.metadata.reference no viene en el payload', async () => {
     const respuesta = await invocar({
       cuerpo: { type: 'SALE_APPROVED', data: {} },
       firma: 'firma-valida',
     });
 
-    expect(respuesta.statusCode).toBe(404);
+    expect(respuesta.statusCode).toBe(200);
     expect(sendMock).not.toHaveBeenCalled();
   });
 });
@@ -621,12 +624,12 @@ describe('POST /api/pagos/bold/webhook — aviso tardío sobre una compra expira
     expect(JSON.stringify(errorSpy.mock.calls)).toContain('no lo esperaba');
   });
 
-  it('registra en el log un aviso sobre una compra que no existe (antes era un 404 silencioso)', async () => {
+  it('registra en el log un aviso sobre una compra que no existe (responde 200 pero deja rastro)', async () => {
     sendMock.mockResolvedValueOnce({});
 
     const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
 
-    expect(respuesta.statusCode).toBe(404);
+    expect(respuesta.statusCode).toBe(200);
     expect(errorSpy).toHaveBeenCalledWith('Webhook de Bold: no existe la compra de la notificación', {
       compraId: 'compra-1',
       tipo: 'SALE_APPROVED',

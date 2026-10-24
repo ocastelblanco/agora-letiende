@@ -218,6 +218,8 @@ jobs:
           URL_BASE_APP: ${{ secrets.URL_BASE_APP }}
           SECRETO_ENLACES_MAGICOS: ${{ secrets.SECRETO_ENLACES_MAGICOS }}
           SECRETO_FIRMA_BOLETAS: ${{ secrets.SECRETO_FIRMA_BOLETAS }}
+          # Correo de las alarmas de CloudWatch (SNS); opcional.
+          EMAIL_ALERTAS: ${{ secrets.EMAIL_ALERTAS }}
           GOOGLE_CALENDAR_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_CALENDAR_SERVICE_ACCOUNT }}
           # Mismo motivo que en desplegar-staging arriba. BOLD_MODO_PRUEBAS
           # no viaja por aquí: es un literal 'true'/'false' resuelto por

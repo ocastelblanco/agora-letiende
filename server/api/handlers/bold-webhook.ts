@@ -362,8 +362,12 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
 
   const compraId = payload?.data?.metadata?.reference;
   if (typeof compraId !== 'string' || compraId.length === 0) {
+    // 200, no 404: el webhook de Bold es por cuenta de comercio, así que llegan
+    // ventas de otros canales que no son de Ágora. Un 404 hace que Bold las
+    // reintente sin fin y termine desactivando el webhook (incidentes del
+    // 16/10 y 23/10/2026).
     console.error('Webhook de Bold: notificación sin referencia de compra', { tipo: payload?.type });
-    return respuestaJson(404, { mensaje: 'No existe una compra con ese identificador' });
+    return respuestaJson(200, { recibido: true });
   }
 
   const resultado = await documentoDynamoDB.send(
@@ -371,10 +375,13 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
   );
   const compra = resultado.Item as CompraParaWebhookBold | undefined;
   if (!compra) {
-    // Antes era un 404 silencioso: así pasaron inadvertidos dos semanas de
-    // avisos rechazados (incidente del 16/10/2026).
+    // Una compra de Ágora nunca desaparece: si el TTL la borra, el consumidor
+    // de Streams la archiva (liberar-reservas.ts). Que no exista significa que
+    // la venta es de otro canal de la cuenta de Bold: se acepta con 200 para
+    // que Bold no reintente ni desactive el webhook (incidentes del 16/10 y
+    // 23/10/2026). Queda el console.error para no perder visibilidad.
     console.error('Webhook de Bold: no existe la compra de la notificación', { compraId, tipo: payload.type });
-    return respuestaJson(404, { mensaje: 'No existe una compra con ese identificador' });
+    return respuestaJson(200, { recibido: true });
   }
 
   if (payload.type === 'SALE_APPROVED') {

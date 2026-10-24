@@ -606,8 +606,64 @@ resources:
     # Dominio personalizado solo en production (roadmap #17, TODO.md) —
     # staging sigue con la URL plana de API Gateway, sin cambios.
     EsProduccion: !Equals ['${sls:stage}', 'production']
+    # La suscripción de correo solo se crea si EMAIL_ALERTAS viene definido
+    # (secreto de GitHub Actions); sin él, el tópico existe pero sin suscriptor.
+    TieneEmailAlertas: !Not [!Equals ['${env:EMAIL_ALERTAS, ''}', '']]
+    CreaSuscripcionAlertas: !And [!Condition EsProduccion, !Condition TieneEmailAlertas]
 
   Resources:
+    # --- Alertas (solo production, incidente Bold del 23/10/2026) ---
+    # Una compra de Bold que el TTL borra sin que llegue el aviso de pago es la
+    # firma de un webhook desactivado. El filtro cuenta esa línea de log de
+    # liberar-reservas.ts y la alarma avisa por correo al primer caso.
+    TopicoAlertasAgora:
+      Type: AWS::SNS::Topic
+      Condition: EsProduccion
+      Properties:
+        TopicName: agora-alertas-${sls:stage}
+        Tags:
+          - Key: Proyecto
+            Value: agora
+
+    SuscripcionAlertasAgora:
+      Type: AWS::SNS::Subscription
+      Condition: CreaSuscripcionAlertas
+      Properties:
+        TopicArn: !Ref TopicoAlertasAgora
+        Protocol: email
+        Endpoint: ${env:EMAIL_ALERTAS, ''}
+
+    FiltroBoldExpiradaSinRespuesta:
+      Type: AWS::Logs::MetricFilter
+      Condition: EsProduccion
+      Properties:
+        LogGroupName: !Ref LiberarReservasLogGroup
+        FilterPattern: '"Compra de Bold expirada sin respuesta"'
+        MetricTransformations:
+          - MetricNamespace: Agora
+            MetricName: BoldExpiradaSinRespuesta
+            MetricValue: '1'
+            DefaultValue: 0
+
+    AlarmaBoldExpiradaSinRespuesta:
+      Type: AWS::CloudWatch::Alarm
+      Condition: EsProduccion
+      Properties:
+        AlarmName: agora-bold-expirada-sin-respuesta-${sls:stage}
+        AlarmDescription: >-
+          Una compra de Bold expiró sin aviso de pago: revisar que el webhook
+          de Bold siga activo (docs/MEMORY.md, incidentes 16/10 y 23/10/2026).
+        Namespace: Agora
+        MetricName: BoldExpiradaSinRespuesta
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref TopicoAlertasAgora
+
     # --- Roles IAM de mínimo privilegio (uno por función, CLAUDE.md §5 A05) ---
     SaludLambdaRole:
       Type: AWS::IAM::Role
