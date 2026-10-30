@@ -3,11 +3,12 @@ import { Component, computed, effect, inject, input, RESPONSE_INIT, signal } fro
 import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { EventosPublicosService } from '../../core/api/eventos-publicos.service';
-import type { EtapaBoleteria, EventoPublico } from '../../core/models/evento.model';
+import type { EtapaBoleteria, EventoPublico, TipoBoleteria } from '../../core/models/evento.model';
 import { PrecioPipe } from '../../shared/pipes/precio.pipe';
 import { avisoEstadoEvento } from '../../shared/utilidades/aviso-estado-evento';
 import { etapaVigenteParaMostrar } from '../../shared/utilidades/etapa-vigente';
 import { paraInputBogota } from '../../shared/utilidades/fecha-bogota';
+import { precioDelTipoEnEtapa, soloTipoPorDefecto, tiposDelEvento } from '../../shared/utilidades/tipos-boleteria';
 
 const URL_BASE_PUBLICA = 'https://agora.letiende.co';
 const ID_SCRIPT_JSON_LD = 'app-json-ld-evento';
@@ -80,6 +81,34 @@ export class DetalleEventoComponent {
     return [...evento.etapas].sort((a, b) => new Date(a.cierraEn).getTime() - new Date(b.cierraEn).getTime());
   });
 
+  /** Tipos de boleta del evento (roadmap #33); siempre hay al menos uno. */
+  protected readonly tipos = computed(() => {
+    const evento = this.evento();
+    return evento ? tiposDelEvento(evento) : [];
+  });
+
+  /**
+   * `false` cuando el único tipo es «Por defecto»: la tabla no muestra
+   * encabezados de columna y la página se ve como antes de los tipos
+   * (`PRD.md` §5.14).
+   */
+  protected readonly mostrarTipos = computed(() => !soloTipoPorDefecto(this.tipos()));
+
+  /**
+   * Un botón de compra por cada tipo con precio en la etapa vigente. Solo
+   * presentación: el tipo viaja como `tipoId` en la URL de compra y el precio
+   * real lo calcula el backend.
+   */
+  protected readonly opcionesCompra = computed(() => {
+    const etapa = this.etapaVigente();
+    if (!etapa) {
+      return [];
+    }
+    return this.tipos()
+      .map((tipo) => ({ tipo, precio: precioDelTipoEnEtapa(etapa, tipo.tipoId) }))
+      .filter((opcion): opcion is { tipo: TipoBoleteria; precio: number } => opcion.precio !== null);
+  });
+
   constructor() {
     // Reacciona a cada cambio del Signal input `slug` — incluida la
     // reutilización de instancia descrita en el docstring de la clase.
@@ -131,6 +160,11 @@ export class DetalleEventoComponent {
    * depende de esa normalización para ser retrocompatible.
    */
   protected readonly esBoleteriaExterna = computed(() => this.evento()?.administradoPorLeTiende === false);
+
+  /** Precio de un tipo en una etapa, o `null` si esa etapa no lo ofrece (se muestra «—»). */
+  protected precioDelTipo(etapa: EtapaBoleteria, tipoId: string): number | null {
+    return precioDelTipoEnEtapa(etapa, tipoId);
+  }
 
   /** Fecha límite de cierre de una etapa, en hora de Bogotá (`CLAUDE.md` §4). */
   protected etapaCierraEnLegible(etapa: EtapaBoleteria): string {
@@ -211,15 +245,20 @@ export class DetalleEventoComponent {
     // `offers` por completo en vez de anunciar un precio que ya no aplica.
     const etapaVigente = etapaVigenteParaMostrar(evento.etapas);
     if (etapaVigente) {
-      jsonLd['offers'] = [
-        {
+      // Una oferta por tipo con precio en la etapa vigente (roadmap #33); con
+      // el único tipo «Por defecto» el nombre es solo el de la etapa.
+      const tipos = tiposDelEvento(evento);
+      const conTipo = !soloTipoPorDefecto(tipos);
+      jsonLd['offers'] = tipos
+        .map((tipo) => ({ tipo, precio: precioDelTipoEnEtapa(etapaVigente, tipo.tipoId) }))
+        .filter((oferta): oferta is { tipo: TipoBoleteria; precio: number } => oferta.precio !== null)
+        .map(({ tipo, precio }) => ({
           '@type': 'Offer',
-          name: etapaVigente.nombre,
-          price: etapaVigente.precio,
+          name: conTipo ? `${etapaVigente.nombre} — ${tipo.nombre}` : etapaVigente.nombre,
+          price: precio,
           priceCurrency: 'COP',
           url: urlEvento,
-        },
-      ];
+        }));
     }
 
     const script = this.documento.createElement('script');

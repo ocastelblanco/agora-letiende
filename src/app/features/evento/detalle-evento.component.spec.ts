@@ -346,4 +346,85 @@ describe('DetalleEventoComponent', () => {
     const jsonLd = JSON.parse(scripts[0].textContent!);
     expect(jsonLd.name).toBe('Otro evento');
   });
+
+  describe('tipos de boletería (roadmap #33)', () => {
+    const eventoConTipos: EventoPublico = {
+      ...eventoEjemplo,
+      tiposBoleta: [
+        { tipoId: 'tipo-ind', nombre: 'Individual', personas: 1, orden: 0 },
+        { tipoId: 'tipo-par', nombre: 'Pareja', personas: 2, orden: 1 },
+      ],
+      etapas: [
+        {
+          etapaId: 'et1',
+          nombre: 'Preventa',
+          precio: 30000,
+          precios: [
+            { tipoId: 'tipo-ind', precio: 30000 },
+            { tipoId: 'tipo-par', precio: 40000 },
+          ],
+          cierraEn: '2099-09-01T00:00:00.000Z',
+          orden: 1,
+        },
+        {
+          etapaId: 'et2',
+          nombre: 'Taquilla',
+          precio: 40000,
+          precios: [{ tipoId: 'tipo-ind', precio: 40000 }],
+          cierraEn: '2099-10-01T00:00:00.000Z',
+          orden: 2,
+        },
+      ],
+    };
+
+    it('muestra una columna por tipo con su encabezado y "—" donde la etapa no ofrece el tipo', async () => {
+      const { fixture } = configurarPrueba(vi.fn().mockResolvedValue({ exito: true, evento: eventoConTipos }));
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      const texto: string = fixture.nativeElement.textContent;
+      expect(texto).toContain('Individual');
+      expect(texto).toContain('Pareja');
+      expect(texto).toContain('$30.000');
+      expect(texto).toContain('$40.000');
+      const filas = fixture.nativeElement.querySelectorAll('ul > li');
+      // encabezado + 2 etapas
+      expect(filas.length).toBe(3);
+      expect(filas[2].textContent).toContain('—');
+    });
+
+    it('muestra un botón "Comprar {tipo} {precio}" por cada tipo con precio en la etapa vigente', async () => {
+      const { fixture } = configurarPrueba(vi.fn().mockResolvedValue({ exito: true, evento: eventoConTipos }));
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      const enlaces: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('a'));
+      const botones = enlaces.filter((enlace) => enlace.textContent?.includes('Comprar'));
+      expect(botones.map((boton) => boton.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+        'Comprar Individual $30.000',
+        'Comprar Pareja $40.000',
+      ]);
+      expect(botones[1].getAttribute('href')).toContain('/evento/concierto-jazz/comprar?tipo=tipo-par');
+    });
+
+    it('con el único tipo "Por defecto" no muestra encabezados de columna y el botón sigue siendo "Comprar boletas"', async () => {
+      const { fixture } = configurarPrueba(vi.fn().mockResolvedValue({ exito: true, evento: eventoEjemplo }));
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.nativeElement.textContent).not.toContain('Por defecto');
+      expect(fixture.nativeElement.querySelectorAll('ul > li').length).toBe(1);
+      expect(fixture.nativeElement.textContent).toContain('Comprar boletas');
+    });
+
+    it('el JSON-LD anuncia una oferta por tipo con precio en la etapa vigente', async () => {
+      const { fixture } = configurarPrueba(vi.fn().mockResolvedValue({ exito: true, evento: eventoConTipos }));
+
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      const jsonLd = JSON.parse(document.getElementById('app-json-ld-evento')!.textContent!);
+      expect(jsonLd.offers).toHaveLength(2);
+      expect(jsonLd.offers[1]).toMatchObject({ name: 'Preventa — Pareja', price: 40000 });
+    });
+  });
 });

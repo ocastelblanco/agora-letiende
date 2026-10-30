@@ -4,9 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { EventosPublicosService } from '../../../core/api/eventos-publicos.service';
 import { VentaEfectivoRegistrada, VentasEfectivoService } from '../../../core/api/ventas-efectivo.service';
-import type { EventoPublico } from '../../../core/models/evento.model';
+import type { EventoPublico, TipoBoleteria } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
 import { etapaVigenteParaMostrar } from '../../../shared/utilidades/etapa-vigente';
+import { precioDelTipoEnEtapa, tiposDelEvento } from '../../../shared/utilidades/tipos-boleteria';
 
 /**
  * Ruta protegida `/evento/:slug/efectivo` (`guardiaRol`, mínimo `portero`,
@@ -39,6 +40,8 @@ export class VentaEfectivoComponent {
 
   protected readonly formulario = this.fb.nonNullable.group({
     cantidad: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
+    // Roadmap #33 — solo se exige cuando el evento tiene varios tipos de boleta.
+    tipoId: this.fb.nonNullable.control(''),
     nombre: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
     telefono: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(20)]),
     correo: this.fb.nonNullable.control('', [Validators.required, Validators.email]),
@@ -48,6 +51,25 @@ export class VentaEfectivoComponent {
   protected readonly etapaVigente = computed(() => {
     const evento = this.evento();
     return evento ? etapaVigenteParaMostrar(evento.etapas) : null;
+  });
+
+  /** Tipos de boleta del evento; siempre hay al menos uno (roadmap #33). */
+  protected readonly tipos = computed(() => {
+    const evento = this.evento();
+    return evento ? tiposDelEvento(evento) : [];
+  });
+
+  protected readonly variosTipos = computed(() => this.tipos().length > 1);
+
+  /**
+   * Tipos que se pueden vender ahora: los que tienen precio en la etapa
+   * vigente (o todos si el evento no tiene etapas). Solo presentación: el
+   * backend vuelve a validar el tipo y calcula el precio.
+   */
+  protected readonly opcionesTipo = computed<TipoBoleteria[]>(() => {
+    const etapa = this.etapaVigente();
+    const tipos = this.tipos();
+    return etapa ? tipos.filter((tipo) => precioDelTipoEnEtapa(etapa, tipo.tipoId) !== null) : tipos;
   });
 
   protected readonly puedeVender = computed(() => {
@@ -94,6 +116,8 @@ export class VentaEfectivoComponent {
       return;
     }
     this.evento.set(resultado.evento);
+    // Con varios tipos el selector arranca en el primero que se puede vender.
+    this.formulario.controls.tipoId.setValue(this.opcionesTipo()[0]?.tipoId ?? '');
     this.cargando.set(false);
   }
 
@@ -101,7 +125,12 @@ export class VentaEfectivoComponent {
   protected totalEstimado(): number {
     const etapa = this.etapaVigente();
     const cantidad = this.formulario.controls.cantidad.value;
-    return etapa && cantidad > 0 ? etapa.precio * cantidad : 0;
+    if (!etapa || cantidad <= 0) {
+      return 0;
+    }
+    const tipoId = this.variosTipos() ? this.formulario.controls.tipoId.value : this.tipos()[0]?.tipoId;
+    const precio = tipoId ? precioDelTipoEnEtapa(etapa, tipoId) : null;
+    return precio !== null ? precio * cantidad : 0;
   }
 
   protected async registrarVenta(): Promise<void> {
@@ -120,6 +149,11 @@ export class VentaEfectivoComponent {
     if (!evento) {
       return;
     }
+    // Con varios tipos hay que haber elegido uno antes de enviar.
+    if (this.variosTipos() && !this.formulario.controls.tipoId.value) {
+      this.formulario.controls.tipoId.markAsTouched();
+      return;
+    }
 
     this.enviando.set(true);
     try {
@@ -127,6 +161,7 @@ export class VentaEfectivoComponent {
       const resultado = await this.ventasEfectivoService.crearVenta({
         slug: evento.slug,
         cantidad: valores.cantidad,
+        ...(this.variosTipos() ? { tipoId: valores.tipoId } : {}),
         cliente: { nombre: valores.nombre, telefono: valores.telefono, correo: valores.correo },
         autorizacionDatos: valores.autorizacionDatos,
       });

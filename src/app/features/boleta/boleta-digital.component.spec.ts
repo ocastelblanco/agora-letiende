@@ -82,4 +82,31 @@ describe('BoletaDigitalComponent', () => {
     expect(imagenes.length).toBe(2);
     expect(imagenes[0].getAttribute('src')).toBe('/logotipo-placeholder.png');
   });
+
+  it('muestra el tipo de boleta y "Válida para N personas" cuando admite más de una', async () => {
+    const obtenerBoletaMock = vi.fn().mockResolvedValue({
+      exito: true,
+      boleta: { ...boletaEjemplo, tipoNombre: 'Pareja', personas: 2 },
+    });
+    const { fixture } = configurarPrueba({ obtenerBoletaMock });
+
+    await activarConCodigo(fixture, 'bol-1.firma123');
+
+    const texto = fixture.nativeElement.textContent as string;
+    expect(texto).toContain('Pareja');
+    expect(texto).toContain('Válida para 2 personas');
+  });
+
+  it('una boleta de una sola persona no muestra "Válida para N personas"', async () => {
+    const obtenerBoletaMock = vi.fn().mockResolvedValue({
+      exito: true,
+      boleta: { ...boletaEjemplo, tipoNombre: 'Individual', personas: 1 },
+    });
+    const { fixture } = configurarPrueba({ obtenerBoletaMock });
+
+    await activarConCodigo(fixture, 'bol-1.firma123');
+
+    expect(fixture.nativeElement.textContent).toContain('Individual');
+    expect(fixture.nativeElement.textContent).not.toContain('Válida para');
+  });
 });

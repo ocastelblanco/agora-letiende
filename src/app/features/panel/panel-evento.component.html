@@ -67,12 +67,17 @@
         </div>
       </div>
 
-      <h2 class="mb-2 text-lg font-semibold text-primary">Ventas por etapa</h2>
+      <h2 class="mb-2 text-lg font-semibold text-primary">Ventas por etapa y tipo de boleta</h2>
       <div class="mb-6 overflow-x-auto rounded-2xl bg-white shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
         <table mat-table [dataSource]="detalle()!.porEtapa" class="w-full">
           <ng-container matColumnDef="nombre">
             <th mat-header-cell *matHeaderCellDef>Etapa</th>
             <td mat-cell *matCellDef="let etapa">{{ etapa.nombre }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="tipoNombre">
+            <th mat-header-cell *matHeaderCellDef>Tipo de boleta</th>
+            <td mat-cell *matCellDef="let etapa">{{ etapa.tipoNombre ?? 'Por defecto' }}</td>
           </ng-container>
 
           <ng-container matColumnDef="vendidas">
@@ -109,6 +114,11 @@
             <ng-container matColumnDef="correo">
               <th mat-header-cell *matHeaderCellDef>Correo</th>
               <td mat-cell *matCellDef="let cliente">{{ cliente.correo }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="tipoNombre">
+              <th mat-header-cell *matHeaderCellDef>Tipo de boleta</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.tipoNombre ?? 'Por defecto' }}</td>
             </ng-container>
 
             <ng-container matColumnDef="cantidad">

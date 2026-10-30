@@ -19,7 +19,16 @@ export interface EventoPublicoSimulado {
   sillasTotales: number;
   sillasDisponibles: number;
   sillasReservadas: number;
-  etapas: { etapaId: string; nombre: string; precio: number; cierraEn: string; orden: number }[];
+  /** Roadmap #33 — ausente en un evento anterior a los tipos (se lee como un único tipo «Por defecto»). */
+  tiposBoleta?: { tipoId: string; nombre: string; personas: number; orden: number }[];
+  etapas: {
+    etapaId: string;
+    nombre: string;
+    precio: number;
+    precios?: { tipoId: string; precio: number }[];
+    cierraEn: string;
+    orden: number;
+  }[];
   maxBoletasPorCompra: number;
   mediosPago: string[];
   plazoComprobanteMinutos: number;
@@ -56,6 +65,32 @@ export function crearEventoBold(cambios: Partial<EventoPublicoSimulado> = {}): E
     estado: 'publicado',
     creadoEn: new Date(ahora - 5 * DIA_MS).toISOString(),
     actualizadoEn: new Date(ahora - 5 * DIA_MS).toISOString(),
+    ...cambios,
+  };
+}
+
+export const PRECIO_INDIVIDUAL = 30_000;
+export const PRECIO_PAREJA = 40_000;
+
+/** Evento con dos tipos de boleta (Individual y Pareja de 2 personas) y una sola etapa vigente. */
+export function crearEventoConTipos(cambios: Partial<EventoPublicoSimulado> = {}): EventoPublicoSimulado {
+  const base = crearEventoBold();
+  return {
+    ...base,
+    tiposBoleta: [
+      { tipoId: 'tipo-individual', nombre: 'Individual', personas: 1, orden: 0 },
+      { tipoId: 'tipo-pareja', nombre: 'Pareja', personas: 2, orden: 1 },
+    ],
+    etapas: [
+      {
+        ...base.etapas[0],
+        precio: PRECIO_INDIVIDUAL,
+        precios: [
+          { tipoId: 'tipo-individual', precio: PRECIO_INDIVIDUAL },
+          { tipoId: 'tipo-pareja', precio: PRECIO_PAREJA },
+        ],
+      },
+    ],
     ...cambios,
   };
 }
