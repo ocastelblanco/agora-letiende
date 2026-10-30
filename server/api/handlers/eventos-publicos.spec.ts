@@ -237,6 +237,56 @@ describe('handler de /api/eventos-publicos', () => {
       expect(cuerpo.productores).toBeUndefined();
     });
 
+    it('un evento anterior a los tipos sale con el tipo «Por defecto» y un precio por etapa (roadmap #33)', async () => {
+      sendMock.mockResolvedValue({
+        Items: [
+          {
+            ...eventoPublicado,
+            etapas: [{ etapaId: 'et-1', nombre: 'Preventa', precio: 45000, cierraEn: '2099-01-01T00:00:00.000Z', orden: 1 }],
+          },
+        ],
+      });
+
+      const respuesta = await invocar('GET', { rawPath: '/api/eventos-publicos/concierto-jazz', slug: 'concierto-jazz' });
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.tiposBoleta).toEqual([{ tipoId: 'defecto', nombre: 'Por defecto', personas: 1, orden: 0 }]);
+      expect(cuerpo.etapas[0]).toMatchObject({ precio: 45000, precios: [{ tipoId: 'defecto', precio: 45000 }] });
+    });
+
+    it('devuelve los tipos y el precio de cada tipo por etapa (roadmap #33)', async () => {
+      sendMock.mockResolvedValue({
+        Items: [
+          {
+            ...eventoPublicado,
+            tiposBoleta: [
+              { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+              { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+            ],
+            etapas: [
+              {
+                etapaId: 'et-1',
+                nombre: 'Preventa',
+                precio: 30000,
+                precios: [
+                  { tipoId: 't-ind', precio: 30000 },
+                  { tipoId: 't-par', precio: 40000 },
+                ],
+                cierraEn: '2099-01-01T00:00:00.000Z',
+                orden: 1,
+              },
+            ],
+          },
+        ],
+      });
+
+      const respuesta = await invocar('GET', { rawPath: '/api/eventos-publicos/concierto-jazz', slug: 'concierto-jazz' });
+
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.tiposBoleta).toHaveLength(2);
+      expect(cuerpo.etapas[0].precios).toHaveLength(2);
+    });
+
     it('usa Query sobre slug-index, nunca Scan', async () => {
       sendMock.mockResolvedValue({ Items: [eventoPublicado] });
 

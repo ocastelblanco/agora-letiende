@@ -7,6 +7,7 @@ import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { estadoEfectivo, finalizarSiVencido, type EventoParaVigencia } from '../lib/vigencia-evento';
 import { respuestaJson } from '../lib/http';
+import { normalizarTipos } from '../lib/tipos-boleteria';
 
 /**
  * Estados de `agora-eventos` que se consultan por el GSI y, tras calcular
@@ -72,6 +73,13 @@ function aVistaPublica(evento: Record<string, unknown>): Record<string, unknown>
   if (typeof vista['logotipoKey'] === 'string') {
     vista['logotipoUrl'] = urlPublicaActivo(vista['logotipoKey']);
   }
+
+  // Roadmap #33 (ADR-020) — siempre el formato nuevo: un evento anterior a
+  // los tipos de boletería sale con un único tipo `defecto` y un precio por
+  // etapa; `precio` se conserva como el del primer tipo (compatibilidad).
+  const { tiposBoleta, etapas } = normalizarTipos(vista);
+  vista['tiposBoleta'] = tiposBoleta;
+  vista['etapas'] = etapas;
 
   vista['administradoPorLeTiende'] = vista['administradoPorLeTiende'] !== false;
   if (typeof vista['vinculoExterno'] === 'object' && vista['vinculoExterno'] !== null) {

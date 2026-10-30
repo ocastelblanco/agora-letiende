@@ -22,6 +22,8 @@ import { duracionMinutosDe } from '../lib/duracion-evento';
 export interface EtapaParaCalendar {
   nombre: string;
   precio: number;
+  /** Roadmap #33 — un precio por tipo de boleta; ausente = solo `precio` (formato anterior). */
+  precios?: { tipoNombre: string; precio: number }[];
   cierraEn: string;
 }
 
@@ -130,9 +132,15 @@ function construirDescripcion(
 
   if (evento.etapas.length > 0) {
     for (const etapa of evento.etapas) {
-      lineas.push(
-        `${etapa.nombre}: cierra ${fechaLegibleBogota(etapa.cierraEn)} (hora Bogotá) — $${formatoCop(etapa.precio)}`,
-      );
+      // Con un único tipo implícito («Por defecto») la línea es la de siempre;
+      // con tipos reales se lista el precio de cada uno.
+      const preciosPorTipo = etapa.precios ?? [];
+      const detallaTipos =
+        preciosPorTipo.length > 1 || (preciosPorTipo.length === 1 && preciosPorTipo[0].tipoNombre !== 'Por defecto');
+      const precios = detallaTipos
+        ? preciosPorTipo.map((p) => `${p.tipoNombre} $${formatoCop(p.precio)}`).join(' · ')
+        : `$${formatoCop(etapa.precio)}`;
+      lineas.push(`${etapa.nombre}: cierra ${fechaLegibleBogota(etapa.cierraEn)} (hora Bogotá) — ${precios}`);
     }
   }
 

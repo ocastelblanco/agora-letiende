@@ -25,6 +25,15 @@ import { generarQrPng, generarQrSvg } from '../services/qr';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { estadoEfectivo, haFinalizadoPorVigencia } from '../lib/vigencia-evento';
 import {
+  normalizarTipos,
+  tipoPorDefecto,
+  tiposEnUso,
+  validarPreciosEtapa,
+  validarTiposBoleta,
+  type PrecioEtapa,
+  type TipoBoleteria,
+} from '../lib/tipos-boleteria';
+import {
   DURACION_POR_DEFECTO_MINUTOS,
   duracionMinutosDe,
   esDuracionMinutosValida,
@@ -210,7 +219,9 @@ function esEmailValido(valor: unknown): valor is string {
 interface EtapaBoleteriaEntrada {
   etapaId: string;
   nombre: string;
+  /** Roadmap #33 — precio del primer tipo, conservado para lectores anteriores a los tipos de boletería. */
   precio: number;
+  precios: PrecioEtapa[];
   cierraEn: string;
   orden: number;
 }
@@ -240,9 +251,15 @@ interface EtapaBoleteriaEntrada {
  * cobra nada, solo controla aforo. `[]` ya es el valor por defecto de un
  * evento nuevo (`EditarEventoComponent`); el cobro se activa solo cuando el
  * administrador agrega la primera etapa.
+ *
+ * Roadmap #33 — cada etapa trae `precios` (un precio por tipo de boletería
+ * del evento, validado contra `tipos`); el `precio` plano de los clientes
+ * anteriores se acepta como el precio del primer tipo. Se persisten ambos:
+ * `precios` es la fuente de verdad, `precio` solo da compatibilidad.
  */
 function normalizarEtapas(
   valor: unknown,
+  tipos: TipoBoleteria[],
   idsExistentes?: ReadonlySet<string>,
 ): EtapaBoleteriaEntrada[] | null {
   if (!Array.isArray(valor)) {
@@ -258,10 +275,13 @@ function normalizarEtapas(
     const registro = item as Record<string, unknown>;
     if (
       !esTextoValido(registro['nombre'], 100) ||
-      !esEnteroNoNegativo(registro['precio']) ||
       !esFechaIsoValida(registro['cierraEn']) ||
       typeof registro['orden'] !== 'number'
     ) {
+      return null;
+    }
+    const precios = validarPreciosEtapa(registro, tipos);
+    if (!precios) {
       return null;
     }
     const etapaIdRecibido = registro['etapaId'];
@@ -277,7 +297,8 @@ function normalizarEtapas(
     etapas.push({
       etapaId,
       nombre: registro['nombre'],
-      precio: registro['precio'],
+      precio: precios[0].precio,
+      precios,
       cierraEn: registro['cierraEn'],
       orden: registro['orden'],
     });
@@ -506,6 +527,15 @@ async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Prom
     const productoresResueltos =
       correosProductores.length > 0 ? await resolverProductores(correosProductores) : [];
 
+    const tiposNormalizados = normalizarTipos(item);
+    const nombresTipo = new Map(tiposNormalizados.tiposBoleta.map((tipo) => [tipo.tipoId, tipo.nombre]));
+    const etapasParaCalendar: EventoParaCalendar['etapas'] = tiposNormalizados.etapas.map((etapa) => ({
+      nombre: etapa.nombre,
+      precio: etapa.precio,
+      precios: etapa.precios.map((p) => ({ tipoNombre: nombresTipo.get(p.tipoId) ?? 'Por defecto', precio: p.precio })),
+      cierraEn: etapa.cierraEn,
+    }));
+
     const eventoParaCalendar: EventoParaCalendar = {
       nombre: String(item['nombre']),
       slug: String(item['slug']),
@@ -516,7 +546,7 @@ async function sincronizarConGoogleCalendar(item: Record<string, unknown>): Prom
         typeof item['vinculoExterno'] === 'object' && item['vinculoExterno'] !== null
           ? (item['vinculoExterno'] as EventoParaCalendar['vinculoExterno'])
           : undefined,
-      etapas: Array.isArray(item['etapas']) ? (item['etapas'] as EventoParaCalendar['etapas']) : [],
+      etapas: etapasParaCalendar,
     };
 
     const resultado = googleCalendarEventIdExistente
@@ -606,6 +636,7 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
 
   let sillasTotales: number = SILLAS_TOTALES_NEUTRO;
   let maxBoletasPorCompra: number = MAX_BOLETAS_POR_COMPRA_NEUTRO;
+  let tiposBoleta: TipoBoleteria[] = [tipoPorDefecto()];
   let etapas: EtapaBoleteriaEntrada[] = [];
   let mediosPago: MedioPago[] = [];
   let productores: string[] = [];
@@ -622,7 +653,19 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     sillasTotales = datos['sillasTotales'];
     maxBoletasPorCompra = datos['maxBoletasPorCompra'];
 
-    const etapasNormalizadas = normalizarEtapas(datos['etapas']);
+    // Roadmap #33 — opcional al crear (clientes anteriores no lo envían): un único tipo «Por defecto».
+    if (datos['tiposBoleta'] !== undefined) {
+      const tiposNormalizados = validarTiposBoleta(datos['tiposBoleta']);
+      if (!tiposNormalizados) {
+        return respuestaJson(400, {
+          mensaje:
+            'tiposBoleta debe ser un arreglo de tipos válidos (nombre único, personas entre 1 y 10)',
+        });
+      }
+      tiposBoleta = tiposNormalizados;
+    }
+
+    const etapasNormalizadas = normalizarEtapas(datos['etapas'], tiposBoleta);
     if (!etapasNormalizadas) {
       return respuestaJson(400, { mensaje: 'etapas debe ser un arreglo de etapas válidas (puede estar vacío)' });
     }
@@ -691,6 +734,7 @@ async function crearEvento(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     // inicializa en la misma escritura, nunca se acepta del payload.
     sillasDisponibles: sillasTotales,
     sillasReservadas: 0,
+    tiposBoleta,
     etapas,
     maxBoletasPorCompra,
     mediosPago,
@@ -1031,6 +1075,31 @@ async function actualizarEvento(
       agregar('estado', '#estado', 'publicado');
     }
   }
+  // Roadmap #33 — tipos de boletería efectivos tras este PUT; los captura el
+  // bloque de abajo y los reutiliza el de `etapas` (que valida sus precios
+  // contra ellos, no contra los del evento persistido).
+  let tiposDeEstePut: TipoBoleteria[] | undefined;
+  if (!desactivaBoleteria && (datos['tiposBoleta'] !== undefined || datos['etapas'] !== undefined)) {
+    const eventoActual = await leerEventoActual();
+    if (!eventoActual) {
+      return respuestaJson(404, { mensaje: 'No existe un evento con ese eventoId' });
+    }
+    const actuales = normalizarTipos(eventoActual);
+    if (datos['tiposBoleta'] !== undefined) {
+      const idsTiposExistentes = new Set(actuales.tiposBoleta.map((tipo) => tipo.tipoId));
+      const tipos = validarTiposBoleta(datos['tiposBoleta'], idsTiposExistentes);
+      if (!tipos) {
+        return respuestaJson(400, {
+          mensaje:
+            'tiposBoleta debe ser un arreglo de tipos válidos (nombre único, personas entre 1 y 10)',
+        });
+      }
+      tiposDeEstePut = tipos;
+      agregar('tiposBoleta', '#tiposBoleta', tipos);
+    } else {
+      tiposDeEstePut = actuales.tiposBoleta;
+    }
+  }
   if (!desactivaBoleteria && datos['etapas'] !== undefined) {
     // Lee el evento actual solo en este caso (no incondicional al inicio de
     // la función: sería una lectura extra innecesaria para un PUT que no
@@ -1053,7 +1122,8 @@ async function actualizarEvento(
       }),
     );
 
-    const etapas = normalizarEtapas(datos['etapas'], idsExistentes);
+    const tiposEfectivos = tiposDeEstePut ?? normalizarTipos(eventoActual).tiposBoleta;
+    const etapas = normalizarEtapas(datos['etapas'], tiposEfectivos, idsExistentes);
     if (!etapas) {
       return respuestaJson(400, { mensaje: 'etapas inválidas' });
     }
@@ -1072,6 +1142,21 @@ async function actualizarEvento(
       if (mediosPagoActual.includes('bold')) {
         agregar('mediosPago', '#mediosPago', mediosPagoActual.filter((medio) => medio !== 'bold'));
       }
+    }
+  }
+  // Roadmap #33 — un tipo que alguna etapa todavía usa no se puede eliminar
+  // (el botón deshabilitado del formulario es solo experiencia de usuario,
+  // CLAUDE.md §5 A01). Se compara contra las etapas EFECTIVAS tras este PUT.
+  if (!desactivaBoleteria && datos['tiposBoleta'] !== undefined && tiposDeEstePut) {
+    const eventoActual = await leerEventoActual();
+    const etapasEfectivas =
+      etapasDeEstePut ?? (eventoActual ? normalizarTipos(eventoActual).etapas : []);
+    const idsConservados = new Set(tiposDeEstePut.map((tipo) => tipo.tipoId));
+    const tipoEnUsoEliminado = [...tiposEnUso(etapasEfectivas)].some((id) => !idsConservados.has(id));
+    if (tipoEnUsoEliminado) {
+      return respuestaJson(409, {
+        mensaje: 'No se puede eliminar un tipo de boletería que todavía tiene precio en alguna etapa',
+      });
     }
   }
   if (!desactivaBoleteria && datos['mediosPago'] !== undefined) {
@@ -1163,6 +1248,7 @@ async function actualizarEvento(
     agregar('sillasTotales', '#sillasTotales', SILLAS_TOTALES_NEUTRO);
     agregar('sillasDisponibles', '#sillasDisponibles', SILLAS_TOTALES_NEUTRO);
     agregar('sillasReservadas', '#sillasReservadas', 0);
+    agregar('tiposBoleta', '#tiposBoleta', [tipoPorDefecto()]);
     agregar('etapas', '#etapas', []);
     agregar('mediosPago', '#mediosPago', []);
     agregar('productores', '#productores', []);
@@ -1406,6 +1492,8 @@ async function duplicarEvento(
     sillasTotales,
     sillasDisponibles: sillasTotales,
     sillasReservadas: 0,
+    // Roadmap #33 — los tipos se copian tal cual (sus `tipoId` solo tienen sentido dentro del evento).
+    tiposBoleta: normalizarTipos(original).tiposBoleta,
     etapas: etapasOriginales.map((etapa) => ({ ...etapa, etapaId: randomUUID() })),
     maxBoletasPorCompra: original['maxBoletasPorCompra'],
     mediosPago: original['mediosPago'] ?? [],
