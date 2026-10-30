@@ -13,6 +13,8 @@ export interface DatosClienteEfectivo {
 export interface DatosNuevaVentaEfectivo {
   slug: string;
   cantidad: number;
+  /** Roadmap #33 — obligatorio si el evento tiene más de un tipo de boleta. */
+  tipoId?: string;
   cliente: DatosClienteEfectivo;
   autorizacionDatos: boolean;
 }

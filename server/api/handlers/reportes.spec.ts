@@ -306,13 +306,14 @@ describe('GET /api/eventos/:eventoId/panel', () => {
       sillasReservadas: 5,
       sillasVendidas: 55,
       porEtapa: [
-        { etapaId: 'et-1', nombre: 'Preventa', vendidas: 2, recaudado: 90000 },
-        { etapaId: 'et-2', nombre: 'General', vendidas: 1, recaudado: 60000 },
+        { etapaId: 'et-1', nombre: 'Preventa', tipoId: 'defecto', tipoNombre: 'Por defecto', vendidas: 2, recaudado: 90000 },
+        { etapaId: 'et-2', nombre: 'General', tipoId: 'defecto', tipoNombre: 'Por defecto', vendidas: 1, recaudado: 60000 },
       ],
       totalVendidas: 3,
       totalRecaudado: 150000,
       ingresados: 2,
       totalBoletas: 3,
+      totalPersonas: 3,
       faltanPorIngresar: 1,
       clientes: [
         {
@@ -323,6 +324,8 @@ describe('GET /api/eventos/:eventoId/panel', () => {
           cantidad: 2,
           montoTotal: 90000,
           etapaId: 'et-1',
+          tipoId: 'defecto',
+          tipoNombre: 'Por defecto',
           medioPago: 'efectivo',
           creadaEn: '2026-08-08T00:00:00.000Z',
         },
@@ -334,6 +337,8 @@ describe('GET /api/eventos/:eventoId/panel', () => {
           cantidad: 1,
           montoTotal: 60000,
           etapaId: 'et-2',
+          tipoId: 'defecto',
+          tipoNombre: 'Por defecto',
           medioPago: 'transferencia',
           creadaEn: '2026-08-09T00:00:00.000Z',
         },
@@ -370,6 +375,8 @@ describe('GET /api/eventos/:eventoId/panel', () => {
     expect(cuerpo.porEtapa).toContainEqual({
       etapaId: 'et-borrada',
       nombre: 'Etapa eliminada',
+      tipoId: 'defecto',
+      tipoNombre: 'Por defecto',
       vendidas: 2,
       recaudado: 90000,
     });
@@ -417,6 +424,8 @@ describe('GET /api/eventos/:eventoId/panel', () => {
     expect(cuerpo.porEtapa).toContainEqual({
       etapaId: undefined,
       nombre: 'Sin etapa (boletería sin cobro)',
+      tipoId: 'defecto',
+      tipoNombre: 'Por defecto',
       vendidas: 2,
       recaudado: 0,
     });
@@ -664,5 +673,76 @@ describe('método no soportado', () => {
     const respuesta = await invocar('POST');
 
     expect(respuesta.statusCode).toBe(405);
+  });
+});
+
+// Roadmap #33 (ADR-020) — el panel agrupa por etapa y tipo, y cuenta personas.
+describe('GET /api/eventos/:eventoId/panel — tipos de boletería', () => {
+  it('agrupa por etapa y tipo, y los asistentes se cuentan en personas', async () => {
+    exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosAdministrador });
+    sendMock
+      .mockResolvedValueOnce({
+        Item: {
+          eventoId: 'evt-1',
+          nombre: 'Concierto',
+          sillasTotales: 100,
+          sillasDisponibles: 90,
+          sillasReservadas: 0,
+          tiposBoleta: [
+            { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+            { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+          ],
+          etapas: [{ etapaId: 'et-1', nombre: 'Preventa', cierraEn: '2026-09-01T00:00:00.000Z', orden: 1, precios: [] }],
+        },
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          { boletaId: 'b1', compraId: 'c1', estado: 'usada', personas: 2, tipoId: 't-par' },
+          { boletaId: 'b2', compraId: 'c2', estado: 'valida', tipoId: 't-ind' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          { compraId: 'c1', etapaId: 'et-1', tipoId: 't-par', tipoNombre: 'Pareja', cantidad: 1, montoTotal: 40000, creadaEn: 'x' },
+          { compraId: 'c2', etapaId: 'et-1', tipoId: 't-ind', tipoNombre: 'Individual', cantidad: 2, montoTotal: 60000, creadaEn: 'x' },
+        ],
+      });
+
+    const respuesta = await invocar('GET', { eventoId: 'evt-1' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.porEtapa).toEqual([
+      { etapaId: 'et-1', nombre: 'Preventa', tipoId: 't-ind', tipoNombre: 'Individual', vendidas: 2, recaudado: 60000 },
+      { etapaId: 'et-1', nombre: 'Preventa', tipoId: 't-par', tipoNombre: 'Pareja', vendidas: 1, recaudado: 40000 },
+    ]);
+    expect(cuerpo.totalBoletas).toBe(2);
+    expect(cuerpo.totalPersonas).toBe(3);
+    expect(cuerpo.ingresados).toBe(2);
+    expect(cuerpo.faltanPorIngresar).toBe(1);
+    expect(cuerpo.clientes[0]).toMatchObject({ tipoId: 't-par', tipoNombre: 'Pareja' });
+  });
+});
+
+describe('GET /api/eventos/:eventoId/reportes — columna «Tipo de boleta» (roadmap #33)', () => {
+  it('el .xlsx incluye el tipo de cada boleta; una boleta anterior a los tipos sale «Por defecto»', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({
+        Items: [
+          { boletaId: 'b-pareja', compraId: 'c-p', etapaId: 'et-1', tipoId: 't-par', tipoNombre: 'Pareja', personas: 2, valorUnitario: 40000, estado: 'valida' },
+          { boletaId: 'b-vieja', compraId: 'c-v', etapaId: 'et-1', valorUnitario: 45000, estado: 'valida' },
+        ],
+      })
+      .mockResolvedValueOnce({ Items: [] });
+    clienteS3SendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocarReportes('evt-1', 'xlsx');
+
+    expect(respuesta.statusCode).toBe(200);
+    const comandoSubida = clienteS3SendMock.mock.calls[0]?.[0] as { input: { Body: Buffer } };
+    const libro = XLSX.read(comandoSubida.input.Body, { type: 'buffer' });
+    const filas = XLSX.utils.sheet_to_json(libro.Sheets['Boletas']!) as Record<string, unknown>[];
+    expect(filas.map((fila) => fila['Tipo de boleta'])).toEqual(['Pareja', 'Por defecto']);
   });
 });

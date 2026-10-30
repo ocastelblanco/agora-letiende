@@ -12,6 +12,9 @@ export interface BoletaDigital {
   direccion: string;
   logotipoUrl?: string;
   etapaNombre?: string;
+  /** Roadmap #33 — tipo de boleta y personas que admite el QR. */
+  tipoNombre?: string;
+  personas?: number;
   nombreCliente?: string;
   qrPng: string;
 }

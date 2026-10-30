@@ -22,6 +22,9 @@ export interface EventoPanel {
 export interface MetricaEtapaPanel {
   etapaId: string;
   nombre: string;
+  /** Roadmap #33 — una fila por etapa y tipo de boleta. */
+  tipoId?: string;
+  tipoNombre?: string;
   vendidas: number;
   recaudado: number;
 }
@@ -41,6 +44,8 @@ export interface ClientePanel {
   cantidad: number;
   montoTotal: number;
   etapaId: string;
+  tipoId?: string;
+  tipoNombre?: string;
   medioPago?: string;
   creadaEn: string;
 }
@@ -60,8 +65,11 @@ export interface DetallePanel {
    */
   totalVendidas: number;
   totalRecaudado: number;
+  /** Personas que ya ingresaron (roadmap #33: un QR de «Pareja» cuenta 2). */
   ingresados: number;
   totalBoletas: number;
+  /** Personas que admiten todas las boletas emitidas; ausente en un backend anterior (= `totalBoletas`). */
+  totalPersonas?: number;
   faltanPorIngresar: number;
   clientes: ClientePanel[];
 }

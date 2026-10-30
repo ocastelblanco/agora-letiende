@@ -1,10 +1,32 @@
 export type EstadoEvento = 'borrador' | 'publicado' | 'agotado' | 'finalizado' | 'cancelado';
 export type MedioPago = 'bold' | 'efectivo' | 'transferencia';
 
+/**
+ * Roadmap #33 (ADR-020) — tipo de boleta de un evento (Individual, Pareja…).
+ * `personas` es el número de sillas que consume cada boleta del tipo; una
+ * boleta de varias personas emite un solo QR. Un evento anterior a los tipos
+ * se lee en el backend como un único tipo `defecto` («Por defecto»).
+ */
+export interface TipoBoleteria {
+  tipoId: string;
+  nombre: string;
+  personas: number;
+  orden: number;
+}
+
+/** Precio de un tipo de boleta dentro de una etapa. */
+export interface PrecioEtapa {
+  tipoId: string;
+  precio: number;
+}
+
 export interface EtapaBoleteria {
   etapaId: string;
   nombre: string;
+  /** Precio del primer tipo, conservado por compatibilidad; la fuente de verdad es `precios`. */
   precio: number;
+  /** Roadmap #33 — un precio por tipo; el backend siempre lo devuelve, incluso en eventos legados. */
+  precios?: PrecioEtapa[];
   cierraEn: string;
   orden: number;
 }
@@ -43,6 +65,8 @@ export interface Evento {
   sillasTotales: number;
   sillasDisponibles: number;
   sillasReservadas: number;
+  /** Roadmap #33 — siempre al menos un tipo (el backend lo normaliza al leer). */
+  tiposBoleta?: TipoBoleteria[];
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
   mediosPago: MedioPago[];
@@ -71,9 +95,23 @@ export interface Evento {
 export interface DatosEtapaBoleteria {
   etapaId?: string;
   nombre: string;
-  precio: number;
+  /** Formato anterior a los tipos: el backend lo toma como el precio del primer tipo. */
+  precio?: number;
+  /** Roadmap #33 — un precio por tipo del evento. */
+  precios?: PrecioEtapa[];
   cierraEn: string;
   orden: number;
+}
+
+/**
+ * Tipo tal como lo envía el formulario. El backend conserva el `tipoId` solo
+ * si pertenece a un tipo ya existente del evento; uno nuevo recibe un UUID.
+ */
+export interface DatosTipoBoleteria {
+  tipoId?: string;
+  nombre: string;
+  /** 1 a 10; ausente = 1. */
+  personas?: number;
 }
 
 /** Datos para crear un evento nuevo (`POST /api/eventos`). */
@@ -91,6 +129,8 @@ export interface DatosNuevoEvento {
   administradoPorLeTiende: boolean;
   sillasTotales: number;
   maxBoletasPorCompra: number;
+  /** Roadmap #33 — opcional: sin él, un único tipo «Por defecto». */
+  tiposBoleta?: DatosTipoBoleteria[];
   etapas: DatosEtapaBoleteria[];
   mediosPago: MedioPago[];
   productores: string[];
@@ -119,6 +159,7 @@ export interface DatosEditarEvento {
   sillasTotales?: number;
   maxBoletasPorCompra?: number;
   plazoComprobanteMinutos?: number;
+  tiposBoleta?: DatosTipoBoleteria[];
   etapas?: DatosEtapaBoleteria[];
   mediosPago?: MedioPago[];
   productores?: string[];
@@ -158,6 +199,7 @@ export interface EventoPublico {
   sillasTotales: number;
   sillasDisponibles: number;
   sillasReservadas: number;
+  tiposBoleta?: TipoBoleteria[];
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
   mediosPago: MedioPago[];

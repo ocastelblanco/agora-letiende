@@ -4,6 +4,7 @@ import type { DynamoDBRecord, DynamoDBStreamEvent, DynamoDBStreamHandler } from 
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from '../services/dynamodb';
 import { SillasReservadasInsuficientesError, liberarSillas } from '../services/aforo';
+import { sillasDeCompra } from '../lib/tipos-boleteria';
 
 // 'esperando_pago_bold' (roadmap #19, Sub-tarea 1) — agregado en el mismo
 // cambio que handlers/compras.ts (única otra copia local de este tipo en el
@@ -128,7 +129,9 @@ export const handler: DynamoDBStreamHandler = async (
     }
 
     try {
-      await liberarSillas(eventoId, cantidad);
+      // Roadmap #33 — el aforo se devuelve en sillas (`cantidad × personas`),
+      // con respaldo a `cantidad` para una compra anterior a los tipos.
+      await liberarSillas(eventoId, sillasDeCompra({ cantidad, sillas: compra['sillas'] }));
     } catch (error) {
       if (!(error instanceof SillasReservadasInsuficientesError)) {
         throw error;

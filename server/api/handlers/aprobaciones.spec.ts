@@ -162,6 +162,7 @@ describe('GET /api/aprobaciones (autenticado)', () => {
         compraId: 'compra-1',
         nombreEvento: 'Concierto de jazz',
         cantidad: 2,
+        tipoNombre: 'Por defecto',
         montoTotal: 90000,
         creadaEn: '2026-08-08T00:00:00.000Z',
       },
@@ -463,5 +464,39 @@ describe('POST /api/aprobaciones/:token/rechazar', () => {
     const respuesta = await invocar('POST', { rawPath: '/api/aprobaciones/token-x/rechazar', token: 'token-x' });
 
     expect(respuesta.statusCode).toBe(200);
+  });
+});
+
+// Roadmap #33 (ADR-020) — aprobar una pareja confirma sus sillas y emite con el tipo.
+describe('POST /api/aprobaciones/:token/aprobar — tipos de boletería', () => {
+  const compraPareja = { ...compraEnRevision, cantidad: 2, tipoId: 't-par', tipoNombre: 'Pareja', personas: 2, sillas: 4 };
+
+  it('confirma compra.sillas (no cantidad) y emite 1 boleta por unidad con el tipo', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraPareja] });
+    sendMock.mockResolvedValueOnce({});
+    confirmarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    await invocar('POST', { rawPath: '/api/aprobaciones/token-x/aprobar', token: 'token-x' });
+
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 4);
+    expect(emitirBoletasMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoId: 't-par', tipoNombre: 'Pareja', personas: 2, cantidad: 2 }),
+    );
+  });
+
+  it('rechazar libera compra.sillas', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [compraPareja] });
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    sendMock.mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    await invocar('POST', {
+      rawPath: '/api/aprobaciones/token-x/rechazar',
+      token: 'token-x',
+      cuerpo: { motivo: 'Comprobante ilegible' },
+    });
+
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 4);
   });
 });

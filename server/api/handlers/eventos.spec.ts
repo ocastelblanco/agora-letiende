@@ -2289,3 +2289,248 @@ describe('handler de /api/eventos', () => {
     });
   });
 });
+
+// Roadmap #33 (ADR-020) — tipos de boletería.
+describe('tipos de boletería en /api/eventos (roadmap #33)', () => {
+  const tiposValidos = [
+    { nombre: 'Individual', personas: 1 },
+    { nombre: 'Pareja', personas: 2 },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosAdmin });
+    clienteS3SendMock.mockResolvedValue({ Contents: [] });
+    credencialCalendarConfiguradaMock.mockReturnValue(false);
+    resolverProductoresMock.mockResolvedValue([]);
+  });
+
+  describe('POST', () => {
+    it('sin tiposBoleta persiste el tipo implícito «Por defecto» y el precio plano pasa al primer tipo', async () => {
+      sendMock.mockResolvedValue({});
+
+      const respuesta = await invocar('POST', { cuerpo: eventoValido });
+
+      expect(respuesta.statusCode).toBe(201);
+      const cuerpo = JSON.parse(respuesta.body!);
+      expect(cuerpo.tiposBoleta).toEqual([{ tipoId: 'defecto', nombre: 'Por defecto', personas: 1, orden: 0 }]);
+      expect(cuerpo.etapas[0].precios).toEqual([{ tipoId: 'defecto', precio: 45000 }]);
+      expect(cuerpo.etapas[0].precio).toBe(45000);
+    });
+
+    it('responde 400 si una etapa trae una lista de precios vacía', async () => {
+      const respuesta = await invocar('POST', {
+        cuerpo: { ...eventoValido, etapas: [{ ...etapaValida, precio: undefined, precios: [] }] },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('acepta precios por tipo y calcula el precio de compatibilidad del primer tipo', async () => {
+      sendMock.mockResolvedValue({});
+      // Los tipos nuevos reciben un UUID del backend, así que el cliente aún no
+      // puede referenciarlos en `precios`: el flujo real es guardar tipos y
+      // luego etapas (PUT); aquí solo se crea con el tipo implícito.
+      const respuesta = await invocar('POST', {
+        cuerpo: {
+          ...eventoValido,
+          etapas: [{ ...etapaValida, precio: undefined, precios: [{ tipoId: 'defecto', precio: 30000 }] }],
+        },
+      });
+
+      expect(respuesta.statusCode).toBe(201);
+      expect(JSON.parse(respuesta.body!).etapas[0]).toMatchObject({ precio: 30000, precios: [{ tipoId: 'defecto', precio: 30000 }] });
+    });
+
+    it.each([
+      ['tiposBoleta vacío', []],
+      ['nombre repetido', [{ nombre: 'Pareja' }, { nombre: 'pareja' }]],
+      ['personas fuera de rango', [{ nombre: 'Grupo', personas: 11 }]],
+      ['nombre con caracteres de control', [{ nombre: 'Pa\u0007reja' }]],
+    ])('responde 400 si %s', async (_caso, tiposBoleta) => {
+      const respuesta = await invocar('POST', { cuerpo: { ...eventoValido, tiposBoleta } });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 si una etapa referencia un tipo que el evento no tiene', async () => {
+      const respuesta = await invocar('POST', {
+        cuerpo: {
+          ...eventoValido,
+          etapas: [{ ...etapaValida, precio: undefined, precios: [{ tipoId: 'no-existe', precio: 1000 }] }],
+        },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+    });
+  });
+
+
+  describe('duplicar', () => {
+    it('copia los tipos de boleta y los precios por tipo de cada etapa', async () => {
+      const original = {
+        eventoId: 'orig',
+        slug: 'show',
+        nombre: 'Show',
+        descripcion: 'd',
+        fechaHora: '2026-10-01T00:00:00.000Z',
+        sillasTotales: 50,
+        tiposBoleta: [
+          { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+          { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+        ],
+        etapas: [
+          {
+            etapaId: 'et-viejo',
+            nombre: 'Preventa',
+            cierraEn: '2026-09-29T00:00:00.000Z',
+            orden: 1,
+            precio: 30000,
+            precios: [
+              { tipoId: 't-ind', precio: 30000 },
+              { tipoId: 't-par', precio: 40000 },
+            ],
+          },
+        ],
+      };
+      sendMock.mockImplementation(async (comando: { input: Record<string, unknown>; constructor: { name: string } }) => {
+        if (comando.constructor.name === 'GetCommand') {
+          return { Item: original };
+        }
+        return comando.input['IndexName'] === 'slug-index' ? { Items: [] } : {};
+      });
+
+      const respuesta = await invocar('POST', { rawPath: '/api/eventos/orig/duplicar', eventoId: 'orig' });
+
+      expect(respuesta.statusCode).toBe(201);
+      const copia = JSON.parse(respuesta.body!);
+      expect(copia.tiposBoleta).toHaveLength(2);
+      expect(copia.etapas[0].etapaId).not.toBe('et-viejo');
+      expect(copia.etapas[0].precios).toEqual(original.etapas[0].precios);
+    });
+  });
+  describe('PUT', () => {
+    const eventoConTipos = {
+      eventoId: 'e1',
+      tiposBoleta: [
+        { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+        { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+      ],
+      etapas: [
+        {
+          etapaId: 'et1',
+          nombre: 'Preventa',
+          cierraEn: '2026-09-01T00:00:00.000Z',
+          orden: 1,
+          precio: 30000,
+          precios: [
+            { tipoId: 't-ind', precio: 30000 },
+            { tipoId: 't-par', precio: 40000 },
+          ],
+        },
+      ],
+    };
+
+    it('guarda etapas con un precio por tipo validado contra los tipos del evento', async () => {
+      sendMock.mockResolvedValueOnce({ Item: eventoConTipos }).mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: {
+          etapas: [
+            {
+              ...etapaValida,
+              etapaId: 'et1',
+              precio: undefined,
+              precios: [
+                { tipoId: 't-ind', precio: 35000 },
+                { tipoId: 't-par', precio: 50000 },
+              ],
+            },
+          ],
+        },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+      const guardadas = sendMock.mock.calls[1][0].input.ExpressionAttributeValues[':etapas'];
+      expect(guardadas[0]).toMatchObject({ etapaId: 'et1', precio: 35000 });
+      expect(guardadas[0].precios).toHaveLength(2);
+    });
+
+    it('responde 400 si una etapa usa un tipoId que el evento no tiene', async () => {
+      sendMock.mockResolvedValueOnce({ Item: eventoConTipos });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { etapas: [{ ...etapaValida, precio: undefined, precios: [{ tipoId: 'ajeno', precio: 1 }] }] },
+      });
+
+      expect(respuesta.statusCode).toBe(400);
+      expect(sendMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('responde 409 al eliminar un tipo que alguna etapa todavía usa', async () => {
+      sendMock.mockResolvedValueOnce({ Item: eventoConTipos });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: { tiposBoleta: [{ tipoId: 't-ind', nombre: 'Individual', personas: 1 }] },
+      });
+
+      expect(respuesta.statusCode).toBe(409);
+      expect(sendMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('permite eliminar un tipo si el mismo PUT retira sus precios de las etapas', async () => {
+      sendMock.mockResolvedValueOnce({ Item: eventoConTipos }).mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: {
+          tiposBoleta: [{ tipoId: 't-ind', nombre: 'Individual', personas: 1 }],
+          etapas: [
+            { ...etapaValida, etapaId: 'et1', precio: undefined, precios: [{ tipoId: 't-ind', precio: 30000 }] },
+          ],
+        },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+    });
+
+    it('renombrar un tipo conserva su tipoId y el de los demás', async () => {
+      sendMock.mockResolvedValueOnce({ Item: eventoConTipos }).mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: {
+          tiposBoleta: [
+            { tipoId: 't-ind', nombre: 'Individual', personas: 1 },
+            { tipoId: 't-par', nombre: 'Dúo', personas: 2 },
+          ],
+        },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+      const guardados = sendMock.mock.calls[1][0].input.ExpressionAttributeValues[':tiposBoleta'];
+      expect(guardados.map((t: { tipoId: string }) => t.tipoId)).toEqual(['t-ind', 't-par']);
+      expect(guardados[1].nombre).toBe('Dúo');
+    });
+
+    it('en un evento legado el tipoId implícito «defecto» es válido para las etapas', async () => {
+      sendMock
+        .mockResolvedValueOnce({ Item: { eventoId: 'e1', etapas: [{ etapaId: 'et1' }] } })
+        .mockResolvedValueOnce({ Attributes: { eventoId: 'e1' } });
+
+      const respuesta = await invocar('PUT', {
+        eventoId: 'e1',
+        cuerpo: {
+          etapas: [{ ...etapaValida, etapaId: 'et1', precio: undefined, precios: [{ tipoId: 'defecto', precio: 20000 }] }],
+        },
+      });
+
+      expect(respuesta.statusCode).toBe(200);
+    });
+  });
+});

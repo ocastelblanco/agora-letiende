@@ -12,6 +12,8 @@ export interface DatosCliente {
 export interface DatosNuevaCompra {
   slug: string;
   cantidad: number;
+  /** Roadmap #33 — obligatorio si el evento tiene más de un tipo de boleta. */
+  tipoId?: string;
   cliente: DatosCliente;
   autorizacionDatos: boolean;
   // Roadmap #19 (Bold) — se envía explícito cuando el evento ofrece 1 o 2

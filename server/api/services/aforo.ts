@@ -1,6 +1,7 @@
 import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { documentoDynamoDB } from './dynamodb';
 import { consultarPagoBold } from './bold';
+import { sillasDeCompra } from '../lib/tipos-boleteria';
 
 /**
  * Las tres primitivas de escritura condicional del ciclo de vida del aforo
@@ -150,7 +151,8 @@ async function expirarYLiberar(
   }
 
   try {
-    await liberarSillas(eventoId, cantidadCompra);
+    // Roadmap #33 — se devuelven las sillas de la compra, no las boletas.
+    await liberarSillas(eventoId, sillasDeCompra({ cantidad: cantidadCompra, sillas: compra['sillas'] }));
   } catch {
     // Best-effort — si esto falla, el TTL real de esa compra la recupera
     // más adelante (su estado ya no retiene aforo según liberar-reservas.ts,

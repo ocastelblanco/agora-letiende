@@ -21,6 +21,7 @@ import {
   etapaVigente,
 } from './compras';
 import { respuestaJson } from '../lib/http';
+import { normalizarTipos, precioDelTipo, resolverTipoDeCompra } from '../lib/tipos-boleteria';
 import { ejecutarIdempotente } from '../services/idempotencia';
 import type { PermisosUsuario } from '../lib/resolver-permisos';
 
@@ -159,25 +160,43 @@ async function registrarVentaEfectivo(
   // caso). Con etapas, el comportamiento no cambia: sigue exigiendo una
   // etapa vigente y sigue rechazando con 501 una etapa a $0 (roadmap #12,
   // caso distinto de "sin etapas en absoluto").
+  //
+  // Roadmap #33 (ADR-020) — del payload solo se acepta `tipoId`; precio,
+  // `personas` y sillas salen del evento almacenado (A08). Sin `tipoId`, un
+  // evento con un único tipo (todo evento anterior a #33) sigue funcionando.
+  const { tiposBoleta, etapas } = normalizarTipos(eventoEncontrado);
+  const resolucionTipo = resolverTipoDeCompra(tiposBoleta, datos['tipoId']);
+  if ('error' in resolucionTipo) {
+    return respuestaJson(400, {
+      mensaje: resolucionTipo.error === 'requerido' ? 'tipoId es obligatorio' : 'tipoId inválido',
+    });
+  }
+  const tipo = resolucionTipo.tipo;
+  const sillas = datos['cantidad'] * tipo.personas;
+
   let etapaId: string | undefined;
   let montoTotal = 0;
 
-  if (eventoEncontrado.etapas.length > 0) {
-    const etapa = etapaVigente(eventoEncontrado.etapas, ahora);
+  if (etapas.length > 0) {
+    const etapa = etapaVigente(etapas, ahora);
     if (!etapa) {
       return respuestaJson(409, { mensaje: 'No hay una etapa de boletería vigente para este evento' });
     }
-    if (etapa.precio === 0) {
+    const precioUnitario = precioDelTipo(etapa, tipo.tipoId);
+    if (precioUnitario === null) {
+      return respuestaJson(409, { mensaje: 'Este tipo de boleta no está disponible en la etapa vigente' });
+    }
+    if (precioUnitario === 0) {
       return respuestaJson(501, {
         mensaje: 'Las boletas gratuitas todavía no están soportadas',
       });
     }
     etapaId = etapa.etapaId;
-    montoTotal = etapa.precio * datos['cantidad'];
+    montoTotal = precioUnitario * datos['cantidad'];
   }
 
   try {
-    await reservarSillas(eventoEncontrado.eventoId, datos['cantidad']);
+    await reservarSillas(eventoEncontrado.eventoId, sillas);
   } catch (error) {
     if (error instanceof AforoInsuficienteError) {
       return respuestaJson(409, { mensaje: error.message, sillasDisponibles: error.sillasDisponibles });
@@ -202,6 +221,10 @@ async function registrarVentaEfectivo(
     eventoId: eventoEncontrado.eventoId,
     etapaId,
     cantidad: datos['cantidad'],
+    tipoId: tipo.tipoId,
+    tipoNombre: tipo.nombre,
+    personas: tipo.personas,
+    sillas,
     cliente: {
       nombre: clienteDatos['nombre'],
       telefono: clienteDatos['telefono'],
@@ -239,7 +262,7 @@ async function registrarVentaEfectivo(
   }
 
   try {
-    await confirmarSillas(eventoEncontrado.eventoId, datos['cantidad']);
+    await confirmarSillas(eventoEncontrado.eventoId, sillas);
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
@@ -256,6 +279,9 @@ async function registrarVentaEfectivo(
       compraId,
       eventoId: eventoEncontrado.eventoId,
       etapaId,
+      tipoId: tipo.tipoId,
+      tipoNombre: tipo.nombre,
+      personas: tipo.personas,
       montoTotal,
       cantidad: datos['cantidad'],
     });

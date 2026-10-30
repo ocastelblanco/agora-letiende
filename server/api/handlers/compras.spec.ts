@@ -412,6 +412,9 @@ describe('POST /api/compras — adquisición sin etapas (boletería opcional)', 
     expect(emitirBoletasMock).toHaveBeenCalledWith({
       compraId: expect.any(String),
       eventoId: 'evt-1',
+      tipoId: 'defecto',
+      tipoNombre: 'Por defecto',
+      personas: 1,
       montoTotal: 0,
       cantidad: 2,
     });
@@ -851,5 +854,163 @@ describe('etapaVigente', () => {
     ];
 
     expect(etapaVigente(etapas, AHORA)).toBeNull();
+  });
+});
+
+// Roadmap #33 (ADR-020) — tipos de boletería: Individual (1 persona) y Pareja (2 personas).
+describe('POST /api/compras — tipos de boletería', () => {
+  const eventoConTipos = {
+    ...eventoPublicado,
+    slug: 'concierto-tipos',
+    tiposBoleta: [
+      { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+      { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+    ],
+    etapas: [
+      {
+        etapaId: 'et-1',
+        nombre: 'Preventa',
+        precio: 30000,
+        precios: [
+          { tipoId: 't-ind', precio: 30000 },
+          { tipoId: 't-par', precio: 40000 },
+        ],
+        cierraEn: '2026-09-01T00:00:00.000Z',
+        orden: 1,
+      },
+    ],
+  };
+
+  it('una pareja reserva cantidad × 2 sillas, cobra el precio del tipo y guarda la instantánea', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConTipos] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-tipos', cantidad: 3, tipoId: 't-par', cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    expect(JSON.parse(respuesta.body ?? '{}').montoTotal).toBe(120000);
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 6);
+    expect(sendMock.mock.calls[1]?.[0].input.Item).toMatchObject({
+      cantidad: 3,
+      tipoId: 't-par',
+      tipoNombre: 'Pareja',
+      personas: 2,
+      sillas: 6,
+      montoTotal: 120000,
+    });
+  });
+
+  it('maxBoletasPorCompra cuenta boletas, no personas', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConTipos] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-tipos', cantidad: 4, tipoId: 't-par', cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 8);
+  });
+
+  it('con varios tipos, tipoId es obligatorio', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConTipos] });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-tipos', cantidad: 1, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it.each([['inventado'], [42], [{ $ne: 'x' }]])('rechaza un tipoId hostil (%j) sin reservar sillas', async (tipoId) => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConTipos] });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-tipos', cantidad: 1, tipoId, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(400);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('ignora un precio, total o personas enviados por el cliente', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConTipos] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    await invocar('POST', {
+      cuerpo: {
+        slug: 'concierto-tipos',
+        cantidad: 1,
+        tipoId: 't-ind',
+        precio: 1,
+        montoTotal: 1,
+        personas: 99,
+        sillas: 99,
+        cliente: clienteValido,
+        autorizacionDatos: true,
+      },
+    });
+
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 1);
+    expect(sendMock.mock.calls[1]?.[0].input.Item).toMatchObject({ montoTotal: 30000, personas: 1, sillas: 1 });
+  });
+
+  it('responde 409 si la etapa vigente no ofrece el tipo', async () => {
+    const soloIndividual = {
+      ...eventoConTipos,
+      etapas: [{ ...eventoConTipos.etapas[0], precios: [{ tipoId: 't-ind', precio: 30000 }] }],
+    };
+    sendMock.mockResolvedValueOnce({ Items: [soloIndividual] });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-tipos', cantidad: 1, tipoId: 't-par', cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('el precio 0 se evalúa por tipo: un tipo gratuito responde 501 aunque otro cueste', async () => {
+    const conGratis = {
+      ...eventoConTipos,
+      etapas: [
+        {
+          ...eventoConTipos.etapas[0],
+          precios: [
+            { tipoId: 't-ind', precio: 30000 },
+            { tipoId: 't-par', precio: 0 },
+          ],
+        },
+      ],
+    };
+    sendMock.mockResolvedValueOnce({ Items: [conGratis] });
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-tipos', cantidad: 1, tipoId: 't-par', cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(501);
+  });
+
+  it('un evento legado (sin tipos) sigue funcionando sin tipoId y guarda el tipo defecto', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoPublicado] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', {
+      cuerpo: { slug: 'concierto-jazz', cantidad: 2, cliente: clienteValido, autorizacionDatos: true },
+    });
+
+    expect(respuesta.statusCode).toBe(201);
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(sendMock.mock.calls[1]?.[0].input.Item).toMatchObject({
+      tipoId: 'defecto',
+      tipoNombre: 'Por defecto',
+      personas: 1,
+      sillas: 2,
+      montoTotal: 90000,
+    });
   });
 });

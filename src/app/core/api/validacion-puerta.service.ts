@@ -9,6 +9,9 @@ export interface ResultadoValidacion {
   veredicto: VeredictoValidacion;
   boletaId?: string;
   numeroEnCompra?: number;
+  /** Roadmap #33 — tipo de boleta y personas que admite el QR (en un veredicto VALIDA). */
+  tipoNombre?: string;
+  personas?: number;
   ingresoEn?: string;
 }
 
