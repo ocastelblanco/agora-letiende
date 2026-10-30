@@ -9,6 +9,7 @@ import { verificarFirmaBoleta } from '../lib/firma-boletas';
 import { generarQrPng } from '../services/qr';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
+import { TIPO_DEFECTO_NOMBRE } from '../lib/tipos-boleteria';
 
 // Placeholder honesto: mismo texto ya usado en el JSON-LD de
 // DetalleEventoComponent, no una dirección real verificada (TODO.md
@@ -27,6 +28,9 @@ interface BoletaAlmacenada {
   numeroEnCompra: number;
   // v2 (roadmap #24) — ausente en la boleta de un evento sin etapas.
   etapaId?: string;
+  // Roadmap #33 — ausentes en una boleta anterior a los tipos de boletería.
+  tipoNombre?: string;
+  personas?: number;
   valorUnitario: number;
   estado: string;
   ingresoEn?: string;
@@ -127,6 +131,8 @@ async function obtenerBoletaDigital(codigo: string | undefined): Promise<APIGate
     direccion: DIRECCION_LE_TIENDE,
     logotipoUrl: typeof evento['logotipoKey'] === 'string' ? urlPublicaActivo(evento['logotipoKey']) : undefined,
     etapaNombre: etapa?.['nombre'],
+    tipoNombre: boleta.tipoNombre ?? TIPO_DEFECTO_NOMBRE,
+    personas: boleta.personas ?? 1,
     nombreCliente: compra?.['cliente']?.['nombre'],
     qrPng,
   });
@@ -240,6 +246,10 @@ async function validarBoletaEnPuerta(
       veredicto: 'VALIDA',
       boletaId,
       numeroEnCompra: boletaActualizada?.numeroEnCompra,
+      // Roadmap #33 — un solo QR admite a todas las `personas` del tipo; el
+      // portero debe dejar pasar a todas, sin ingresos parciales (ADR-020).
+      tipoNombre: boletaActualizada?.tipoNombre ?? TIPO_DEFECTO_NOMBRE,
+      personas: boletaActualizada?.personas ?? 1,
     });
   } catch (error) {
     if (!esErrorCondicionFallida(error)) {

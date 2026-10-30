@@ -13,19 +13,12 @@ import { clienteS3 } from '../services/s3';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
 import { generarReportePdf, type FilaReporte } from '../lib/reporte-pdf';
+import { TIPO_DEFECTO_ID, TIPO_DEFECTO_NOMBRE, normalizarTipos } from '../lib/tipos-boleteria';
 
 // v2 (roadmap #24) — etiqueta de una compra/boleta de un evento sin etapas
 // de boletería, distinta de 'Etapa eliminada' (que sí implica una etapa que
 // existió y fue borrada).
 const NOMBRE_SIN_ETAPA = 'Sin etapa (boletería sin cobro)';
-
-interface EtapaEvento {
-  etapaId: string;
-  nombre: string;
-  precio: number;
-  cierraEn: string;
-  orden: number;
-}
 
 interface ClienteCompra {
   nombre: string;
@@ -38,6 +31,9 @@ interface CompraAprobada {
   eventoId: string;
   // v2 (roadmap #24) — ausente en una compra de un evento sin etapas.
   etapaId?: string;
+  // Roadmap #33 — ausentes en una compra anterior a los tipos de boletería (= 'defecto').
+  tipoId?: string;
+  tipoNombre?: string;
   cantidad: number;
   montoTotal: number;
   cliente?: ClienteCompra;
@@ -50,6 +46,10 @@ interface BoletaDelEvento {
   boletaId: string;
   compraId: string;
   etapaId?: string;
+  tipoId?: string;
+  tipoNombre?: string;
+  // Personas que admite el QR (roadmap #33); ausente = 1.
+  personas?: number;
   valorUnitario: number;
   estado: string;
   ingresoEn?: string;
@@ -200,7 +200,10 @@ async function obtenerPanelEvento(
   }
 
   const { boletas, comprasAprobadas } = await obtenerDatosCrudosDelEvento(eventoId);
-  const etapas = (Array.isArray(eventoItem['etapas']) ? eventoItem['etapas'] : []) as EtapaEvento[];
+  const { tiposBoleta, etapas } = normalizarTipos(eventoItem);
+  const nombresTipoPorId = new Map(tiposBoleta.map((tipo) => [tipo.tipoId, tipo.nombre]));
+  const nombreDelTipo = (tipoId: string, instantanea?: string): string =>
+    instantanea ?? nombresTipoPorId.get(tipoId) ?? TIPO_DEFECTO_NOMBRE;
 
   // Se agrupa por el etapaId propio de cada compra, no por `evento.etapas`:
   // `normalizarEtapas()` (handlers/eventos.ts) ya preserva el etapaId real
@@ -220,18 +223,30 @@ async function obtenerPanelEvento(
   const idsHuerfanos = Array.from(idsEtapaEnCompras).filter(
     (id) => id === undefined || !nombresPorEtapaId.has(id),
   );
-  const porEtapa = [...idsConocidosConVentas, ...idsHuerfanos].map((etapaId) => {
+  // Roadmap #33 — dentro de cada etapa, una fila por tipo de boleta: primero
+  // los tipos conocidos en el orden del evento, luego los desconocidos en el
+  // orden en que aparecen en las compras. Una compra anterior a los tipos
+  // cuenta como 'defecto'.
+  const ordenTipos = new Map(tiposBoleta.map((tipo, indice) => [tipo.tipoId, indice]));
+  const porEtapa = [...idsConocidosConVentas, ...idsHuerfanos].flatMap((etapaId) => {
     const comprasDeEtapa = comprasAprobadas.filter((compra) => compra.etapaId === etapaId);
-    return {
-      etapaId,
-      // v2 (roadmap #24) — `etapaId === undefined` es una compra genuina de
-      // un evento sin etapas (boletería sin cobro), no una etapa borrada:
-      // se distingue de 'Etapa eliminada' (etapaId presente pero huérfano)
-      // para no confundir al productor sobre qué pasó con esas ventas.
-      nombre: etapaId === undefined ? NOMBRE_SIN_ETAPA : (nombresPorEtapaId.get(etapaId) ?? 'Etapa eliminada'),
-      vendidas: comprasDeEtapa.reduce((total, compra) => total + compra.cantidad, 0),
-      recaudado: comprasDeEtapa.reduce((total, compra) => total + compra.montoTotal, 0),
-    };
+    const idsTipo = Array.from(new Set(comprasDeEtapa.map((compra) => compra.tipoId ?? TIPO_DEFECTO_ID)));
+    idsTipo.sort((a, b) => (ordenTipos.get(a) ?? Infinity) - (ordenTipos.get(b) ?? Infinity));
+    return idsTipo.map((tipoId) => {
+      const comprasDelTipo = comprasDeEtapa.filter((compra) => (compra.tipoId ?? TIPO_DEFECTO_ID) === tipoId);
+      return {
+        etapaId,
+        // v2 (roadmap #24) — `etapaId === undefined` es una compra genuina de
+        // un evento sin etapas (boletería sin cobro), no una etapa borrada:
+        // se distingue de 'Etapa eliminada' (etapaId presente pero huérfano)
+        // para no confundir al productor sobre qué pasó con esas ventas.
+        nombre: etapaId === undefined ? NOMBRE_SIN_ETAPA : (nombresPorEtapaId.get(etapaId) ?? 'Etapa eliminada'),
+        tipoId,
+        tipoNombre: nombreDelTipo(tipoId, comprasDelTipo.find((compra) => compra.tipoNombre)?.tipoNombre),
+        vendidas: comprasDelTipo.reduce((total, compra) => total + compra.cantidad, 0),
+        recaudado: comprasDelTipo.reduce((total, compra) => total + compra.montoTotal, 0),
+      };
+    });
   });
 
   // Totales calculados directamente sobre TODAS las compras aprobadas, sin
@@ -240,8 +255,15 @@ async function obtenerPanelEvento(
   const totalVendidas = comprasAprobadas.reduce((total, compra) => total + compra.cantidad, 0);
   const totalRecaudado = comprasAprobadas.reduce((total, compra) => total + compra.montoTotal, 0);
 
-  const ingresados = boletas.filter((boleta) => boleta.estado === 'usada').length;
+  // Roadmap #33 (ADR-020) — los asistentes se cuentan en personas, no en
+  // boletas: un QR de «Pareja» admite a 2. `totalBoletas` sigue siendo el
+  // número de boletas emitidas.
+  const personasDe = (boleta: BoletaDelEvento): number => boleta.personas ?? 1;
+  const ingresados = boletas
+    .filter((boleta) => boleta.estado === 'usada')
+    .reduce((total, boleta) => total + personasDe(boleta), 0);
   const totalBoletas = boletas.length;
+  const totalPersonas = boletas.reduce((total, boleta) => total + personasDe(boleta), 0);
 
   const sillasTotales = eventoItem['sillasTotales'] as number;
   const sillasDisponibles = eventoItem['sillasDisponibles'] as number;
@@ -258,6 +280,8 @@ async function obtenerPanelEvento(
     cantidad: compra.cantidad,
     montoTotal: compra.montoTotal,
     etapaId: compra.etapaId,
+    tipoId: compra.tipoId ?? TIPO_DEFECTO_ID,
+    tipoNombre: nombreDelTipo(compra.tipoId ?? TIPO_DEFECTO_ID, compra.tipoNombre),
     medioPago: compra.medioPago,
     creadaEn: compra.creadaEn,
   }));
@@ -273,7 +297,8 @@ async function obtenerPanelEvento(
     totalRecaudado,
     ingresados,
     totalBoletas,
-    faltanPorIngresar: totalBoletas - ingresados,
+    totalPersonas,
+    faltanPorIngresar: totalPersonas - ingresados,
     clientes,
   });
 }
@@ -331,8 +356,9 @@ async function generarReporteEvento(
   }
 
   const { boletas, comprasAprobadas } = await obtenerDatosCrudosDelEvento(eventoId);
-  const etapas = (Array.isArray(eventoItem['etapas']) ? eventoItem['etapas'] : []) as EtapaEvento[];
+  const { tiposBoleta, etapas } = normalizarTipos(eventoItem);
   const nombresPorEtapaId = new Map(etapas.map((etapa) => [etapa.etapaId, etapa.nombre]));
+  const nombresTipoPorId = new Map(tiposBoleta.map((tipo) => [tipo.tipoId, tipo.nombre]));
   const comprasPorId = new Map(comprasAprobadas.map((compra) => [compra.compraId, compra]));
 
   // Una fila por boleta, no por compra (PRD.md §5.6) — unidas por
@@ -360,6 +386,8 @@ async function generarReporteEvento(
         boleta.etapaId === undefined
           ? NOMBRE_SIN_ETAPA
           : (nombresPorEtapaId.get(boleta.etapaId) ?? 'Etapa eliminada'),
+      // Roadmap #33 — la instantánea de la boleta manda; una boleta anterior a los tipos es 'Por defecto'.
+      tipo: boleta.tipoNombre ?? nombresTipoPorId.get(boleta.tipoId ?? TIPO_DEFECTO_ID) ?? TIPO_DEFECTO_NOMBRE,
       ingreso: boleta.ingresoEn ? fechaLegibleBogota(boleta.ingresoEn) : '',
     };
   });
@@ -372,12 +400,14 @@ async function generarReporteEvento(
     tipoContenido = 'application/pdf';
     // Resumen por etapa a partir de las propias boletas (misma fuente que las
     // filas), en el orden en que cada etapa aparece por primera vez.
+    // Roadmap #33 — por etapa y tipo; el tipo solo se nombra si no es el implícito «Por defecto».
     const porEtapa = new Map<string, { nombre: string; vendidas: number; recaudado: number }>();
     for (const fila of filas) {
-      const acumulado = porEtapa.get(fila.etapa) ?? { nombre: fila.etapa, vendidas: 0, recaudado: 0 };
+      const nombre = fila.tipo === TIPO_DEFECTO_NOMBRE ? fila.etapa : `${fila.etapa} · ${fila.tipo}`;
+      const acumulado = porEtapa.get(nombre) ?? { nombre, vendidas: 0, recaudado: 0 };
       acumulado.vendidas += 1;
       acumulado.recaudado += fila.valor;
-      porEtapa.set(fila.etapa, acumulado);
+      porEtapa.set(nombre, acumulado);
     }
     contenido = await generarReportePdf({
       nombreEvento: String(eventoItem['nombre'] ?? ''),
@@ -407,6 +437,7 @@ async function generarReporteEvento(
         'Medio de pago': fila.medioPago,
         Valor: fila.valor,
         'Etapa de boletería': fila.etapa,
+        'Tipo de boleta': fila.tipo,
         'Fecha y hora de ingreso': fila.ingreso,
       })),
     );

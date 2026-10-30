@@ -22,6 +22,7 @@ export interface FilaReporte {
   medioPago: string;
   valor: number;
   etapa: string;
+  tipo: string;
   ingreso: string;
 }
 
@@ -52,13 +53,14 @@ const TAMANO_TABLA = 7;
 // Ancho de cada columna en puntos; suman 720 = 792 (carta apaisada) - 2 × 36.
 const COLUMNAS: ReadonlyArray<{ titulo: string; ancho: number; alinear?: 'right' }> = [
   { titulo: 'ID', ancho: 46 },
-  { titulo: 'Cliente', ancho: 112 },
-  { titulo: 'Teléfono', ancho: 62 },
-  { titulo: 'Correo', ancho: 130 },
-  { titulo: 'Compra', ancho: 78 },
-  { titulo: 'Medio de pago', ancho: 62 },
-  { titulo: 'Valor', ancho: 52, alinear: 'right' },
-  { titulo: 'Etapa', ancho: 100 },
+  { titulo: 'Cliente', ancho: 96 },
+  { titulo: 'Teléfono', ancho: 60 },
+  { titulo: 'Correo', ancho: 112 },
+  { titulo: 'Compra', ancho: 70 },
+  { titulo: 'Medio de pago', ancho: 56 },
+  { titulo: 'Valor', ancho: 50, alinear: 'right' },
+  { titulo: 'Etapa', ancho: 92 },
+  { titulo: 'Tipo de boleta', ancho: 60 },
   { titulo: 'Ingreso', ancho: 78 },
 ];
 
@@ -170,6 +172,7 @@ export function generarReportePdf(datos: DatosReportePdf): Promise<Buffer> {
         fila.medioPago,
         pesos(fila.valor),
         fila.etapa,
+        fila.tipo,
         fila.ingreso || '—',
       ];
       let x = MARGEN;

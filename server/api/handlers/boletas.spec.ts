@@ -357,3 +357,53 @@ describe('POST /api/boletas/:codigo/validar', () => {
     });
   });
 });
+
+// Roadmap #33 (ADR-020) — un solo QR admite a todas las personas del tipo.
+describe('tipos de boletería en boletas', () => {
+  const boletaPareja = { ...boletaValida, tipoId: 't-par', tipoNombre: 'Pareja', personas: 2 };
+
+  it('la boleta digital muestra el tipo y cuántas personas admite', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock
+      .mockResolvedValueOnce({ Item: boletaPareja })
+      .mockResolvedValueOnce({ Item: eventoConEtapa })
+      .mockResolvedValueOnce({ Item: compraConCliente });
+
+    const cuerpo = JSON.parse((await invocar('GET', { codigo: 'bol-1.firma-buena' })).body ?? '{}');
+
+    expect(cuerpo.tipoNombre).toBe('Pareja');
+    expect(cuerpo.personas).toBe(2);
+  });
+
+  it('una boleta anterior a los tipos se muestra como «Por defecto», 1 persona', async () => {
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock
+      .mockResolvedValueOnce({ Item: boletaValida })
+      .mockResolvedValueOnce({ Item: eventoConEtapa })
+      .mockResolvedValueOnce({ Item: compraConCliente });
+
+    const cuerpo = JSON.parse((await invocar('GET', { codigo: 'bol-1.firma-buena' })).body ?? '{}');
+
+    expect(cuerpo.tipoNombre).toBe('Por defecto');
+    expect(cuerpo.personas).toBe(1);
+  });
+
+  it('VALIDA de una pareja es una única transición y avisa que admite 2 personas', async () => {
+    exigirRolMock.mockResolvedValue({ autorizado: true, permisos: permisosPortero });
+    verificarFirmaBoletaMock.mockReturnValueOnce(true);
+    sendMock.mockResolvedValueOnce({ Item: eventoConEtapa });
+    sendMock.mockResolvedValueOnce({ Attributes: { ...boletaPareja, estado: 'usada' } });
+
+    const respuesta = await invocar('POST', {
+      rawPath: '/api/boletas/bol-1.firma-buena/validar',
+      codigo: 'bol-1.firma-buena',
+      cuerpo: { eventoId: 'evt-1' },
+    });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo).toMatchObject({ veredicto: 'VALIDA', tipoNombre: 'Pareja', personas: 2 });
+    const escritura = sendMock.mock.calls[1][0];
+    expect(escritura.input.ConditionExpression).toContain("estado = :valida");
+    expect(sendMock).toHaveBeenCalledTimes(2);
+  });
+});
