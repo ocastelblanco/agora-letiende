@@ -310,3 +310,5 @@ Backend,29/10/2026 21:00,29/10/2026 21:19,0:19:00,AI,Sonnet 5.5,"Implementa el b
 Backend,29/10/2026 21:24,29/10/2026 21:35,0:11:00,AI,Sonnet 5.5,"Verifica en staging real los tipos de boletería: compra por tipo, precio hostil, aforo en sillas y devolución idempotente",Claude Code,cli,medium
 Frontend,29/10/2026 21:38,29/10/2026 21:46,0:08:00,AI,Sonnet 5.5,"Implementa el formulario de administración de tipos de boletería: panel de tipos y precios por tipo en cada etapa",Claude Code,cli,high
 Frontend,29/10/2026 22:05,29/10/2026 22:18,0:13:00,AI,Sonnet 5.5,"Implementa el frontend público de tipos de boletería: tabla por tipo, compra, taquilla, puerta, boleta, panel y E2E; cierra la documentación",Claude Code,cli,high
+Frontend,30/10/2026 12:35,30/10/2026 12:44,0:09:00,AI,Sonnet 5.5,"Ajusta en móvil las filas de tipos y precios por etapa: flex-wrap, mínimo de 10em, grupo campo+botón y divisores",Claude Code,cli,low
+Backend,30/10/2026 12:48,30/10/2026 12:55,0:07:00,AI,Sonnet 5.5,"Resuelve el conflicto del tracking con main y actualiza memoria, JIT, PRD y tech-specs tras fusionar los PR 116 y 117",Claude Code,cli,low

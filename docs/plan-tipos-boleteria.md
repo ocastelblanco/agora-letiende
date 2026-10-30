@@ -1,6 +1,6 @@
 # Plan de Tipos de boletería
 
-**Fecha:** 29/10/2026 · **Estado:** implementado (29/10/2026) · **Roadmap:** #33 (`docs/tech-specs.md` §11) · **Decisión:** ADR-020 (`docs/MEMORY.md` §3)
+**Fecha:** 29/10/2026 · **Estado:** implementado y validado por OCM en staging (29-30/10/2026; PR #114, #115, #116 y #117) · **Roadmap:** #33 (`docs/tech-specs.md` §11) · **Decisión:** ADR-020 (`docs/MEMORY.md` §3)
 
 Un evento puede vender más de un tipo de boleta al mismo tiempo (por ejemplo «Individual» y «Pareja»), combinados con las etapas de boletería: 2 tipos × 2 etapas = 4 precios. A futuro el mismo mecanismo sirve para ubicación o para paquetes (libro + entrada y entrada sola). Todas las decisiones de este documento se resolvieron con OCM en la sesión del 29/10/2026.
 

@@ -302,8 +302,8 @@
 
                   <div formArrayName="tiposBoleta" class="flex flex-col gap-3">
                     @for (tipo of tiposBoleta.controls; track tipo; let indiceTipo = $index) {
-                      <div [formGroupName]="indiceTipo" class="flex items-end gap-2">
-                        <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs text-primary/60">
+                      <div [formGroupName]="indiceTipo" class="flex flex-wrap items-end gap-x-2 gap-y-2 border-b border-primary/10 pb-3 last:border-b-0 last:pb-0">
+                        <label class="flex min-w-[10em] flex-[100_1_10em] flex-col gap-1 text-xs text-primary/60">
                           Tipo de boletería
                           <input
                             type="text"
@@ -311,16 +311,17 @@
                             class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
                           />
                         </label>
-                        <label class="flex w-24 flex-col gap-1 text-xs text-primary/60">
-                          Personas
-                          <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            formControlName="personas"
-                            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                          />
-                        </label>
+                        <div class="flex flex-[1_1_auto] items-end gap-2">
+                          <label class="flex min-w-20 flex-[1_1_auto] flex-col gap-1 text-xs text-primary/60">
+                            Personas
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              formControlName="personas"
+                              class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                            />
+                          </label>
                         @if (!esProductor()) {
                           <button
                             mat-icon-button
@@ -337,6 +338,7 @@
                             <mat-icon fontSet="material-symbols-outlined">delete</mat-icon>
                           </button>
                         }
+                        </div>
                       </div>
                     }
                   </div>
@@ -397,14 +399,14 @@
                         />
                       </label>
 
-                      <div formArrayName="precios" class="flex flex-col gap-2">
+                      <div formArrayName="precios" class="flex flex-col gap-3">
                         @for (
                           linea of grupo.controls.precios.controls;
                           track linea;
                           let indiceLinea = $index
                         ) {
-                          <div [formGroupName]="indiceLinea" class="flex items-start gap-2">
-                            <mat-form-field class="min-w-0 flex-1" subscriptSizing="dynamic">
+                          <div [formGroupName]="indiceLinea" class="flex flex-wrap items-start gap-x-2 gap-y-2 border-b border-primary/10 pb-3 last:border-b-0 last:pb-0">
+                            <mat-form-field class="min-w-[10em] flex-[100_1_10em]" subscriptSizing="dynamic">
                               <mat-label>Tipo de boletería</mat-label>
                               <mat-select formControlName="tipoId">
                                 @for (tipoOpcion of tiposBoleta.controls; track tipoOpcion) {
@@ -423,7 +425,8 @@
                                 }
                               </mat-select>
                             </mat-form-field>
-                            <label class="flex w-36 flex-col gap-1 text-xs text-primary/60">
+                            <div class="flex flex-[1_1_auto] items-start gap-2">
+                            <label class="flex min-w-24 flex-[1_1_auto] flex-col gap-1 text-xs text-primary/60">
                               Precio
                               <input
                                 type="number"
@@ -451,6 +454,7 @@
                                 <mat-icon fontSet="material-symbols-outlined">delete</mat-icon>
                               </button>
                             }
+                            </div>
                           </div>
                         }
                       </div>

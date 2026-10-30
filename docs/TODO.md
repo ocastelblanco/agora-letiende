@@ -147,7 +147,7 @@ tarea de este repositorio.
 
 ## Tarea 1 — Sin tarea iniciable (decisión de OCM)
 
-**Tipos de boletería (roadmap #33, ADR-020) quedó completo el 29/10/2026** en 3 PR (#114 backend, #115 administración, y el de frontend público; resumen en `docs/MEMORY.md` §2). No queda ningún ítem de v2 sin prerrequisito externo: el único restante es WhatsApp (Tarea 2, bloqueada por la Verificación de Negocio de Meta). Para tener un segundo ítem activo hay que promover uno de v3 (`PRD.md` §6: validación en puerta sin conexión, devoluciones y transferencia de boletas, códigos de descuento y cortesías, historial de compras por correo) — **decisión de OCM, no del agente**.
+**Tipos de boletería (roadmap #33, ADR-020) quedó completo el 29/10/2026** en 3 PR (#114 backend, #115 administración y #116 frontend público) más el ajuste de UI móvil (#117); resumen en `docs/MEMORY.md` §2). No queda ningún ítem de v2 sin prerrequisito externo: el único restante es WhatsApp (Tarea 2, bloqueada por la Verificación de Negocio de Meta). Para tener un segundo ítem activo hay que promover uno de v3 (`PRD.md` §6: validación en puerta sin conexión, devoluciones y transferencia de boletas, códigos de descuento y cortesías, historial de compras por correo) — **decisión de OCM, no del agente**.
 
 ---
 
