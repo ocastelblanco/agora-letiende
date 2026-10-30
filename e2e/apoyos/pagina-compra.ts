@@ -27,9 +27,9 @@ export class PaginaCompra {
     this.botonIntentarDeNuevo = page.getByRole('button', { name: 'Intentar de nuevo' });
   }
 
-  async abrir(slug = SLUG_EVENTO): Promise<void> {
+  async abrir(slug = SLUG_EVENTO, tipoId?: string): Promise<void> {
     // Ruta relativa (sin "/" inicial): la suite contra staging cuelga la app de "/cartelera/" (baseHref).
-    await this.page.goto(`evento/${slug}/comprar`);
+    await this.page.goto(`evento/${slug}/comprar${tipoId ? `?tipo=${tipoId}` : ''}`);
   }
 
   async llenarDatos(cantidad = 2, cliente = CLIENTE_PRUEBA): Promise<void> {
