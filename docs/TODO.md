@@ -145,17 +145,9 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Tipos de boletería (roadmap #33) — ▶️ activa (aprobada por OCM el 29/10/2026)
+## Tarea 1 — Sin tarea iniciable (decisión de OCM)
 
-**Plan completo, decisiones cerradas y definición de terminado: `docs/plan-tipos-boleteria.md`. Decisión de diseño: ADR-020 (`docs/MEMORY.md` §3).** Un evento puede vender varios tipos de boleta al tiempo (Individual, Pareja…), combinados con las etapas (2 tipos × 2 etapas = 4 precios). Pareja = 2 sillas y **1 solo QR**, una única transición `valida → usada`. Un solo tipo por compra; `maxBoletasPorCompra` cuenta boletas; los eventos existentes se normalizan **al leer** (tipo `defecto`), sin migración.
-
-**Un PR por parte, cada uno en su rama creada desde `main`; arrancar por la primera sin fusionar:**
-
-1. `feature/tipos-boleteria-backend` — modelo, normalización (`normalizarTipos`), validación en `eventos.ts`, `tipoId` en compra y venta en efectivo, aforo con `compra.sillas`, boletas, reportes. Verificar en staging real contra DynamoDB (gotcha de `ConditionExpression`, `CLAUDE.md` §7).
-2. `feature/tipos-boleteria-admin` — panel «Tipos de boletería» y líneas de precio por etapa en `editar-evento.component`.
-3. `feature/tipos-boleteria-publico` — tabla de etapas y botones por tipo en `/evento/:slug`, compra, taquilla, puerta, boleta digital, panel y reportes; E2E de Playwright.
-
-**Por qué es la Tarea 1:** pedido directo de OCM (29/10/2026), por delante del orden normal del JIT. No hay prerrequisito externo.
+**Tipos de boletería (roadmap #33, ADR-020) quedó completo el 29/10/2026** en 3 PR (#114 backend, #115 administración, y el de frontend público; resumen en `docs/MEMORY.md` §2). No queda ningún ítem de v2 sin prerrequisito externo: el único restante es WhatsApp (Tarea 2, bloqueada por la Verificación de Negocio de Meta). Para tener un segundo ítem activo hay que promover uno de v3 (`PRD.md` §6: validación en puerta sin conexión, devoluciones y transferencia de boletas, códigos de descuento y cortesías, historial de compras por correo) — **decisión de OCM, no del agente**.
 
 ---
 
