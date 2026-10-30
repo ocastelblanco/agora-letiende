@@ -308,4 +308,4 @@ Specs definition,29/10/2026 14:38,29/10/2026 15:57,1:19:00,human,OCM,"Define el 
 Specs definition,29/10/2026 15:57,29/10/2026 20:41,4:44:00,AI,Sonnet 5.5,"Planea Tipos de boletería: explora el modelo, resuelve decisiones con OCM, escribe plan, ADR-020 y actualiza PRD, tech-specs, MEMORY y TODO",Claude Code,cli,medium
 Backend,29/10/2026 21:00,29/10/2026 21:19,0:19:00,AI,Sonnet 5.5,"Implementa el backend de tipos de boletería: normalización, validación, compra por tipo, aforo en sillas, boletas y reportes",Claude Code,cli,high
 Backend,29/10/2026 21:24,29/10/2026 21:35,0:11:00,AI,Sonnet 5.5,"Verifica en staging real los tipos de boletería: compra por tipo, precio hostil, aforo en sillas y devolución idempotente",Claude Code,cli,medium
-Frontend,29/10/2026 21:40,29/10/2026 21:49,0:09:00,AI,Sonnet 5.5,"Implementa el formulario de administración de tipos de boletería: panel de tipos y precios por tipo en cada etapa",Claude Code,cli,high
+Frontend,29/10/2026 21:38,29/10/2026 21:46,0:08:00,AI,Sonnet 5.5,"Implementa el formulario de administración de tipos de boletería: panel de tipos y precios por tipo en cada etapa",Claude Code,cli,high
