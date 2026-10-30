@@ -193,3 +193,34 @@ it('procesa varios registros del mismo lote de forma independiente', async () =>
   expect(liberarSillasMock).toHaveBeenNthCalledWith(1, 'evt-1', 1);
   expect(liberarSillasMock).toHaveBeenNthCalledWith(2, 'evt-2', 3);
 });
+
+// Roadmap #33 (ADR-020) — el aforo se devuelve en sillas, no en boletas.
+describe('liberar-reservas con tipos de boletería', () => {
+  it('devuelve compra.sillas (pareja: 3 boletas × 2 personas = 6), no cantidad', async () => {
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await handler(evento([registroTtl('esperando_comprobante', { cantidad: { N: '3' }, sillas: { N: '6' } })]), {} as never, () => {});
+
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 6);
+  });
+
+  it('una compra anterior a los tipos (sin sillas) devuelve cantidad', async () => {
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+
+    await handler(evento([registroTtl('esperando_comprobante', { cantidad: { N: '3' } })]), {} as never, () => {});
+
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 3);
+  });
+
+  it('un evento duplicado del Stream de una pareja no vuelve a devolver sillas', async () => {
+    const yaArchivada = Object.assign(new Error('condición'), { name: 'ConditionalCheckFailedException' });
+    sendMock.mockRejectedValueOnce(yaArchivada);
+
+    await handler(evento([registroTtl('esperando_comprobante', { sillas: { N: '4' } })]), {} as never, () => {});
+
+    expect(liberarSillasMock).not.toHaveBeenCalled();
+  });
+});

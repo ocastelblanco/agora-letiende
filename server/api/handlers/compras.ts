@@ -28,6 +28,13 @@ import {
   esTextoValido,
 } from '../lib/validaciones';
 import { respuestaJson } from '../lib/http';
+import {
+  normalizarTipos,
+  precioDelTipo,
+  resolverTipoDeCompra,
+  type EtapaConPrecios,
+  type TipoBoleteria,
+} from '../lib/tipos-boleteria';
 
 const canalNotificacion = new CanalCorreoSes();
 
@@ -70,6 +77,9 @@ export interface EtapaBoleteria {
   etapaId: string;
   nombre: string;
   precio: number;
+  // Roadmap #33 — ausente en una etapa anterior a los tipos de boletería;
+  // `normalizarTipos()` la completa al leer.
+  precios?: { tipoId: string; precio: number }[];
   cierraEn: string;
   orden: number;
 }
@@ -85,6 +95,8 @@ export interface EventoParaCompra {
   // abajo, mismo criterio de "tipar solo lo que se lee, cuando algo empieza
   // a leerlo".
   fechaHora: string;
+  // Roadmap #33 — ausente en un evento anterior a los tipos de boletería.
+  tiposBoleta?: TipoBoleteria[];
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
   mediosPago: MedioPago[];
@@ -143,7 +155,7 @@ export async function buscarEventoPublicadoPorSlug(slug: string): Promise<Evento
  * Exportada: `ventas-efectivo.ts` la reutiliza, nunca reimplementa el
  * cálculo de precio.
  */
-export function etapaVigente(etapas: EtapaBoleteria[], ahora: Date): EtapaBoleteria | null {
+export function etapaVigente<T extends { cierraEn: string }>(etapas: T[], ahora: Date): T | null {
   const ordenadas = [...etapas].sort((a, b) => new Date(a.cierraEn).getTime() - new Date(b.cierraEn).getTime());
   return ordenadas.find((etapa) => new Date(etapa.cierraEn).getTime() > ahora.getTime()) ?? null;
 }
@@ -160,12 +172,14 @@ export function etapaVigente(etapas: EtapaBoleteria[], ahora: Date): EtapaBolete
  */
 async function crearAdquisicionSinEtapas(
   eventoEncontrado: EventoParaCompra,
+  tipo: TipoBoleteria,
   cantidad: number,
   clienteDatos: Record<string, unknown>,
   ahora: Date,
 ): Promise<APIGatewayProxyResultV2> {
+  const sillas = cantidad * tipo.personas;
   try {
-    await reservarSillas(eventoEncontrado.eventoId, cantidad);
+    await reservarSillas(eventoEncontrado.eventoId, sillas);
   } catch (error) {
     if (error instanceof AforoInsuficienteError) {
       return respuestaJson(409, { mensaje: error.message, sillasDisponibles: error.sillasDisponibles });
@@ -184,6 +198,10 @@ async function crearAdquisicionSinEtapas(
     compraId,
     eventoId: eventoEncontrado.eventoId,
     cantidad,
+    tipoId: tipo.tipoId,
+    tipoNombre: tipo.nombre,
+    personas: tipo.personas,
+    sillas,
     cliente: {
       nombre: clienteDatos['nombre'],
       telefono: clienteDatos['telefono'],
@@ -215,7 +233,7 @@ async function crearAdquisicionSinEtapas(
   }
 
   try {
-    await confirmarSillas(eventoEncontrado.eventoId, cantidad);
+    await confirmarSillas(eventoEncontrado.eventoId, sillas);
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
@@ -228,6 +246,9 @@ async function crearAdquisicionSinEtapas(
     const boletas = await emitirBoletas({
       compraId,
       eventoId: eventoEncontrado.eventoId,
+      tipoId: tipo.tipoId,
+      tipoNombre: tipo.nombre,
+      personas: tipo.personas,
       montoTotal: 0,
       cantidad,
     });
@@ -291,19 +312,22 @@ function configuracionBold(compraId: string, montoTotal: number): {
 
 async function crearCompraBold(
   eventoEncontrado: EventoParaCompra,
-  etapa: EtapaBoleteria,
+  etapa: EtapaConPrecios,
+  tipo: TipoBoleteria,
+  precioUnitario: number,
   cantidad: number,
   clienteDatos: Record<string, unknown>,
   ahora: Date,
 ): Promise<APIGatewayProxyResultV2> {
-  const montoTotal = etapa.precio * cantidad;
+  const montoTotal = precioUnitario * cantidad;
+  const sillas = cantidad * tipo.personas;
   const compraId = randomUUID();
   // La firma se calcula antes de reservar: si no se puede firmar, la
   // petición falla sin dejar sillas apartadas.
   const bold = configuracionBold(compraId, montoTotal);
 
   try {
-    await reservarSillas(eventoEncontrado.eventoId, cantidad);
+    await reservarSillas(eventoEncontrado.eventoId, sillas);
   } catch (error) {
     if (error instanceof AforoInsuficienteError) {
       return respuestaJson(409, { mensaje: error.message, sillasDisponibles: error.sillasDisponibles });
@@ -324,6 +348,10 @@ async function crearCompraBold(
     eventoId: eventoEncontrado.eventoId,
     etapaId: etapa.etapaId,
     cantidad,
+    tipoId: tipo.tipoId,
+    tipoNombre: tipo.nombre,
+    personas: tipo.personas,
+    sillas,
     cliente: {
       nombre: clienteDatos['nombre'],
       telefono: clienteDatos['telefono'],
@@ -462,19 +490,37 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
   // productor. Se resuelve ANTES de `etapaVigente()`: sin etapas, esa
   // función siempre devolvería `null` y produciría el 409 "no hay etapa
   // vigente", que sería un mensaje incorrecto para este caso.
-  if (eventoEncontrado.etapas.length === 0) {
-    return await crearAdquisicionSinEtapas(eventoEncontrado, datos['cantidad'], clienteDatos, ahora);
+  //
+  // Roadmap #33 (ADR-020) — del cliente solo se acepta el `tipoId`; el
+  // precio, las `personas` y las sillas salen siempre del evento almacenado
+  // (A08). Un evento anterior a los tipos se lee como un único tipo
+  // `defecto`, así que un cliente que no envía `tipoId` sigue funcionando.
+  const { tiposBoleta, etapas } = normalizarTipos(eventoEncontrado);
+  const resolucionTipo = resolverTipoDeCompra(tiposBoleta, datos['tipoId']);
+  if ('error' in resolucionTipo) {
+    return respuestaJson(400, {
+      mensaje: resolucionTipo.error === 'requerido' ? 'tipoId es obligatorio' : 'tipoId inválido',
+    });
+  }
+  const tipo = resolucionTipo.tipo;
+
+  if (etapas.length === 0) {
+    return await crearAdquisicionSinEtapas(eventoEncontrado, tipo, datos['cantidad'], clienteDatos, ahora);
   }
 
-  const etapa = etapaVigente(eventoEncontrado.etapas, ahora);
+  const etapa = etapaVigente(etapas, ahora);
   if (!etapa) {
     return respuestaJson(409, { mensaje: 'No hay una etapa de boletería vigente para este evento' });
+  }
+  const precioUnitario = precioDelTipo(etapa, tipo.tipoId);
+  if (precioUnitario === null) {
+    return respuestaJson(409, { mensaje: 'Este tipo de boleta no está disponible en la etapa vigente' });
   }
 
   // Alcance explícito de TODO.md Tarea 2: las boletas gratuitas (roadmap
   // #12, emisión) todavía no existen — mejor un 501 claro que una compra
   // "confirmada" que nunca emite nada.
-  if (etapa.precio === 0) {
+  if (precioUnitario === 0) {
     return respuestaJson(501, {
       mensaje: 'Las boletas gratuitas todavía no están soportadas',
     });
@@ -484,15 +530,24 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
   // por completo del de transferencia: `crearCompraBold` maneja su propia
   // reserva, persistencia y respuesta.
   if (medioPago === 'bold') {
-    return await crearCompraBold(eventoEncontrado, etapa, datos['cantidad'], clienteDatos, ahora);
+    return await crearCompraBold(
+      eventoEncontrado,
+      etapa,
+      tipo,
+      precioUnitario,
+      datos['cantidad'],
+      clienteDatos,
+      ahora,
+    );
   }
 
   // El token se genera antes de reservar: si no se puede generar, la
   // petición falla sin dejar sillas apartadas.
   const { token, hash } = generarTokenEnlace();
 
+  const sillas = datos['cantidad'] * tipo.personas;
   try {
-    await reservarSillas(eventoEncontrado.eventoId, datos['cantidad']);
+    await reservarSillas(eventoEncontrado.eventoId, sillas);
   } catch (error) {
     if (error instanceof AforoInsuficienteError) {
       return respuestaJson(409, { mensaje: error.message, sillasDisponibles: error.sillasDisponibles });
@@ -503,7 +558,7 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     throw error;
   }
 
-  const montoTotal = etapa.precio * datos['cantidad'];
+  const montoTotal = precioUnitario * datos['cantidad'];
   const compraId = randomUUID();
   const expiraEnFecha = new Date(ahora.getTime() + eventoEncontrado.plazoComprobanteMinutos * 60_000);
   // TTL de DynamoDB exige epoch-segundos (Number), nunca ISO 8601 — excepción
@@ -516,6 +571,10 @@ async function crearCompra(evento: APIGatewayProxyEventV2): Promise<APIGatewayPr
     eventoId: eventoEncontrado.eventoId,
     etapaId: etapa.etapaId,
     cantidad: datos['cantidad'],
+    tipoId: tipo.tipoId,
+    tipoNombre: tipo.nombre,
+    personas: tipo.personas,
+    sillas,
     cliente: {
       nombre: clienteDatos['nombre'],
       telefono: clienteDatos['telefono'],

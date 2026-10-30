@@ -164,6 +164,9 @@ describe('POST /api/ventas-efectivo', () => {
       compraId: expect.any(String),
       eventoId: 'evt-1',
       etapaId: 'et-1',
+      tipoId: 'defecto',
+      tipoNombre: 'Por defecto',
+      personas: 1,
       montoTotal: 90000,
       cantidad: 2,
     });
@@ -376,6 +379,9 @@ describe('POST /api/ventas-efectivo', () => {
         compraId: expect.any(String),
         eventoId: 'evt-1',
         etapaId: undefined,
+        tipoId: 'defecto',
+        tipoNombre: 'Por defecto',
+        personas: 1,
         montoTotal: 0,
         cantidad: 2,
       });
@@ -394,5 +400,66 @@ describe('POST /api/ventas-efectivo', () => {
 
       expect(respuesta.statusCode).toBe(201);
     });
+  });
+});
+
+// Roadmap #33 (ADR-020) — tipos de boletería en la venta en efectivo.
+describe('POST /api/ventas-efectivo — tipos de boletería', () => {
+  const eventoConTipos = {
+    ...eventoPublicado,
+    tiposBoleta: [
+      { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+      { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+    ],
+    etapas: [
+      {
+        etapaId: 'et-1',
+        nombre: 'Preventa',
+        precio: 30000,
+        precios: [
+          { tipoId: 't-ind', precio: 30000 },
+          { tipoId: 't-par', precio: 40000 },
+        ],
+        cierraEn: '2026-09-01T00:00:00.000Z',
+        orden: 1,
+      },
+    ],
+  };
+
+  it('una pareja reserva y confirma cantidad × 2 sillas, cobra su precio y emite con el tipo', async () => {
+    sendMock.mockResolvedValueOnce({ Items: [eventoConTipos] }).mockResolvedValueOnce({});
+    reservarSillasMock.mockResolvedValueOnce(undefined);
+
+    const respuesta = await invocar('POST', { ...cuerpoValido, cantidad: 2, tipoId: 't-par' });
+
+    expect(respuesta.statusCode).toBe(201);
+    expect(JSON.parse(respuesta.body ?? '{}').montoTotal).toBe(80000);
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 4);
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 4);
+    expect(emitirBoletasMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoId: 't-par', tipoNombre: 'Pareja', personas: 2, cantidad: 2, montoTotal: 80000 }),
+    );
+    expect(sendMock.mock.calls[1]?.[0].input.Item).toMatchObject({ sillas: 4, personas: 2 });
+  });
+
+  it('con varios tipos exige tipoId y rechaza uno ajeno al evento', async () => {
+    sendMock.mockResolvedValue({ Items: [eventoConTipos] });
+
+    expect((await invocar('POST', cuerpoValido)).statusCode).toBe(400);
+    expect((await invocar('POST', { ...cuerpoValido, tipoId: 'ajeno' })).statusCode).toBe(400);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('responde 409 si la etapa vigente no ofrece el tipo', async () => {
+    const soloIndividual = {
+      ...eventoConTipos,
+      etapas: [{ ...eventoConTipos.etapas[0], precios: [{ tipoId: 't-ind', precio: 30000 }] }],
+    };
+    sendMock.mockResolvedValueOnce({ Items: [soloIndividual] });
+
+    const respuesta = await invocar('POST', { ...cuerpoValido, tipoId: 't-par' });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
   });
 });

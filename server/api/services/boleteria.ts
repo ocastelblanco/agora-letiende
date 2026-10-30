@@ -12,6 +12,11 @@ export interface BoletaEmitida {
   // v2 (roadmap #24) — ausente cuando la compra es de un evento sin etapas
   // de boletería (boletería opcional sin cobro).
   etapaId?: string;
+  // Roadmap #33 (ADR-020) — instantánea del tipo al emitir; ausentes en una
+  // boleta anterior a los tipos de boletería (se lee como «Por defecto»).
+  tipoId?: string;
+  tipoNombre?: string;
+  personas?: number;
   valorUnitario: number;
   estado: EstadoBoleta;
   emitidaEn: string;
@@ -21,13 +26,17 @@ export interface CompraParaEmision {
   compraId: string;
   eventoId: string;
   etapaId?: string;
+  tipoId?: string;
+  tipoNombre?: string;
+  personas?: number;
   montoTotal: number;
   cantidad: number;
 }
 
 /**
- * Emite `compra.cantidad` boletas en `agora-boletas`, una por silla
- * comprada (`tech-specs.md` §5.5, `TODO.md` Tarea 2) — primer y único
+ * Emite `compra.cantidad` boletas en `agora-boletas`, una por boleta
+ * comprada (un tipo multi-persona, roadmap #33, emite un solo QR que admite
+ * a todas sus `personas`) (`tech-specs.md` §5.5, `TODO.md` Tarea 2) — primer y único
  * consumidor por ahora es `aprobarCompra()` en `handlers/aprobaciones.ts`;
  * Venta en efectivo (roadmap #14) la reutilizará sin recrearla.
  *
@@ -52,6 +61,9 @@ export async function emitirBoletas(compra: CompraParaEmision): Promise<BoletaEm
     compraId: compra.compraId,
     numeroEnCompra: indice + 1,
     etapaId: compra.etapaId,
+    tipoId: compra.tipoId,
+    tipoNombre: compra.tipoNombre,
+    personas: compra.personas,
     valorUnitario,
     estado: 'valida',
     emitidaEn,

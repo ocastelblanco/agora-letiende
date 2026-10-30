@@ -636,3 +636,21 @@ describe('POST /api/pagos/bold/webhook — aviso tardío sobre una compra expira
     });
   });
 });
+
+// Roadmap #33 (ADR-020) — un pago Bold de una pareja confirma sus sillas y emite con el tipo.
+describe('POST /api/pagos/bold/webhook — tipos de boletería', () => {
+  it('SALE_APPROVED de una pareja confirma compra.sillas y emite con el tipo', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Item: { ...compraEsperandoPago, tipoId: 't-par', tipoNombre: 'Pareja', personas: 2, sillas: 4 } })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { nombre: 'Concierto de jazz' } });
+
+    const respuesta = await invocar({ cuerpo: pagoAprobadoBold, firma: 'firma-valida' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 4);
+    expect(emitirBoletasMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoId: 't-par', tipoNombre: 'Pareja', personas: 2, cantidad: 2 }),
+    );
+  });
+});

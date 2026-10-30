@@ -18,6 +18,7 @@ import { emitirBoletas } from '../services/boleteria';
 import { firmarCodigoBoleta } from '../lib/firma-boletas';
 import { CanalCorreoSes } from '../services/notificaciones';
 import { respuestaJson } from '../lib/http';
+import { sillasDeCompra } from '../lib/tipos-boleteria';
 
 const canalNotificacion = new CanalCorreoSes();
 
@@ -39,6 +40,11 @@ interface CompraParaWebhookBold {
   eventoId: string;
   etapaId?: string;
   cantidad: number;
+  // Roadmap #33 — ausentes en una compra anterior a los tipos de boletería.
+  tipoId?: string;
+  tipoNombre?: string;
+  personas?: number;
+  sillas?: number;
   cliente?: ClienteCompra;
   montoTotal: number;
   medioPago?: string;
@@ -194,7 +200,7 @@ async function procesarPagoAprobado(compra: CompraParaWebhookBold): Promise<APIG
   }
 
   try {
-    await confirmarSillas(compra.eventoId, compra.cantidad);
+    await confirmarSillas(compra.eventoId, sillasDeCompra(compra));
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
@@ -207,6 +213,9 @@ async function procesarPagoAprobado(compra: CompraParaWebhookBold): Promise<APIG
       compraId: compra.compraId,
       eventoId: compra.eventoId,
       etapaId: compra.etapaId,
+      tipoId: compra.tipoId,
+      tipoNombre: compra.tipoNombre,
+      personas: compra.personas,
       montoTotal: compra.montoTotal,
       cantidad: compra.cantidad,
     });
@@ -270,7 +279,7 @@ async function procesarPagoRechazado(compra: CompraParaWebhookBold): Promise<API
   }
 
   try {
-    await liberarSillas(compra.eventoId, compra.cantidad);
+    await liberarSillas(compra.eventoId, sillasDeCompra(compra));
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
@@ -292,7 +301,7 @@ async function procesarPagoRechazado(compra: CompraParaWebhookBold): Promise<API
  */
 async function recuperarCompraExpirada(compra: CompraParaWebhookBold): Promise<APIGatewayProxyResultV2> {
   try {
-    await reservarSillas(compra.eventoId, compra.cantidad);
+    await reservarSillas(compra.eventoId, sillasDeCompra(compra));
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
@@ -321,7 +330,7 @@ async function recuperarCompraExpirada(compra: CompraParaWebhookBold): Promise<A
     );
   } catch (error) {
     // Otro aviso de Bold ganó la carrera: se devuelve el aforo recién tomado.
-    await liberarSillas(compra.eventoId, compra.cantidad).catch(() => undefined);
+    await liberarSillas(compra.eventoId, sillasDeCompra(compra)).catch(() => undefined);
     if (esErrorCondicionFallida(error)) {
       return respuestaJson(200, { recibido: true });
     }

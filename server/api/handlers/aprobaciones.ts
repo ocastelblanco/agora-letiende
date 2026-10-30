@@ -15,6 +15,7 @@ import { emitirBoletas } from '../services/boleteria';
 import { CanalCorreoSes } from '../services/notificaciones';
 import { exigirRol, tieneAccesoAlEvento } from '../lib/autorizacion';
 import { respuestaJson } from '../lib/http';
+import { TIPO_DEFECTO_NOMBRE, sillasDeCompra } from '../lib/tipos-boleteria';
 
 const canalNotificacion = new CanalCorreoSes();
 
@@ -42,6 +43,11 @@ interface CompraParaAprobacion {
   eventoId: string;
   etapaId: string;
   cantidad: number;
+  // Roadmap #33 — ausentes en una compra anterior a los tipos de boletería.
+  tipoId?: string;
+  tipoNombre?: string;
+  personas?: number;
+  sillas?: number;
   cliente?: ClienteCompra;
   montoTotal: number;
   estado: string;
@@ -161,6 +167,7 @@ async function listarPendientes(evento: APIGatewayProxyEventV2): Promise<APIGate
         compraId: compra['compraId'],
         nombreEvento: eventoItem['nombre'],
         cantidad: compra['cantidad'],
+        tipoNombre: compra['tipoNombre'] ?? TIPO_DEFECTO_NOMBRE,
         montoTotal: compra['montoTotal'],
         creadaEn: compra['creadaEn'],
       }));
@@ -195,6 +202,7 @@ async function obtenerDetalleAprobacion(token: string | undefined): Promise<APIG
   return respuestaJson(200, {
     compraId: compra.compraId,
     cantidad: compra.cantidad,
+    tipoNombre: compra.tipoNombre ?? TIPO_DEFECTO_NOMBRE,
     montoTotal: compra.montoTotal,
     cliente: compra.cliente,
     urlComprobante,
@@ -244,7 +252,7 @@ async function aprobarCompra(token: string | undefined): Promise<APIGatewayProxy
   }
 
   try {
-    await confirmarSillas(compra.eventoId, compra.cantidad);
+    await confirmarSillas(compra.eventoId, sillasDeCompra(compra));
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
@@ -260,6 +268,9 @@ async function aprobarCompra(token: string | undefined): Promise<APIGatewayProxy
       compraId: compra.compraId,
       eventoId: compra.eventoId,
       etapaId: compra.etapaId,
+      tipoId: compra.tipoId,
+      tipoNombre: compra.tipoNombre,
+      personas: compra.personas,
       montoTotal: compra.montoTotal,
       cantidad: compra.cantidad,
     });
@@ -360,7 +371,7 @@ async function rechazarCompra(
   }
 
   try {
-    await liberarSillas(compra.eventoId, compra.cantidad);
+    await liberarSillas(compra.eventoId, sillasDeCompra(compra));
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
