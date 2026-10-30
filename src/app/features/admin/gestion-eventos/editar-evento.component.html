@@ -284,8 +284,75 @@
               </mat-expansion-panel-header>
 
               <ng-template matExpansionPanelContent>
+                <!-- Roadmap #33 (ADR-020) — tipos de boleta del evento. -->
+                <section class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-primary">Tipos de boletería</h3>
+                    @if (!esProductor()) {
+                      <button
+                        mat-icon-button
+                        type="button"
+                        aria-label="Añadir tipo de boletería"
+                        (click)="agregarTipo()"
+                      >
+                        <mat-icon fontSet="material-symbols-outlined">add</mat-icon>
+                      </button>
+                    }
+                  </div>
+
+                  <div formArrayName="tiposBoleta" class="flex flex-col gap-3">
+                    @for (tipo of tiposBoleta.controls; track tipo; let indiceTipo = $index) {
+                      <div [formGroupName]="indiceTipo" class="flex items-end gap-2">
+                        <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs text-primary/60">
+                          Tipo de boletería
+                          <input
+                            type="text"
+                            formControlName="nombre"
+                            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                          />
+                        </label>
+                        <label class="flex w-24 flex-col gap-1 text-xs text-primary/60">
+                          Personas
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            formControlName="personas"
+                            class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                          />
+                        </label>
+                        @if (!esProductor()) {
+                          <button
+                            mat-icon-button
+                            type="button"
+                            class="[--mat-icon-button-icon-color:var(--color-danger)]"
+                            [attr.aria-label]="
+                              indiceTipo === 0
+                                ? 'Restablecer el tipo de boletería a Por defecto'
+                                : 'Eliminar tipo de boletería'
+                            "
+                            [disabled]="indiceTipo > 0 && tipoEnUso(tipo.controls.tipoId.value)"
+                            (click)="quitarTipo(indiceTipo)"
+                          >
+                            <mat-icon fontSet="material-symbols-outlined">delete</mat-icon>
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                  @if (tiposBoleta.hasError('nombresRepetidos')) {
+                    <p class="text-xs text-danger">
+                      Los nombres de los tipos de boletería no pueden repetirse.
+                    </p>
+                  }
+                  <p class="text-xs text-primary/60">
+                    «Personas» es el número de sillas que consume cada boleta del tipo (por ejemplo,
+                    2 para una pareja). Un tipo con precio en alguna etapa no se puede eliminar.
+                  </p>
+                </section>
+
                 @if (!esProductor()) {
-                  <button mat-stroked-button type="button" (click)="agregarEtapa()">
+                  <button mat-stroked-button type="button" class="mt-4" (click)="agregarEtapa()">
                     Agregar etapa
                   </button>
                 }
@@ -297,7 +364,9 @@
                       class="flex flex-col gap-3 rounded-xl border border-primary/20 p-3"
                     >
                       <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-primary/60">Etapa {{ indice + 1 }}</span>
+                        <span class="text-xs font-semibold text-primary/60"
+                          >Etapa {{ indice + 1 }}</span
+                        >
                         @if (!esProductor()) {
                           <button
                             mat-stroked-button
@@ -310,27 +379,94 @@
                         }
                       </div>
 
-                      <input
-                        type="text"
-                        formControlName="nombre"
-                        placeholder="Nombre (ej. Preventa)"
-                        class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                      />
-                      <input
-                        type="number"
-                        formControlName="precio"
-                        placeholder="Precio en COP"
-                        class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                      />
-                      <p class="-mt-2 text-xs text-primary/60">
-                        {{ grupo.controls.precio.value | precio }}
-                      </p>
-                      <label class="text-xs text-primary/60">Cierra en (Bogotá)</label>
-                      <input
-                        type="datetime-local"
-                        formControlName="cierraEn"
-                        class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
-                      />
+                      <label class="flex flex-col gap-1 text-xs text-primary/60">
+                        Nombre de la etapa
+                        <input
+                          type="text"
+                          formControlName="nombre"
+                          placeholder="Nombre (ej. Preventa)"
+                          class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                        />
+                      </label>
+                      <label class="flex flex-col gap-1 text-xs text-primary/60">
+                        Cierra en (Bogotá)
+                        <input
+                          type="datetime-local"
+                          formControlName="cierraEn"
+                          class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                        />
+                      </label>
+
+                      <div formArrayName="precios" class="flex flex-col gap-2">
+                        @for (
+                          linea of grupo.controls.precios.controls;
+                          track linea;
+                          let indiceLinea = $index
+                        ) {
+                          <div [formGroupName]="indiceLinea" class="flex items-start gap-2">
+                            <mat-form-field class="min-w-0 flex-1" subscriptSizing="dynamic">
+                              <mat-label>Tipo de boletería</mat-label>
+                              <mat-select formControlName="tipoId">
+                                @for (tipoOpcion of tiposBoleta.controls; track tipoOpcion) {
+                                  <mat-option
+                                    [value]="tipoOpcion.controls.tipoId.value"
+                                    [disabled]="
+                                      tipoUsadoEnOtraLinea(
+                                        indice,
+                                        indiceLinea,
+                                        tipoOpcion.controls.tipoId.value
+                                      )
+                                    "
+                                  >
+                                    {{ tipoOpcion.controls.nombre.value || 'Sin nombre' }}
+                                  </mat-option>
+                                }
+                              </mat-select>
+                            </mat-form-field>
+                            <label class="flex w-36 flex-col gap-1 text-xs text-primary/60">
+                              Precio
+                              <input
+                                type="number"
+                                formControlName="precio"
+                                placeholder="Precio en COP"
+                                class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+                              />
+                              <span class="text-primary/60">{{
+                                linea.controls.precio.value | precio
+                              }}</span>
+                            </label>
+                            @if (!esProductor()) {
+                              <button
+                                mat-icon-button
+                                type="button"
+                                class="mt-4 [--mat-icon-button-icon-color:var(--color-danger)]"
+                                [attr.aria-label]="
+                                  indiceLinea === 0
+                                    ? 'Restablecer el tipo de la primera línea a Por defecto'
+                                    : 'Eliminar tipo de boletería de la etapa'
+                                "
+                                [disabled]="!puedeQuitarPrecio(indice, indiceLinea)"
+                                (click)="quitarPrecio(indice, indiceLinea)"
+                              >
+                                <mat-icon fontSet="material-symbols-outlined">delete</mat-icon>
+                              </button>
+                            }
+                          </div>
+                        }
+                      </div>
+                      @if (!esProductor()) {
+                        <div>
+                          <button
+                            mat-icon-button
+                            type="button"
+                            aria-label="Añadir tipo de boletería a la etapa"
+                            [disabled]="!puedeAgregarPrecio(indice)"
+                            (click)="agregarPrecio(indice)"
+                          >
+                            <mat-icon fontSet="material-symbols-outlined">add</mat-icon>
+                          </button>
+                        </div>
+                      }
                     </div>
                   }
                 </div>

@@ -105,6 +105,16 @@ describe('validarTiposBoleta', () => {
     expect(tipos?.[2].tipoId).not.toBe('inventado');
   });
 
+  it('conserva un tipoId con forma de UUID generado por el formulario, pero no uno repetido', () => {
+    const idNuevo = '3f2b8c1e-9a4d-4e6f-8b1a-2c3d4e5f6a7b';
+    const tipos = validarTiposBoleta([
+      { tipoId: idNuevo, nombre: 'Individual' },
+      { tipoId: idNuevo, nombre: 'Pareja' },
+    ]);
+    expect(tipos?.[0].tipoId).toBe(idNuevo);
+    expect(tipos?.[1].tipoId).not.toBe(idNuevo);
+  });
+
   it.each([
     ['vacío', []],
     ['no es arreglo', 'x'],

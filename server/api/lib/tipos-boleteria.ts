@@ -189,11 +189,16 @@ export function sillasDeCompra(compra: { cantidad: number; sillas?: unknown }): 
     : compra.cantidad;
 }
 
+const PATRON_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Valida el arreglo `tiposBoleta` de un payload. Un `tipoId` recibido solo se
- * conserva si pertenece a `idsExistentes` (los tipos que el evento ya tiene)
- * y no se repitió antes en el mismo payload — misma regla de `etapaId` en
- * `normalizarEtapas()`; cualquier otro caso recibe un UUID nuevo. Devuelve
+ * Valida el arreglo `tiposBoleta` de un payload. Un `tipoId` recibido se
+ * conserva si no se repitió antes en el mismo payload y, o bien pertenece a
+ * `idsExistentes` (los tipos que el evento ya tiene), o bien tiene forma de
+ * UUID: el formulario de administración genera el id de un tipo nuevo para
+ * poder referenciarlo en los `precios` de las etapas del mismo PUT. Un id no
+ * es un secreto ni da acceso a nada (solo tiene sentido dentro del evento);
+ * cualquier otro caso recibe un UUID nuevo. Devuelve
  * `null` si es inválido: vacío, nombre inválido o repetido (sin distinguir
  * mayúsculas), o `personas` fuera de 1–10 (ausente = 1).
  */
@@ -227,7 +232,9 @@ export function validarTiposBoleta(
 
     const idRecibido = registro['tipoId'];
     const tipoId =
-      typeof idRecibido === 'string' && idsExistentes.has(idRecibido) && !idsAsignados.has(idRecibido)
+      typeof idRecibido === 'string' &&
+      (idsExistentes.has(idRecibido) || PATRON_UUID.test(idRecibido)) &&
+      !idsAsignados.has(idRecibido)
         ? idRecibido
         : randomUUID();
     idsAsignados.add(tipoId);
