@@ -20,6 +20,12 @@
       </span>
       @if (r.veredicto === 'VALIDA') {
         <p class="text-lg">Boleta #{{ r.numeroEnCompra }} — adelante</p>
+        @if (r.tipoNombre) {
+          <p class="text-xl font-semibold">{{ r.tipoNombre }}</p>
+        }
+        @if (r.personas && r.personas > 1) {
+          <p class="text-3xl font-bold">Admite {{ r.personas }} personas</p>
+        }
       } @else if (r.veredicto === 'YA_USADA') {
         <p class="text-lg">Esta boleta ya ingresó{{ r.ingresoEn ? ' (' + r.ingresoEn + ')' : '' }}</p>
       } @else if (r.veredicto === 'OTRO_EVENTO') {

@@ -60,7 +60,7 @@ async function activarConSlug(fixture: ComponentFixture<VentaEfectivoComponent>,
 }
 
 function llenarFormularioValido(componente: VentaEfectivoComponent, cantidad = 2) {
-  componente['formulario'].setValue({
+  componente['formulario'].patchValue({
     cantidad,
     nombre: 'Ana Pérez',
     telefono: '3001234567',
@@ -224,5 +224,69 @@ describe('VentaEfectivoComponent', () => {
       expect.objectContaining({ duration: expect.any(Number) }),
     );
     expect(fixture.componentInstance['ventaRegistrada']()).toBeNull();
+  });
+
+  describe('con varios tipos de boleta (roadmap #33)', () => {
+    const eventoConTipos: EventoPublico = {
+      ...eventoEjemplo,
+      tiposBoleta: [
+        { tipoId: 'tipo-ind', nombre: 'Individual', personas: 1, orden: 0 },
+        { tipoId: 'tipo-par', nombre: 'Pareja', personas: 2, orden: 1 },
+      ],
+      etapas: [
+        {
+          etapaId: 'et1',
+          nombre: 'Preventa',
+          precio: 30000,
+          precios: [
+            { tipoId: 'tipo-ind', precio: 30000 },
+            { tipoId: 'tipo-par', precio: 40000 },
+          ],
+          cierraEn: '2099-01-01T00:00:00.000Z',
+          orden: 1,
+        },
+      ],
+    };
+
+    it('muestra el selector de tipo y calcula el total estimado con el precio del tipo elegido', async () => {
+      const { fixture } = configurarPrueba({ evento: eventoConTipos });
+      await activarConSlug(fixture, 'concierto-jazz');
+      const componente = fixture.componentInstance;
+
+      expect(fixture.nativeElement.querySelectorAll('select#tipoId option').length).toBe(2);
+
+      componente['formulario'].patchValue({ tipoId: 'tipo-par', cantidad: 2 });
+      fixture.detectChanges();
+
+      expect(componente['totalEstimado']()).toBe(80000);
+    });
+
+    it('envía el tipoId elegido y nunca un precio o total', async () => {
+      const crearVentaMock = vi.fn().mockResolvedValue({
+        exito: true,
+        venta: { compraId: 'compra-1', estado: 'aprobada', cantidad: 1, montoTotal: 40000, boletas: 1 },
+      });
+      const { fixture } = configurarPrueba({ evento: eventoConTipos, crearVentaMock });
+      await activarConSlug(fixture, 'concierto-jazz');
+      llenarFormularioValido(fixture.componentInstance, 1);
+      fixture.componentInstance['formulario'].patchValue({ tipoId: 'tipo-par' });
+
+      await fixture.componentInstance['registrarVenta']();
+
+      expect(crearVentaMock).toHaveBeenCalledWith({
+        slug: 'concierto-jazz',
+        cantidad: 1,
+        tipoId: 'tipo-par',
+        cliente: { nombre: 'Ana Pérez', telefono: '3001234567', correo: 'ana@correo.com' },
+        autorizacionDatos: true,
+      });
+    });
+
+    it('con un solo tipo no muestra el selector ni envía tipoId', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConSlug(fixture, 'concierto-jazz');
+
+      expect(fixture.nativeElement.querySelector('select#tipoId')).toBeNull();
+    });
   });
 });

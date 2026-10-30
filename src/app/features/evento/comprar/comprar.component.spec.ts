@@ -954,4 +954,81 @@ describe('ComprarComponent', () => {
       expect(fixture.componentInstance['compraCreada']()).toBeNull();
     });
   });
+
+  describe('tipos de boletería (roadmap #33)', () => {
+    const eventoConTipos: EventoPublico = {
+      ...eventoEjemplo,
+      tiposBoleta: [
+        { tipoId: 'tipo-ind', nombre: 'Individual', personas: 1, orden: 0 },
+        { tipoId: 'tipo-par', nombre: 'Pareja', personas: 2, orden: 1 },
+      ],
+      etapas: [
+        {
+          etapaId: 'et1',
+          nombre: 'Preventa',
+          precio: 30000,
+          precios: [
+            { tipoId: 'tipo-ind', precio: 30000 },
+            { tipoId: 'tipo-par', precio: 40000 },
+          ],
+          cierraEn: '2099-01-01T00:00:00.000Z',
+          orden: 1,
+        },
+      ],
+    };
+
+    async function activarConTipo(
+      fixture: ComponentFixture<ComprarComponent>,
+      tipo: string | undefined,
+    ): Promise<void> {
+      fixture.componentRef.setInput('tipo', tipo);
+      await activarConSlug(fixture, 'concierto-jazz');
+    }
+
+    it('con ?tipo= válido envía el tipoId, nunca un precio, y calcula el total con el precio del tipo', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 80000 },
+      });
+      const { fixture } = configurarPrueba({ evento: eventoConTipos, crearCompraMock });
+      await activarConTipo(fixture, 'tipo-par');
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      expect(fixture.componentInstance['totalEstimado']()).toBe(80000);
+      expect(fixture.nativeElement.textContent).toContain('Pareja');
+
+      await fixture.componentInstance['comprar']();
+
+      expect(crearCompraMock).toHaveBeenCalledTimes(1);
+      const payload = crearCompraMock.mock.calls[0][0];
+      expect(payload.tipoId).toBe('tipo-par');
+      expect(payload).not.toHaveProperty('precio');
+      expect(payload).not.toHaveProperty('montoTotal');
+    });
+
+    it.each([undefined, 'tipo-inexistente'])(
+      'con varios tipos y ?tipo=%s no muestra el formulario y ofrece volver al evento',
+      async (tipo) => {
+        const { fixture } = configurarPrueba({ evento: eventoConTipos });
+        await activarConTipo(fixture, tipo);
+
+        expect(fixture.nativeElement.querySelector('form')).toBeNull();
+        expect(fixture.nativeElement.textContent).toContain('Volver al evento');
+      },
+    );
+
+    it('un evento con un solo tipo no envía tipoId (payload idéntico al de antes de los tipos)', async () => {
+      const crearCompraMock = vi.fn().mockResolvedValue({
+        exito: true,
+        compra: { compraId: 'compra-1', estado: 'esperando_comprobante', cantidad: 2, montoTotal: 90000 },
+      });
+      const { fixture } = configurarPrueba({ crearCompraMock });
+      await activarConTipo(fixture, undefined);
+      llenarFormularioValido(fixture.componentInstance, 2);
+
+      await fixture.componentInstance['comprar']();
+
+      expect(crearCompraMock.mock.calls[0][0]).not.toHaveProperty('tipoId');
+    });
+  });
 });

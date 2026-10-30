@@ -241,4 +241,34 @@ describe('PanelEventoComponent', () => {
       expect(fixture.nativeElement.textContent).not.toContain('No se pudo generar el reporte');
     });
   });
+
+  it('muestra la columna "Tipo de boleta" en las ventas por etapa y en la lista de clientes', async () => {
+    const detalleConTipos: DetallePanel = {
+      ...detalleEjemplo,
+      porEtapa: [
+        { etapaId: 'et-1', nombre: 'Preventa', tipoId: 't-ind', tipoNombre: 'Individual', vendidas: 2, recaudado: 60000 },
+        { etapaId: 'et-1', nombre: 'Preventa', tipoId: 't-par', tipoNombre: 'Pareja', vendidas: 1, recaudado: 40000 },
+      ],
+      clientes: [{ ...detalleEjemplo.clientes[0], tipoId: 't-par', tipoNombre: 'Pareja' }],
+    };
+    const { fixture } = configurarPrueba({ misEventos: [eventoPropio], detalle: detalleConTipos });
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const encabezados = Array.from(fixture.nativeElement.querySelectorAll('th')).map((th) =>
+      (th as HTMLElement).textContent?.trim(),
+    );
+    expect(encabezados.filter((titulo) => titulo === 'Tipo de boleta')).toHaveLength(2);
+    const texto = fixture.nativeElement.textContent as string;
+    expect(texto).toContain('Individual');
+    expect(texto).toContain('Pareja');
+  });
+
+  it('un backend sin tipos (datos legados) muestra "Por defecto" en la columna', async () => {
+    const { fixture } = configurarPrueba({ misEventos: [eventoPropio], detalle: detalleEjemplo });
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    expect(fixture.nativeElement.textContent).toContain('Por defecto');
+  });
 });

@@ -9,6 +9,7 @@ export interface CuerpoCompraEnviado {
   cliente: { nombre: string; telefono: string; correo: string };
   autorizacionDatos: boolean;
   medioPago?: string;
+  tipoId?: string;
   [campo: string]: unknown;
 }
 
@@ -22,11 +23,19 @@ export interface ApiSimulada {
   consultasDeEstado: number;
   /** Cuántas veces se pidió el evento por slug. */
   cargasDeEvento: number;
+  /** Precio unitario que el «backend» cobró en la última compra (según el tipo enviado). */
+  precioUnitario: number;
   /** Si se define, `POST /api/compras` responde este error en lugar de crear la compra. */
   errorAlComprar?: { status: number; mensaje: string };
 }
 
 const ID_COMPRA = 'compra-e2e-1';
+
+/** Precio de la primera etapa para el tipo enviado, como lo resolvería el backend (nunca viene del cliente). */
+function precioDe(evento: EventoPublicoSimulado, tipoId: string | undefined): number {
+  const etapa = evento.etapas[0];
+  return etapa.precios?.find((precio) => precio.tipoId === tipoId)?.precio ?? etapa.precio;
+}
 
 function json(ruta: Route, status: number, cuerpo: unknown): Promise<void> {
   return ruta.fulfill({ status, contentType: 'application/json', body: JSON.stringify(cuerpo) });
@@ -45,6 +54,7 @@ export async function simularApi(page: Page, evento: EventoPublicoSimulado): Pro
     comprasRecibidas: [],
     consultasDeEstado: 0,
     cargasDeEvento: 0,
+    precioUnitario: PRECIO_BOLETA,
   };
 
   // Primero el más general: Playwright evalúa las rutas de la última registrada a la primera.
@@ -64,6 +74,7 @@ export async function simularApi(page: Page, evento: EventoPublicoSimulado): Pro
     }
     const cuerpo = ruta.request().postDataJSON() as CuerpoCompraEnviado;
     control.comprasRecibidas.push(cuerpo);
+    control.precioUnitario = precioDe(evento, cuerpo.tipoId);
     if (control.errorAlComprar) {
       return json(ruta, control.errorAlComprar.status, { mensaje: control.errorAlComprar.mensaje });
     }
@@ -71,7 +82,7 @@ export async function simularApi(page: Page, evento: EventoPublicoSimulado): Pro
       compraId: ID_COMPRA,
       estado: 'esperando_pago_bold',
       cantidad: cuerpo.cantidad,
-      montoTotal: PRECIO_BOLETA * cuerpo.cantidad,
+      montoTotal: control.precioUnitario * cuerpo.cantidad,
       expiraEn: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       bold: { llaveIdentidad: 'llave-publica-e2e', firma: 'firma-integridad-e2e', moneda: 'COP' },
     });
@@ -84,7 +95,7 @@ export async function simularApi(page: Page, evento: EventoPublicoSimulado): Pro
       compraId: ID_COMPRA,
       estado: control.estadoCompra,
       cantidad: cuerpo?.cantidad ?? 1,
-      montoTotal: PRECIO_BOLETA * (cuerpo?.cantidad ?? 1),
+      montoTotal: control.precioUnitario * (cuerpo?.cantidad ?? 1),
     });
   });
 
