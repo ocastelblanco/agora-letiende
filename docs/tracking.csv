@@ -306,3 +306,4 @@ Infra,23/10/2026 22:35,23/10/2026 23:10,0:35:00,human,OCM,"Valida las compras en
 Backend,23/10/2026 23:15,23/10/2026 23:30,0:15:00,AI,Sonnet 5.5,"Documenta el cierre del incidente de Bold, el secreto EMAIL_ALERTAS y los pendientes",Claude Code,cli,low
 Specs definition,29/10/2026 14:38,29/10/2026 15:57,1:19:00,human,OCM,"Define el requerimiento de Tipos de boletería: contexto, cambios de frontend y de backend",Editor Markdown,desktop,high
 Specs definition,29/10/2026 15:57,29/10/2026 20:41,4:44:00,AI,Sonnet 5.5,"Planea Tipos de boletería: explora el modelo, resuelve decisiones con OCM, escribe plan, ADR-020 y actualiza PRD, tech-specs, MEMORY y TODO",Claude Code,cli,medium
+Backend,29/10/2026 21:07,29/10/2026 21:25,0:18:00,AI,Sonnet 5.5,"Implementa el backend de tipos de boletería: normalización, validación, compra por tipo, aforo en sillas, boletas y reportes",Claude Code,cli,high
