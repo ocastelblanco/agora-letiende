@@ -157,16 +157,25 @@ describe('EditarEventoComponent', () => {
       componente['agregarEtapa']();
       componente['etapas'].at(0).patchValue({
         nombre: 'Preventa',
-        precio: 45000,
         cierraEn: '2026-08-31T19:00',
       });
+      componente['etapas'].at(0).controls.precios.at(0).patchValue({ precio: 45000 });
 
       await componente['guardar']();
 
       expect(crearEventoMock).toHaveBeenCalledTimes(1);
       const datosEnviados = crearEventoMock.mock.calls[0][0];
       expect(datosEnviados.fechaHora).toBe('2026-09-15T01:00:00.000Z');
-      expect(datosEnviados.etapas[0]).toMatchObject({ nombre: 'Preventa', precio: 45000, orden: 1 });
+      expect(datosEnviados.etapas[0]).toMatchObject({
+        nombre: 'Preventa',
+        precios: [{ tipoId: datosEnviados.tiposBoleta[0].tipoId, precio: 45000 }],
+        orden: 1,
+      });
+      // Roadmap #33 — el formulario ya no envía el `precio` plano.
+      expect(datosEnviados.etapas[0].precio).toBeUndefined();
+      expect(datosEnviados.tiposBoleta).toEqual([
+        { tipoId: expect.any(String), nombre: 'Por defecto', personas: 1 },
+      ]);
       expect(datosEnviados.mediosPago).toEqual(['efectivo']);
       expect(navigateMock).toHaveBeenCalledWith(['/mis-eventos/eventos', 'e1']);
       expect(snackBarOpenMock).toHaveBeenCalledWith('Evento creado correctamente.', 'Cerrar', {
@@ -819,9 +828,9 @@ describe('EditarEventoComponent', () => {
       componente['agregarEtapa']();
       componente['etapas'].at(1).patchValue({
         nombre: 'General',
-        precio: 30000,
         cierraEn: '2026-09-09T19:00',
       });
+      componente['etapas'].at(1).controls.precios.at(0).patchValue({ precio: 30000 });
       await componente['guardar']();
 
       const primerPayload = actualizarEventoMock.mock.calls[0][1];
@@ -1078,6 +1087,271 @@ describe('EditarEventoComponent', () => {
       const [, datos] = actualizarEventoMock.mock.calls[0];
       expect(datos.productores).toEqual(['productor@letiende.co']);
       expect(datos.porteros).toEqual(['nuevo-portero@letiende.co']);
+    });
+  });
+  describe('tipos de boletería (roadmap #33)', () => {
+    const eventoConTipos: Evento = {
+      ...eventoExistente,
+      tiposBoleta: [
+        { tipoId: 't-ind', nombre: 'Individual', personas: 1, orden: 0 },
+        { tipoId: 't-par', nombre: 'Pareja', personas: 2, orden: 1 },
+        { tipoId: 't-vip', nombre: 'VIP', personas: 1, orden: 2 },
+      ],
+      etapas: [
+        {
+          etapaId: 'et1',
+          nombre: 'Preventa',
+          precio: 30000,
+          precios: [
+            { tipoId: 't-ind', precio: 30000 },
+            { tipoId: 't-par', precio: 40000 },
+          ],
+          cierraEn: '2026-09-01T00:00:00.000Z',
+          orden: 1,
+        },
+      ],
+    };
+
+    it('un evento nuevo inicia con un único tipo «Por defecto» de 1 persona', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      expect(componente['tiposBoleta'].length).toBe(1);
+      expect(componente['tiposBoleta'].at(0).getRawValue()).toMatchObject({ nombre: 'Por defecto', personas: 1 });
+    });
+
+    it('un evento anterior a los tipos (sin tiposBoleta) carga el tipo legado y el precio plano de su etapa', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoExistente] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['tiposBoleta'].at(0).controls.tipoId.value).toBe('defecto');
+      expect(componente['etapas'].at(0).controls.precios.getRawValue()).toEqual([
+        { tipoId: 'defecto', precio: 45000 },
+      ]);
+    });
+
+    it('precarga los tipos y los precios por tipo que devuelve el backend', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['tiposBoleta'].controls.map((g) => g.controls.nombre.value)).toEqual([
+        'Individual',
+        'Pareja',
+        'VIP',
+      ]);
+      expect(componente['etapas'].at(0).controls.precios.getRawValue()).toEqual([
+        { tipoId: 't-ind', precio: 30000 },
+        { tipoId: 't-par', precio: 40000 },
+      ]);
+    });
+
+    it('agregarTipo añade una fila vacía de 1 persona con un tipoId nuevo', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      componente['agregarTipo']();
+
+      expect(componente['tiposBoleta'].length).toBe(2);
+      const nuevo = componente['tiposBoleta'].at(1).getRawValue();
+      expect(nuevo).toMatchObject({ nombre: '', personas: 1 });
+      expect(nuevo.tipoId).not.toBe(componente['tiposBoleta'].at(0).controls.tipoId.value);
+    });
+
+    it('la primera fila nunca se elimina: su botón la restablece a «Por defecto» con 1 persona', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      componente['quitarTipo'](0);
+
+      expect(componente['tiposBoleta'].length).toBe(3);
+      expect(componente['tiposBoleta'].at(0).getRawValue()).toEqual({
+        tipoId: 't-ind',
+        nombre: 'Por defecto',
+        personas: 1,
+      });
+    });
+
+    it('un tipo con precio en alguna etapa no se puede eliminar; uno sin uso sí', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      expect(componente['tipoEnUso']('t-par')).toBe(true);
+      expect(componente['tipoEnUso']('t-vip')).toBe(false);
+
+      componente['quitarTipo'](1);
+      expect(componente['tiposBoleta'].length).toBe(3);
+
+      componente['quitarTipo'](2);
+      expect(componente['tiposBoleta'].controls.map((g) => g.controls.tipoId.value)).toEqual(['t-ind', 't-par']);
+    });
+
+    it('en el DOM, el botón de eliminar un tipo en uso está deshabilitado y el de uno libre habilitado', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+      await activarConId(fixture, 'e1');
+      fixture.componentInstance['etapasExpandido'].set(true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const botones = Array.from(
+        fixture.nativeElement.querySelectorAll('button[aria-label="Eliminar tipo de boletería"]'),
+      ) as HTMLButtonElement[];
+      expect(botones.length).toBe(2);
+      expect(botones[0].disabled).toBe(true); // Pareja: en uso
+      expect(botones[1].disabled).toBe(false); // VIP: sin uso
+    });
+
+    it('renombrar un tipo conserva su tipoId y el guardado envía los precios con ese mismo id', async () => {
+      const actualizarEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoConTipos });
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos], actualizarEventoMock });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      componente['tiposBoleta'].at(1).patchValue({ nombre: '  Dúo  ' });
+      await componente['guardar']();
+
+      const payload = actualizarEventoMock.mock.calls[0][1];
+      expect(payload.tiposBoleta[1]).toEqual({ tipoId: 't-par', nombre: 'Dúo', personas: 2 });
+      expect(payload.etapas[0].precios).toEqual([
+        { tipoId: 't-ind', precio: 30000 },
+        { tipoId: 't-par', precio: 40000 },
+      ]);
+      expect(payload.etapas[0].precio).toBeUndefined();
+    });
+
+    it('un tipo nuevo con precio en una etapa se envía en el mismo guardado con su tipoId', async () => {
+      const actualizarEventoMock = vi.fn().mockResolvedValue({ exito: true, evento: eventoConTipos });
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos], actualizarEventoMock });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      componente['agregarTipo']();
+      componente['tiposBoleta'].at(3).patchValue({ nombre: 'Grupo', personas: 4 });
+      const idNuevo = componente['tiposBoleta'].at(3).controls.tipoId.value;
+      componente['agregarPrecio'](0); // t-vip, primer tipo libre
+      componente['etapas'].at(0).controls.precios.at(2).patchValue({ tipoId: idNuevo, precio: 90000 });
+      await componente['guardar']();
+
+      const payload = actualizarEventoMock.mock.calls[0][1];
+      expect(payload.tiposBoleta[3]).toEqual({ tipoId: idNuevo, nombre: 'Grupo', personas: 4 });
+      expect(payload.etapas[0].precios[2]).toEqual({ tipoId: idNuevo, precio: 90000 });
+    });
+
+    it('rechaza nombres de tipo repetidos (sin distinguir mayúsculas) y no llama a la API', async () => {
+      const actualizarEventoMock = vi.fn();
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos], actualizarEventoMock });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+
+      componente['tiposBoleta'].at(1).patchValue({ nombre: 'individual' });
+      await componente['guardar']();
+
+      expect(componente['tiposBoleta'].hasError('nombresRepetidos')).toBe(true);
+      expect(actualizarEventoMock).not.toHaveBeenCalled();
+    });
+
+    it('rechaza personas fuera de 1 a 10', async () => {
+      const { fixture } = configurarPrueba({});
+      await activarConId(fixture, 'nuevo');
+      const componente = fixture.componentInstance;
+
+      for (const invalido of [0, 11, 1.5]) {
+        componente['tiposBoleta'].at(0).patchValue({ personas: invalido });
+        expect(componente['tiposBoleta'].at(0).controls.personas.valid).toBe(false);
+      }
+      componente['tiposBoleta'].at(0).patchValue({ personas: 2 });
+      expect(componente['tiposBoleta'].at(0).controls.personas.valid).toBe(true);
+    });
+
+    describe('líneas de precio por etapa', () => {
+      it('una etapa nueva arranca con una línea para el primer tipo', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['agregarEtapa']();
+
+        expect(componente['etapas'].at(1).controls.precios.getRawValue()).toEqual([{ tipoId: 't-ind', precio: 0 }]);
+      });
+
+      it('agregarPrecio elige el primer tipo libre y deja de poder agregar cuando todos están usados', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        expect(componente['puedeAgregarPrecio'](0)).toBe(true);
+        componente['agregarPrecio'](0);
+
+        expect(componente['etapas'].at(0).controls.precios.at(2).controls.tipoId.value).toBe('t-vip');
+        expect(componente['puedeAgregarPrecio'](0)).toBe(false);
+        componente['agregarPrecio'](0);
+        expect(componente['etapas'].at(0).controls.precios.length).toBe(3);
+      });
+
+      it('un tipo no se puede repetir en la misma etapa: la opción ya elegida en otra línea queda deshabilitada', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        expect(componente['tipoUsadoEnOtraLinea'](0, 0, 't-par')).toBe(true);
+        expect(componente['tipoUsadoEnOtraLinea'](0, 0, 't-ind')).toBe(false); // la propia línea no cuenta
+        expect(componente['tipoUsadoEnOtraLinea'](0, 0, 't-vip')).toBe(false);
+      });
+
+      it('una línea que no es la primera se elimina', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+
+        componente['quitarPrecio'](0, 1);
+
+        expect(componente['etapas'].at(0).controls.precios.getRawValue()).toEqual([{ tipoId: 't-ind', precio: 30000 }]);
+      });
+
+      it('la primera línea nunca se elimina: su botón la devuelve al primer tipo', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+        // Primero libera «Individual» de la etapa y pone la primera línea en «VIP».
+        componente['quitarPrecio'](0, 1);
+        componente['etapas'].at(0).controls.precios.at(0).patchValue({ tipoId: 't-vip' });
+
+        expect(componente['puedeQuitarPrecio'](0, 0)).toBe(true);
+        componente['quitarPrecio'](0, 0);
+
+        expect(componente['etapas'].at(0).controls.precios.length).toBe(1);
+        expect(componente['etapas'].at(0).controls.precios.at(0).controls.tipoId.value).toBe('t-ind');
+        // Ya está en el primer tipo: no hay nada que restablecer.
+        expect(componente['puedeQuitarPrecio'](0, 0)).toBe(false);
+      });
+
+      it('la primera línea no se restablece si otra línea ya usa el primer tipo', async () => {
+        const { fixture } = configurarPrueba({ eventos: [eventoConTipos] });
+        await activarConId(fixture, 'e1');
+        const componente = fixture.componentInstance;
+        componente['etapas'].at(0).controls.precios.at(0).patchValue({ tipoId: 't-vip' });
+        componente['etapas'].at(0).controls.precios.at(1).patchValue({ tipoId: 't-ind' });
+
+        expect(componente['puedeQuitarPrecio'](0, 0)).toBe(false);
+      });
+    });
+
+    it('un productor ve los tipos y los precios deshabilitados y sin botones de edición', async () => {
+      const { fixture } = configurarPrueba({ eventos: [eventoConTipos], rol: 'productor' });
+      await activarConId(fixture, 'e1');
+      const componente = fixture.componentInstance;
+      componente['etapasExpandido'].set(true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(componente['tiposBoleta'].disabled).toBe(true);
+      expect(componente['etapas'].disabled).toBe(true);
+      expect(fixture.nativeElement.querySelector('button[aria-label="Añadir tipo de boletería"]')).toBeNull();
     });
   });
 });

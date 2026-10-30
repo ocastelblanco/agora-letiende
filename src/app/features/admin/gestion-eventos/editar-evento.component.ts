@@ -1,10 +1,18 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormArray,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -13,8 +21,11 @@ import { EventosService } from '../../../core/api/eventos.service';
 import { UsuariosService } from '../../../core/api/usuarios.service';
 import {
   DatosEtapaBoleteria,
+  DatosTipoBoleteria,
   Evento,
   MedioPago,
+  PrecioEtapa,
+  TipoBoleteria,
   TipoVinculo,
   VinculoExterno,
 } from '../../../core/models/evento.model';
@@ -38,6 +49,29 @@ const MEDIOS_PAGO: readonly { valor: MedioPago; etiqueta: string }[] = [
   { valor: 'transferencia', etiqueta: 'Transferencia' },
   { valor: 'bold', etiqueta: 'Bold' },
 ];
+
+// Roadmap #33 (ADR-020) — mismos límites que el backend
+// (`server/api/lib/tipos-boleteria.ts`); el backend siempre revalida.
+const NOMBRE_TIPO_POR_DEFECTO = 'Por defecto';
+const TIPO_ID_LEGADO = 'defecto';
+const PERSONAS_MINIMAS_POR_TIPO = 1;
+const PERSONAS_MAXIMAS_POR_TIPO = 10;
+const LONGITUD_MAXIMA_NOMBRE_TIPO = 60;
+
+/** Roadmap #33 — los nombres de los tipos de un evento no se repiten (sin distinguir mayúsculas). */
+function validarNombresTiposUnicos(arreglo: AbstractControl): ValidationErrors | null {
+  const nombres = (arreglo as FormArray).controls.map((grupo) =>
+    String(grupo.get('nombre')?.value ?? '')
+      .trim()
+      .toLowerCase(),
+  );
+  return new Set(nombres).size === nombres.length ? null : { nombresRepetidos: true };
+}
+
+/** Roadmap #33 — un tipo nuevo nace con su `tipoId` para poder referenciarlo en los precios de las etapas del mismo guardado. */
+function nuevoTipoId(): string {
+  return crypto.randomUUID();
+}
 
 const TIPOS_MIME_IMAGEN_VALIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -115,6 +149,7 @@ function validarDuracionTotal(grupo: AbstractControl): ValidationErrors | null {
     MatButtonModule,
     MatExpansionModule,
     MatFormFieldModule,
+    MatIconModule,
     MatSelectModule,
     MatSlideToggleModule,
     PrecioPipe,
@@ -231,23 +266,80 @@ export class EditarEventoComponent {
       transferencia: [false],
       bold: [false],
     }),
+    // Roadmap #33 — siempre hay al menos un tipo (el primero, «Por defecto»,
+    // no se elimina). Los eventos sin tipos propios cargan el tipo legado.
+    tiposBoleta: this.fb.nonNullable.array(
+      [this.crearGrupoTipo(nuevoTipoId(), NOMBRE_TIPO_POR_DEFECTO, 1)],
+      {
+        validators: validarNombresTiposUnicos,
+      },
+    ),
     // v2 (roadmap #24) — boletería opcional: inicia vacío. Sin etapas, el
     // evento no cobra nada y solo controla aforo; el cobro se activa al
     // agregar la primera etapa con agregarEtapa().
     etapas: this.fb.nonNullable.array<ReturnType<typeof this.crearGrupoEtapa>>([]),
   });
 
-  private crearGrupoEtapa() {
+  private crearGrupoTipo(tipoId: string, nombre: string, personas: number) {
+    return this.fb.nonNullable.group({
+      // Nunca se edita a mano: renombrar un tipo conserva su tipoId, que es lo
+      // que referencian los precios de las etapas, las compras y las boletas.
+      tipoId: [tipoId],
+      nombre: [
+        nombre,
+        [
+          Validators.required,
+          Validators.maxLength(LONGITUD_MAXIMA_NOMBRE_TIPO),
+          (c: AbstractControl) => (String(c.value).trim() ? null : { required: true }),
+        ],
+      ],
+      personas: [
+        personas,
+        [
+          Validators.required,
+          Validators.min(PERSONAS_MINIMAS_POR_TIPO),
+          Validators.max(PERSONAS_MAXIMAS_POR_TIPO),
+          Validators.pattern(/^\d+$/),
+        ],
+      ],
+    });
+  }
+
+  private crearGrupoPrecio(tipoId: string, precio: number) {
+    return this.fb.nonNullable.group({
+      tipoId: [tipoId, Validators.required],
+      precio: [precio, [Validators.required, Validators.min(0)]],
+    });
+  }
+
+  private crearGrupoEtapa(
+    primerTipoId: string,
+    datos?: {
+      etapaId: string;
+      nombre: string;
+      cierraEn: string;
+      precios: PrecioEtapa[];
+    },
+  ) {
+    // Una etapa nueva arranca con una línea para el primer tipo.
+    const precios = datos?.precios ?? [{ tipoId: primerTipoId, precio: 0 }];
     return this.fb.nonNullable.group({
       // Vacío por defecto: una etapa nueva agregada con agregarEtapa() queda
       // con etapaId: '', que etapasFormulario() traduce a `undefined` —
       // "generar uno nuevo en el backend" (TODO.md Tarea 2). Sin validadores:
       // no es un campo que el administrador edite a mano.
-      etapaId: [''],
-      nombre: ['', Validators.required],
-      precio: [0, [Validators.required, Validators.min(0)]],
-      cierraEn: ['', Validators.required],
+      etapaId: [datos?.etapaId ?? ''],
+      nombre: [datos?.nombre ?? '', Validators.required],
+      cierraEn: [datos?.cierraEn ?? '', Validators.required],
+      // Roadmap #33 — una línea por tipo que la etapa ofrece (al menos una).
+      precios: this.fb.nonNullable.array(
+        precios.map((precio) => this.crearGrupoPrecio(precio.tipoId, precio.precio)),
+      ),
     });
+  }
+
+  protected get tiposBoleta() {
+    return this.formulario.controls.tiposBoleta;
   }
 
   protected get etapas() {
@@ -297,8 +389,89 @@ export class EditarEventoComponent {
     () => !this.modoCrear() && !this.esProductor() && this.estadoPersistido() === 'borrador',
   );
 
+  protected agregarTipo(): void {
+    this.tiposBoleta.push(this.crearGrupoTipo(nuevoTipoId(), '', 1));
+  }
+
+  /** Un tipo con precio en alguna etapa no se puede eliminar (el backend lo rechaza también con 409). */
+  protected tipoEnUso(tipoId: string): boolean {
+    return this.etapas.controls.some((etapa) =>
+      etapa.controls.precios.controls.some((linea) => linea.controls.tipoId.value === tipoId),
+    );
+  }
+
+  /**
+   * La primera fila nunca se elimina: su botón la restablece a «Por defecto»
+   * con 1 persona. Las demás se eliminan solo si ninguna etapa las usa.
+   */
+  protected quitarTipo(indice: number): void {
+    if (indice === 0) {
+      this.tiposBoleta.at(0).patchValue({ nombre: NOMBRE_TIPO_POR_DEFECTO, personas: 1 });
+      return;
+    }
+    if (this.tipoEnUso(this.tiposBoleta.at(indice).controls.tipoId.value)) {
+      return;
+    }
+    this.tiposBoleta.removeAt(indice);
+  }
+
+  /** Un tipo no puede repetirse en la misma etapa: las opciones ya elegidas en otra línea se deshabilitan. */
+  protected tipoUsadoEnOtraLinea(
+    etapaIndice: number,
+    lineaIndice: number,
+    tipoId: string,
+  ): boolean {
+    return this.etapas
+      .at(etapaIndice)
+      .controls.precios.controls.some(
+        (linea, indice) => indice !== lineaIndice && linea.controls.tipoId.value === tipoId,
+      );
+  }
+
+  protected puedeAgregarPrecio(etapaIndice: number): boolean {
+    return this.etapas.at(etapaIndice).controls.precios.length < this.tiposBoleta.length;
+  }
+
+  protected agregarPrecio(etapaIndice: number): void {
+    const precios = this.etapas.at(etapaIndice).controls.precios;
+    const libre = this.tiposBoleta.controls
+      .map((tipo) => tipo.controls.tipoId.value)
+      .find((tipoId) => !precios.controls.some((linea) => linea.controls.tipoId.value === tipoId));
+    if (libre !== undefined) {
+      precios.push(this.crearGrupoPrecio(libre, 0));
+    }
+  }
+
+  /**
+   * La primera línea de una etapa nunca se elimina: su botón la devuelve al
+   * primer tipo («Por defecto»), salvo que otra línea ya lo use.
+   */
+  protected puedeQuitarPrecio(etapaIndice: number, lineaIndice: number): boolean {
+    if (lineaIndice > 0) {
+      return true;
+    }
+    const primerTipoId = this.tiposBoleta.at(0).controls.tipoId.value;
+    const linea = this.etapas.at(etapaIndice).controls.precios.at(0);
+    return (
+      linea.controls.tipoId.value !== primerTipoId &&
+      !this.tipoUsadoEnOtraLinea(etapaIndice, 0, primerTipoId)
+    );
+  }
+
+  protected quitarPrecio(etapaIndice: number, lineaIndice: number): void {
+    if (!this.puedeQuitarPrecio(etapaIndice, lineaIndice)) {
+      return;
+    }
+    const precios = this.etapas.at(etapaIndice).controls.precios;
+    if (lineaIndice === 0) {
+      precios.at(0).controls.tipoId.setValue(this.tiposBoleta.at(0).controls.tipoId.value);
+      return;
+    }
+    precios.removeAt(lineaIndice);
+  }
+
   protected agregarEtapa(): void {
-    this.etapas.push(this.crearGrupoEtapa());
+    this.etapas.push(this.crearGrupoEtapa(this.tiposBoleta.at(0).controls.tipoId.value));
   }
 
   /**
@@ -362,7 +535,10 @@ export class EditarEventoComponent {
   private actualizarValidadoresVinculo(): void {
     const tipo = this.formulario.controls.vinculoExterno.controls.tipo.value;
     const valorControl = this.formulario.controls.vinculoExterno.controls.valor;
-    valorControl.setValidators([Validators.required, Validators.pattern(PATRONES_VALOR_VINCULO[tipo])]);
+    valorControl.setValidators([
+      Validators.required,
+      Validators.pattern(PATRONES_VALOR_VINCULO[tipo]),
+    ]);
     valorControl.updateValueAndValidity({ emitEvent: false });
   }
 
@@ -520,6 +696,8 @@ export class EditarEventoComponent {
     // v2 (roadmap #24) — un evento nuevo inicia sin etapas (boletería
     // opcional): antes se precargaba una etapa vacía por defecto.
     this.etapas.clear();
+    this.tiposBoleta.clear();
+    this.tiposBoleta.push(this.crearGrupoTipo(nuevoTipoId(), NOMBRE_TIPO_POR_DEFECTO, 1));
     this.imagenKey.set(undefined);
     this.logotipoKey.set(undefined);
     // El propio reset() de arriba dispara slug.valueChanges (con slug en
@@ -562,7 +740,11 @@ export class EditarEventoComponent {
       duracion: minutosAHorasMinutos(evento.duracionMinutos ?? DURACION_POR_DEFECTO_MINUTOS),
       administradoPorLeTiende,
       vinculoExterno: vinculo
-        ? { tipo: vinculo.tipo, valor: vinculo.tipo === 'web' ? `${PREFIJO_VINCULO_WEB}${vinculo.valor}` : vinculo.valor }
+        ? {
+            tipo: vinculo.tipo,
+            valor:
+              vinculo.tipo === 'web' ? `${PREFIJO_VINCULO_WEB}${vinculo.valor}` : vinculo.valor,
+          }
         : undefined,
       sillasTotales: evento.sillasTotales,
       maxBoletasPorCompra: evento.maxBoletasPorCompra,
@@ -600,20 +782,34 @@ export class EditarEventoComponent {
     // de que el bucle alcance a repoblar `etapas` — invertir el orden evita
     // ese pisado, apoyándose en que el backend nunca persiste `bold: true`
     // sin al menos una etapa (`server/api/handlers/eventos.ts`).
+    // Roadmap #33 — los tipos se cargan ANTES que las etapas, que los
+    // referencian por `tipoId`. Un evento sin tipos propios (el backend los
+    // normaliza, pero un cliente anterior no los traía) usa el tipo legado.
+    const tipos: Pick<TipoBoleteria, 'tipoId' | 'nombre' | 'personas'>[] = evento.tiposBoleta
+      ?.length
+      ? [...evento.tiposBoleta].sort((a, b) => a.orden - b.orden)
+      : [{ tipoId: TIPO_ID_LEGADO, nombre: NOMBRE_TIPO_POR_DEFECTO, personas: 1 }];
+    this.tiposBoleta.clear();
+    for (const tipo of tipos) {
+      this.tiposBoleta.push(this.crearGrupoTipo(tipo.tipoId, tipo.nombre, tipo.personas));
+    }
+
     this.etapas.clear();
     for (const etapa of evento.etapas) {
-      const grupo = this.crearGrupoEtapa();
       // Preserva el etapaId real ya existente (TODO.md Tarea 2) — así
       // etapasFormulario() lo reenvía tal cual al guardar, en vez de dejar
       // que el backend genere uno nuevo y huerfanice compras/boletas ya
       // asociadas a esta etapa.
-      grupo.setValue({
-        etapaId: etapa.etapaId,
-        nombre: etapa.nombre,
-        precio: etapa.precio,
-        cierraEn: paraInputBogota(etapa.cierraEn),
-      });
-      this.etapas.push(grupo);
+      this.etapas.push(
+        this.crearGrupoEtapa(tipos[0].tipoId, {
+          etapaId: etapa.etapaId,
+          nombre: etapa.nombre,
+          cierraEn: paraInputBogota(etapa.cierraEn),
+          precios: etapa.precios?.length
+            ? etapa.precios
+            : [{ tipoId: tipos[0].tipoId, precio: etapa.precio }],
+        }),
+      );
     }
 
     for (const medio of MEDIOS_PAGO) {
@@ -645,6 +841,7 @@ export class EditarEventoComponent {
       this.formulario.controls.porteros.disable();
       this.formulario.controls.estado.disable();
       this.formulario.controls.mediosPago.disable();
+      this.tiposBoleta.disable();
       this.etapas.disable();
     }
   }
@@ -652,6 +849,14 @@ export class EditarEventoComponent {
   private mediosPagoSeleccionados(): MedioPago[] {
     const valores = this.formulario.controls.mediosPago.getRawValue();
     return MEDIOS_PAGO.filter((medio) => valores[medio.valor]).map((medio) => medio.valor);
+  }
+
+  private tiposBoletaFormulario(): DatosTipoBoleteria[] {
+    return this.tiposBoleta.controls.map((grupo) => ({
+      tipoId: grupo.controls.tipoId.value,
+      nombre: grupo.controls.nombre.value.trim(),
+      personas: grupo.controls.personas.value,
+    }));
   }
 
   private etapasFormulario(): DatosEtapaBoleteria[] {
@@ -662,7 +867,10 @@ export class EditarEventoComponent {
       // "ausente", así que se traduce explícitamente a undefined.
       etapaId: grupo.controls.etapaId.value || undefined,
       nombre: grupo.controls.nombre.value,
-      precio: grupo.controls.precio.value,
+      precios: grupo.controls.precios.controls.map((linea) => ({
+        tipoId: linea.controls.tipoId.value,
+        precio: linea.controls.precio.value,
+      })),
       cierraEn: desdeInputBogota(grupo.controls.cierraEn.value),
       orden: indice + 1,
     }));
@@ -730,6 +938,7 @@ export class EditarEventoComponent {
           sillasTotales: valores.sillasTotales,
           maxBoletasPorCompra: valores.maxBoletasPorCompra,
           plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
+          tiposBoleta: this.tiposBoletaFormulario(),
           etapas: this.etapasFormulario(),
           mediosPago: this.mediosPagoSeleccionados(),
           productores: valores.productores,
@@ -796,6 +1005,7 @@ export class EditarEventoComponent {
               sillasTotales: valores.sillasTotales,
               maxBoletasPorCompra: valores.maxBoletasPorCompra,
               plazoComprobanteMinutos: valores.plazoComprobanteMinutos,
+              tiposBoleta: this.tiposBoletaFormulario(),
               etapas: this.etapasFormulario(),
               mediosPago: this.mediosPagoSeleccionados(),
               productores: valores.productores,
