@@ -48,11 +48,12 @@ export class PanelEventoComponent {
   protected readonly descargandoReporte = signal(false);
   protected readonly errorReporte = signal<string | null>(null);
 
-  protected readonly columnasEtapas = ['nombre', 'vendidas', 'recaudado'];
+  protected readonly columnasEtapas = ['nombre', 'tipoNombre', 'vendidas', 'recaudado'];
   protected readonly columnasClientes = [
     'nombre',
     'telefono',
     'correo',
+    'tipoNombre',
     'cantidad',
     'montoTotal',
     'medioPago',

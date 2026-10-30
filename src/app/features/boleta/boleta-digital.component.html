@@ -21,6 +21,12 @@
         @if (datos.etapaNombre) {
           <p class="text-xs text-primary/60">{{ datos.etapaNombre }}</p>
         }
+        @if (datos.tipoNombre) {
+          <p class="text-sm font-semibold text-primary">{{ datos.tipoNombre }}</p>
+        }
+        @if (datos.personas && datos.personas > 1) {
+          <p class="text-xs text-primary/70">Válida para {{ datos.personas }} personas</p>
+        }
 
         <img
           [src]="'data:image/png;base64,' + datos.qrPng"

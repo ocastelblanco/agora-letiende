@@ -186,4 +186,54 @@ describe('PuertaComponent', () => {
     expect(stopMock).toHaveBeenCalled();
     expect(releaseAllStreamsMock).toHaveBeenCalled();
   });
+
+  it('un veredicto VALIDA de un tipo para varias personas muestra el tipo y cuántas personas admite', async () => {
+    const validarBoletaMock = vi.fn().mockResolvedValue({
+      veredicto: 'VALIDA',
+      boletaId: 'bol-2',
+      numeroEnCompra: 1,
+      tipoNombre: 'Pareja',
+      personas: 2,
+    } satisfies ResultadoValidacion);
+    let callbackCapturado: ((resultado: { getText: () => string }) => void) | undefined;
+    decodeFromVideoDeviceMock.mockImplementation(async (_deviceId, _video, callback) => {
+      callbackCapturado = callback;
+      return { stop: stopMock };
+    });
+    const { fixture } = configurarPrueba({ validarBoletaMock });
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    await fixture.componentInstance['escanear'](document.createElement('video'));
+    callbackCapturado?.({ getText: () => 'https://agora.letiende.co/boleta/bol-2.firma456' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const texto = fixture.nativeElement.textContent as string;
+    expect(texto).toContain('Pareja');
+    expect(texto).toContain('Admite 2 personas');
+  });
+
+  it('un veredicto VALIDA de una sola persona no anuncia "Admite N personas"', async () => {
+    const validarBoletaMock = vi.fn().mockResolvedValue({
+      veredicto: 'VALIDA',
+      boletaId: 'bol-3',
+      numeroEnCompra: 1,
+      tipoNombre: 'Individual',
+      personas: 1,
+    } satisfies ResultadoValidacion);
+    let callbackCapturado: ((resultado: { getText: () => string }) => void) | undefined;
+    decodeFromVideoDeviceMock.mockImplementation(async (_deviceId, _video, callback) => {
+      callbackCapturado = callback;
+      return { stop: stopMock };
+    });
+    const { fixture } = configurarPrueba({ validarBoletaMock });
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    await fixture.componentInstance['escanear'](document.createElement('video'));
+    callbackCapturado?.({ getText: () => 'https://agora.letiende.co/boleta/bol-3.firma789' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Admite');
+  });
 });
