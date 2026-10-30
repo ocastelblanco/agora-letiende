@@ -145,15 +145,23 @@ tarea de este repositorio.
 
 ---
 
-## Tarea 1 — Sin tarea iniciable (decisión de OCM)
+## Tarea 1 — Tipos de boletería (roadmap #33) — ▶️ activa (aprobada por OCM el 29/10/2026)
 
-**La Exportación de reportes en PDF (roadmap #21) quedó completa el 15/10/2026** (ADR-019, resumen en `docs/MEMORY.md` §2; pendiente solo de fusionar su PR). Con ella no queda ningún ítem de v2 sin prerrequisito externo: el único restante es WhatsApp (Tarea 2, bloqueada por la Verificación de Negocio de Meta). Para tener un segundo ítem activo hay que promover uno de v3 (`PRD.md` §6: validación en puerta sin conexión, devoluciones y transferencia de boletas, códigos de descuento y cortesías, historial de compras por correo) — **decisión de OCM, no del agente**.
+**Plan completo, decisiones cerradas y definición de terminado: `docs/plan-tipos-boleteria.md`. Decisión de diseño: ADR-020 (`docs/MEMORY.md` §3).** Un evento puede vender varios tipos de boleta al tiempo (Individual, Pareja…), combinados con las etapas (2 tipos × 2 etapas = 4 precios). Pareja = 2 sillas y **1 solo QR**, una única transición `valida → usada`. Un solo tipo por compra; `maxBoletasPorCompra` cuenta boletas; los eventos existentes se normalizan **al leer** (tipo `defecto`), sin migración.
+
+**Un PR por parte, cada uno en su rama creada desde `main`; arrancar por la primera sin fusionar:**
+
+1. `feature/tipos-boleteria-backend` — modelo, normalización (`normalizarTipos`), validación en `eventos.ts`, `tipoId` en compra y venta en efectivo, aforo con `compra.sillas`, boletas, reportes. Verificar en staging real contra DynamoDB (gotcha de `ConditionExpression`, `CLAUDE.md` §7).
+2. `feature/tipos-boleteria-admin` — panel «Tipos de boletería» y líneas de precio por etapa en `editar-evento.component`.
+3. `feature/tipos-boleteria-publico` — tabla de etapas y botones por tipo en `/evento/:slug`, compra, taquilla, puerta, boleta digital, panel y reportes; E2E de Playwright.
+
+**Por qué es la Tarea 1:** pedido directo de OCM (29/10/2026), por delante del orden normal del JIT. No hay prerrequisito externo.
 
 ---
 
 ## Tarea 2 — Notificaciones por WhatsApp (roadmap #20) — 🔒 bloqueada por prerrequisito externo
 
-**Prioridad Alta, pero no iniciable hoy.** Depende de la Verificación de Negocio de Meta y de un número de teléfono nuevo que no esté en uso en la app de WhatsApp (ver "Pendientes que no son de código" abajo y `docs/tareas-a-realizar.md` §8). Es el único ítem de v2 que queda: ya no hay ningún otro sin prerrequisito externo (el PDF se completó el 15/10/2026). Mientras siga bloqueada, no hay trabajo de desarrollo disponible hasta que OCM promueva un ítem de v3 (ver Tarea 1).
+**Prioridad Alta, pero no iniciable hoy.** Depende de la Verificación de Negocio de Meta y de un número de teléfono nuevo que no esté en uso en la app de WhatsApp (ver "Pendientes que no son de código" abajo y `docs/tareas-a-realizar.md` §8). Es el único ítem de v2 que queda: ya no hay ningún otro sin prerrequisito externo (el PDF se completó el 15/10/2026). Mientras siga bloqueada, el trabajo de desarrollo disponible es el de la Tarea 1; al terminarla, sin otro ítem iniciable, hay que esperar a que OCM promueva uno de v3 (`PRD.md` §6).
 
 ---
 

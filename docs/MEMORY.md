@@ -120,7 +120,7 @@ Ninguno — **v1 completa, incluido Dominio personalizado (PR #43, 14/08/2026)**
 - [x] Playwright **PR B, suite real contra el sandbox de Bold** (01/10/2026, roadmap #30, **PR #85**, validado por el usuario): evento temporal sembrado y borrado en DynamoDB de staging, pago real dentro del checkout sandbox de Bold, webhook real, verificación de compra/boletas/aforo en la base de datos; solo Chromium, a demanda (`npm run e2e:staging` o `workflow_dispatch`). **Encontró un bug real** (pantalla sin salida tras un pago rechazado), ya incluido en el endurecimiento. El job `staging` ya se lanzó en GitHub Actions y funciona con el usuario IAM de CI (PR #86 corrigió un permiso de la limpieza). Ver §9, §7 y ADR-015
 - [x] Hotfix de guardas contra doble toque (30/09/2026, roadmap #31, **PR #84**, validado en vivo en staging por el usuario): `if (this.enviando()) return;` antes de `set(true)` en `registrarVenta()` (venta en efectivo), `subir()` (comprobante) y `guardar()` de eventos y de usuarios, con una prueba unitaria por componente (verificado que las 4 fallan sin la guarda). `comprar()` ya se había corregido en el PR #83. Ver §9
 - [x] Endurecimiento (roadmap #32), completo (01/10/2026): (0) pantalla sin salida tras un pago rechazado con Bold — **PR #88**, validada por OCM (opción (a): `GET /api/compras/:id/estado` devuelve `bold` mientras la reserva esté vigente; mensaje «Tu pago fue rechazado…»; `test.fail()` de la E2E real retirado); (1) idempotencia en el backend de compra y venta en efectivo — **PR #89**, validada en staging real (tabla `agora-idempotencia`, `Idempotency-Key`, 409 ante cuerpo distinto; ver sesión del 01/10/2026); (2) guarda síncrona contra el doble clic en «Eliminar» de eventos y usuarios — rama `fix/eliminar-doble-clic`, pendiente de fusión (`dialogoEliminarAbierto` + `eliminando…() !== null`; 2 pruebas nuevas por componente, comprobado que fallan sin la guarda)
-- [ ] Exportación PDF (XLSX ya implementado y fusionado, PR #25) — **Tarea 1 activa de `TODO.md`** (la Tarea 2 es WhatsApp, bloqueada por Meta)
+- [ ] **Tipos de boletería (29/10/2026, roadmap #33, ADR-020)** — aprobado por OCM, plan en `docs/plan-tipos-boleteria.md`, **Tarea 1 activa de `TODO.md`** (3 PR: backend, administración, público). Pareja = 2 sillas y 1 QR; un tipo por compra; normalización al leer, sin migración.
 
 Ya no pendientes, resueltos antes de lo previsto: Etapas de boletería con cierre automático (roadmap #23, PR #28) y Otros medios de pago — Bre-B resultó ser un tipo de transferencia bancaria común, cubierto por el medio de pago `transferencia` ya existente desde v1, sin desarrollo adicional (decisión del 06/08/2026).
 
@@ -416,6 +416,24 @@ Se presentaron cuatro opciones al usuario (Angular Material, solo Tailwind sin s
 - El bundle de `reportes.js` pasa de ~5 MB a ~7,8 MB (+2,7 MB de `pdfkit`). Sin costo recurrente nuevo.
 - Los textos de clientes son entrada hostil: se recortan los caracteres de control antes de dibujarlos y cada celda se trunca con «…» según su ancho medido (`ellipsis` de pdfkit no aplica con `lineBreak: false`; sin recortar, el texto se montaba sobre la fila siguiente).
 - `0 vulnerabilidades` en `npm audit --omit=dev` de `pdfkit@0.17.2` el 15/10/2026.
+
+### ADR-020 — Tipos de boletería: pareja = 2 sillas y 1 QR, y normalización al leer
+
+**Fecha:** 29/10/2026 · **Estado:** Aceptada
+
+**Decisión:** un evento define `tiposBoleta[]` (`tipoId`, `nombre`, `personas`, `orden`) y cada etapa define `precios[]` (`tipoId`, `precio`). Una compra es de **un solo tipo** y guarda `tipoId`, `tipoNombre`, `personas` y `sillas = cantidad × personas`. Una boleta de un tipo multi-persona consume `personas` sillas, emite **un solo QR** y se valida con la misma transición única `valida → usada`: las dos personas entran juntas o ninguna (sin ingresos parciales).
+
+**Contexto:** hay eventos con boletería individual y de pareja a precios distintos, y a futuro habrá diferencias de ubicación o paquetes (libro + entrada). Se descartó el QR por persona (cambiaba el modelo de boletas) y la boleta de una silla (el aforo no cuadraría con el teatro), y se descartó la compra con tipos mezclados (rediseño de compra, Bold y reportes).
+
+**Consecuencias:**
+- **Sin migración de datos:** el backend normaliza al leer; un evento sin `tiposBoleta` es un único tipo `defecto` («Por defecto», 1 persona) con el precio actual de cada etapa, y compras/boletas sin `tipoId` son `defecto`. Una sola función compartida hace esa normalización; ningún handler lee `etapa.precio` directamente.
+- **El aforo trabaja en sillas, no en boletas:** reservar, confirmar y devolver usan `compra.sillas` (respaldo a `cantidad` en compras legadas). La devolución sigue siendo condicional y calculada en JS (`ConditionExpression` no admite aritmética), para que un evento duplicado del stream no infle el aforo.
+- `maxBoletasPorCompra` cuenta boletas, no personas. El contador de asistentes del panel suma `personas` de las boletas usadas.
+- El precio, el total y `personas` los calcula siempre el backend a partir del evento almacenado; del cliente solo se acepta `tipoId` (A08).
+- Un tipo se puede renombrar aunque tenga ventas: compras y boletas guardan el nombre como instantánea.
+- Sin infraestructura nueva: costo adicional US$0, `PAY_PER_REQUEST` intacto.
+
+---
 
 ## 4. Dependencias instaladas
 
@@ -1852,3 +1870,13 @@ Primera tarea con el flujo nuevo de OCM: desarrollo, PR, revisión en staging, a
 6. **Pendiente de OCM:** fusionar esta rama.
 
 **Próxima tarea sugerida:** Tarea 1 de `TODO.md`, Exportación PDF: arrancar con la investigación corta (librería de PDF viable en Node 24/Lambda, tamaño de paquete, cold start, sin Chromium si es posible, y qué columnas lleva el reporte) y presentar opciones a OCM antes de escribir código.
+
+---
+
+**Sesión del 29/10/2026 — Planeación de Tipos de boletería (roadmap #33)**
+
+Punto de partida: pedido de OCM de poder vender varios tipos de boleta por evento (Individual, Pareja…) combinados con las etapas. Se exploró el modelo (`EtapaBoleteria.precio`, `etapaVigente`, `emitirBoletas`, reportes, aforo) y se resolvieron con OCM, por `AskUserQuestion`, las cuatro decisiones que condicionaban el diseño (sillas y QR de la pareja, compra mixta, tope por compra, migración) más tres sugerencias (campo «Personas», renombrar con ventas, selector de tipo en taquilla). Todas aprobadas.
+
+Lo que se hizo: `docs/plan-tipos-boleteria.md` (plan por PR y definición de terminado), ADR-020, `TODO.md` (Tarea 1 = Tipos de boletería), `PRD.md` §5.14, `tech-specs.md` (modelo de datos, aforo en sillas, fila #33 del roadmap técnico) y el tracking. No se escribió código.
+
+**Próxima tarea:** Tarea 1 de `TODO.md`, primer PR (`feature/tipos-boleteria-backend`), una vez OCM fusione el PR de documentación.
