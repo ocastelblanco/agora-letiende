@@ -2,13 +2,14 @@ import { Component, DestroyRef, computed, effect, inject, input, signal } from '
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CompraCreada, ComprasService } from '../../../core/api/compras.service';
 import { EventosPublicosService } from '../../../core/api/eventos-publicos.service';
-import type { EventoPublico } from '../../../core/models/evento.model';
+import type { EventoPublico, TipoBoleteria } from '../../../core/models/evento.model';
 import { PrecioPipe } from '../../../shared/pipes/precio.pipe';
 import { etapaVigenteParaMostrar } from '../../../shared/utilidades/etapa-vigente';
 import { paraInputBogota } from '../../../shared/utilidades/fecha-bogota';
+import { precioDelTipoEnEtapa, tiposDelEvento } from '../../../shared/utilidades/tipos-boleteria';
 
 /** Medio de pago elegible por un cliente sin autenticar — nunca 'efectivo' (venta presencial). */
 type MedioPagoPublico = 'transferencia' | 'bold';
@@ -71,7 +72,7 @@ function obtenerBoldCheckout(): ConstructorBoldCheckout | undefined {
  */
 @Component({
   selector: 'app-comprar',
-  imports: [ReactiveFormsModule, MatButtonModule, PrecioPipe],
+  imports: [ReactiveFormsModule, MatButtonModule, PrecioPipe, RouterLink],
   templateUrl: './comprar.component.html',
 })
 export class ComprarComponent {
@@ -83,6 +84,12 @@ export class ComprarComponent {
   private readonly router = inject(Router);
 
   readonly slug = input.required<string>();
+  /**
+   * Roadmap #33 — `?tipo=<tipoId>` de la página del evento (Signal input por
+   * `withComponentInputBinding()`, igual que `slug`). Solo selecciona qué
+   * tipo mostrar y enviar: el precio real lo calcula siempre el backend.
+   */
+  readonly tipo = input<string | undefined>(undefined);
 
   protected readonly evento = signal<EventoPublico | null>(null);
   protected readonly cargando = signal(true);
@@ -137,6 +144,38 @@ export class ComprarComponent {
     const evento = this.evento();
     return evento ? etapaVigenteParaMostrar(evento.etapas) : null;
   });
+
+  /** Tipos de boleta del evento; siempre hay al menos uno (roadmap #33). */
+  protected readonly tipos = computed(() => {
+    const evento = this.evento();
+    return evento ? tiposDelEvento(evento) : [];
+  });
+
+  /**
+   * Tipo con el que se compra: el único del evento, o el que pidió `?tipo=`
+   * cuando hay varios y la etapa vigente lo ofrece. `null` si hay varios y el
+   * parámetro falta, no existe o no tiene precio en la etapa vigente — en ese
+   * caso la página no deja comprar y devuelve al evento (nunca se adivina un
+   * tipo por el cliente).
+   */
+  protected readonly tipoSeleccionado = computed<TipoBoleteria | null>(() => {
+    const tipos = this.tipos();
+    if (tipos.length === 0) {
+      return null;
+    }
+    if (tipos.length === 1) {
+      return tipos[0];
+    }
+    const elegido = tipos.find((tipo) => tipo.tipoId === this.tipo());
+    const etapa = this.etapaVigente();
+    if (!elegido || !etapa || precioDelTipoEnEtapa(etapa, elegido.tipoId) === null) {
+      return null;
+    }
+    return elegido;
+  });
+
+  /** `true` si hay varios tipos: se muestra cuál se compra y se envía su `tipoId`. */
+  protected readonly variosTipos = computed(() => this.tipos().length > 1);
 
   protected readonly puedeComprar = computed(() => {
     const evento = this.evento();
@@ -435,8 +474,10 @@ export class ComprarComponent {
   /** Total mostrado en pantalla — solo referencia, nunca se envía al backend. */
   protected totalEstimado(): number {
     const etapa = this.etapaVigente();
+    const tipo = this.tipoSeleccionado();
     const cantidad = this.formulario.controls.cantidad.value;
-    return etapa && cantidad > 0 ? etapa.precio * cantidad : 0;
+    const precio = etapa && tipo ? precioDelTipoEnEtapa(etapa, tipo.tipoId) : null;
+    return precio !== null && cantidad > 0 ? precio * cantidad : 0;
   }
 
   protected fechaLimiteLegible(expiraEnIso: string): string {
@@ -473,7 +514,8 @@ export class ComprarComponent {
       return;
     }
     const evento = this.evento();
-    if (!evento) {
+    const tipo = this.tipoSeleccionado();
+    if (!evento || !tipo) {
       return;
     }
 
@@ -484,6 +526,9 @@ export class ComprarComponent {
       const resultado = await this.comprasService.crearCompra({
         slug: evento.slug,
         cantidad: valores.cantidad,
+        // Solo con varios tipos: un evento sin tipos propios envía el mismo
+        // payload de siempre (el backend resuelve el tipo implícito).
+        ...(this.variosTipos() ? { tipoId: tipo.tipoId } : {}),
         cliente: { nombre: valores.nombre, telefono: valores.telefono, correo: valores.correo },
         autorizacionDatos: valores.autorizacionDatos,
         ...(medioPago ? { medioPago } : {}),

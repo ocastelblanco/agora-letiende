@@ -43,6 +43,21 @@
           (ngSubmit)="registrarVenta()"
           class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
         >
+          @if (variosTipos()) {
+            <div>
+              <label for="tipoId" class="mb-1 block text-sm font-semibold text-primary">Tipo de boleta</label>
+              <select
+                id="tipoId"
+                formControlName="tipoId"
+                class="w-full rounded-xl border border-primary/20 px-3 py-2 text-sm text-primary"
+              >
+                @for (tipo of opcionesTipo(); track tipo.tipoId) {
+                  <option [value]="tipo.tipoId">{{ tipo.nombre }}</option>
+                }
+              </select>
+            </div>
+          }
+
           <div>
             <label for="cantidad" class="mb-1 block text-sm font-semibold text-primary">
               Cantidad de boletas

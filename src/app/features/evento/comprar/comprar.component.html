@@ -51,6 +51,12 @@
               página — te enviaremos las boletas a tu correo apenas se confirme el pago.
             </p>
             <dl class="mb-4 flex flex-col gap-1 text-sm text-primary/80">
+              @if (variosTipos() && tipoSeleccionado(); as tipoElegido) {
+                <div class="flex justify-between">
+                  <dt>Tipo de boleta</dt>
+                  <dd>{{ tipoElegido.nombre }}</dd>
+                </div>
+              }
               <div class="flex justify-between">
                 <dt>Cantidad de boletas</dt>
                 <dd>{{ compra.cantidad }}</dd>
@@ -118,6 +124,12 @@
               </p>
             }
             <dl class="flex flex-col gap-1 text-sm text-primary/80">
+              @if (variosTipos() && tipoSeleccionado(); as tipoElegido) {
+                <div class="flex justify-between">
+                  <dt>Tipo de boleta</dt>
+                  <dd>{{ tipoElegido.nombre }}</dd>
+                </div>
+              }
               <div class="flex justify-between">
                 <dt>Cantidad de boletas</dt>
                 <dd>{{ compra.cantidad }}</dd>
@@ -135,12 +147,35 @@
             Este evento no tiene boletas disponibles en este momento.
           </p>
         </div>
+      } @else if (!tipoSeleccionado()) {
+        <div class="rounded-2xl bg-white p-8 text-center shadow-[0_4px_16px_rgba(35,12,0,0.08)]">
+          <p class="mb-4 text-sm text-primary/70">
+            Elige el tipo de boleta desde la página del evento para continuar.
+          </p>
+          <a
+            [routerLink]="['/evento', detalleEvento.slug]"
+            class="inline-flex h-12 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold tracking-wider text-neutral uppercase transition-opacity hover:opacity-90"
+          >
+            Volver al evento
+          </a>
+        </div>
       } @else {
         <form
           [formGroup]="formulario"
           (ngSubmit)="comprar()"
           class="flex flex-col gap-6 rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(35,12,0,0.08)]"
         >
+          @if (variosTipos() && tipoSeleccionado(); as tipoElegido) {
+            <div class="rounded-xl border border-primary/10 px-3 py-2 text-sm text-primary">
+              <span class="font-semibold">Tipo de boleta:</span> {{ tipoElegido.nombre }}
+              @if (tipoElegido.personas > 1) {
+                <span class="block text-xs text-primary/60">
+                  Cada boleta es para {{ tipoElegido.personas }} personas y ocupa {{ tipoElegido.personas }} sillas.
+                </span>
+              }
+            </div>
+          }
+
           <div>
             <label for="cantidad" class="mb-1 block text-sm font-semibold text-primary">
               Cantidad de boletas
