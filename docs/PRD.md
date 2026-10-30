@@ -193,7 +193,7 @@ El sistema responde de inmediato con uno de estos veredictos:
    └── ❌ OTRO EVENTO → boleta legítima, pero de otra función
 ```
 
-Una boleta válida se marca como usada en el momento del escaneo y no puede volver a usarse. El contador de asistentes del panel de control se actualiza en el acto. Un `portero` solo ve, en el selector de eventos, aquellos en los que está asignado — mismo criterio de `5.4` *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
+Una boleta válida se marca como usada en el momento del escaneo y no puede volver a usarse. Una boleta de un tipo multi-persona (por ejemplo «Pareja», `5.14`) se valida con una sola lectura y el veredicto indica a cuántas personas admite; no hay ingresos parciales. El contador de asistentes del panel de control se actualiza en el acto. Un `portero` solo ve, en el selector de eventos, aquellos en los que está asignado — mismo criterio de `5.4` *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
 
 ### 5.6 Panel de control del evento (v1 básico, v2 completo)
 
@@ -244,6 +244,18 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 
 ---
 
+### 5.14 Tipos de boletería (v2)
+
+Un evento puede ofrecer más de un tipo de boleta al mismo tiempo: por ejemplo **Individual** y **Pareja**, o, a futuro, boletas que difieren por ubicación o por lo que incluyen (libro + entrada y entrada sola). Se combinan con las etapas: dos tipos y dos etapas son cuatro precios.
+
+- **Configuración (administrador):** en «Etapas de boletería» hay un panel «Tipos de boletería» con al menos un tipo («Por defecto»). Cada tipo tiene un nombre y un número de **personas** (1 por defecto; 2 para una pareja). Cada etapa define el precio de cada tipo que ofrece. Un tipo en uso por alguna etapa no se puede eliminar; el primero nunca se elimina, solo vuelve a «Por defecto».
+- **Página del evento:** las etapas se muestran como una tabla (una fila por etapa, una columna por tipo) y, debajo, un botón «Comprar {tipo} {precio}» por cada tipo con precio en la etapa vigente. Si todas las etapas solo tienen el tipo «Por defecto», la vista es la de siempre.
+- **Compra:** un solo tipo por compra. Una boleta de pareja consume 2 sillas del aforo, emite **un solo QR** y se valida con una única lectura: entran las dos personas o ninguna. El tope «máximo de boletas por compra» cuenta boletas, no personas.
+- **Reportes y paneles:** todas las tablas incluyen la columna «Tipo de boleta», y el contador de asistentes suma personas.
+- **Eventos existentes:** siguen funcionando sin cambios; se tratan como un único tipo «Por defecto».
+
+Plan y decisiones: `docs/plan-tipos-boleteria.md` · ADR-020.
+
 ## 6. Roadmap
 
 **No hay fecha límite fija.** El orden lo determinan las dependencias técnicas y el valor entregado, no un calendario. La decisión explícita del equipo es entregar primero un **ciclo completo mínimo**: un evento que se puede crear, vender, cobrar, emitir y validar de punta a punta. Un ciclo completo aunque austero es utilizable en un evento real; media docena de funcionalidades a medias no lo es.
@@ -289,6 +301,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | Pantalla sin salida tras un pago rechazado con Bold (el cliente queda sin ningún botón para continuar) | **Alta** | ✅ Corregido (01/10/2026): el estado de la compra devuelve la config de Bold mientras la reserva esté vigente; primera parte del endurecimiento (roadmap #32), validado por OCM, PR #88 pendiente de fusión |
 | Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | ✅ Idempotencia fusionada y validada en staging (PR #89); guarda de "eliminar" implementada (01/10/2026, pendiente de fusión) — endurecimiento (roadmap #32) completo |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | ✅ Suite simulada corriendo en cada PR (roadmap #30, PR #83) y suite real contra el sandbox de Bold, a demanda (PR #85) |
+| Tipos de boletería (Individual, Pareja…) combinados con las etapas | **Alta** | 🟡 Planeado y aprobado (29/10/2026, roadmap #33, ADR-020) — plan en `docs/plan-tipos-boleteria.md` |
 
 ### v3 — Ideas no comprometidas
 
@@ -392,6 +405,7 @@ Al crear un evento, este aparece automáticamente en el calendario de `letiende.
 | **Evento** | Una función específica de un espectáculo, con su fecha, hora, aforo y precios propios. |
 | **Aforo** | Cantidad total de sillas disponibles para un evento. Es un límite físico del teatro. |
 | **Etapa de boletería** | Período de venta con un precio propio y una fecha de cierre (por ejemplo, "preventa" y "taquilla"). Un evento puede no tener ninguna (v2) — en ese caso no cobra nada y solo controla el aforo. |
+| **Tipo de boletería** | Variante de boleta que un evento vende al mismo tiempo, con su propio precio por etapa y un número de personas (por ejemplo «Individual», 1 persona, y «Pareja», 2 personas). Un evento siempre tiene al menos uno, «Por defecto». |
 | **Boletería externa** | Evento anunciado en la Cartelera de Ágora cuya boletería administra un tercero, no Le Tiende. No tiene sillas, etapas ni medios de pago en Ágora: en su lugar expone un vínculo (WhatsApp, Instagram o web) hacia el canal real de venta (v2). |
 | **Boleta** | El derecho de una persona a entrar a un evento. Es la unidad que se emite y se valida: una compra de 3 boletas genera 3 boletas independientes, cada una con su código único. |
 | **Compra** | La transacción por la cual un cliente adquiere una o varias boletas de un mismo evento. |

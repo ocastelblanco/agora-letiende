@@ -304,3 +304,5 @@ Backend,23/10/2026 22:30,23/10/2026 22:35,0:05:00,AI,Sonnet 5.5,"Webhook de Bold
 Infra,23/10/2026 22:05,23/10/2026 22:30,0:25:00,AI,Sonnet 5.5,"Diagnostica dos boletas de Bold que no llegaron al panel: webhook inactivo, 404 reintentados, tabla de 5 compras a validar",Claude Code,cli,high
 Infra,23/10/2026 22:35,23/10/2026 23:10,0:35:00,human,OCM,"Valida las compras en Bold, emite 7 boletas en efectivo, reactiva el webhook, fusiona el PR 111, crea EMAIL_ALERTAS y confirma SNS","Bold Panel, Ágora, GitHub",desktop,medium
 Backend,23/10/2026 23:15,23/10/2026 23:30,0:15:00,AI,Sonnet 5.5,"Documenta el cierre del incidente de Bold, el secreto EMAIL_ALERTAS y los pendientes",Claude Code,cli,low
+Specs definition,29/10/2026 14:38,29/10/2026 15:57,1:19:00,human,OCM,"Define el requerimiento de Tipos de boletería: contexto, cambios de frontend y de backend",Editor Markdown,desktop,high
+Specs definition,29/10/2026 15:57,29/10/2026 20:41,4:44:00,AI,Sonnet 5.5,"Planea Tipos de boletería: explora el modelo, resuelve decisiones con OCM, escribe plan, ADR-020 y actualiza PRD, tech-specs, MEMORY y TODO",Claude Code,cli,medium

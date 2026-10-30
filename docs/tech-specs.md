@@ -251,10 +251,24 @@ export interface Usuario {
 
 export type EstadoEvento = 'borrador' | 'publicado' | 'agotado' | 'finalizado' | 'cancelado';
 
+// v2 (roadmap #33, ADR-020) — un evento define sus tipos; cada etapa, el precio de cada tipo.
+export interface TipoBoleteria {
+  tipoId: string;             // UUID; el tipo implícito de datos legados es el literal 'defecto'
+  nombre: string;             // "Individual", "Pareja", "Por defecto"
+  personas: number;           // 1..10 — sillas que consume cada boleta de este tipo
+  orden: number;
+}
+
+export interface PrecioEtapa {
+  tipoId: string;
+  precio: number;             // COP entero; 0 = gratuito
+}
+
 export interface EtapaBoleteria {
   etapaId: string;
   nombre: string;             // "Preventa", "Taquilla"
-  precio: number;             // COP entero; 0 = gratuito
+  precios: PrecioEtapa[];     // roadmap #33 — al menos uno; un evento legado se normaliza al leer
+  precio?: number;            // Legado: precio plano previo a #33; solo lectura (se normaliza a precios)
   cierraEn: string;           // ISO 8601 UTC
   orden: number;
 }
@@ -293,6 +307,7 @@ export interface Evento {
   sillasReservadas: number;
   // v2 (roadmap #24) — puede ser `[]`: un evento sin etapas no cobra nada,
   // solo controla aforo. El cobro se activa al agregar la primera etapa.
+  tiposBoleta: TipoBoleteria[]; // roadmap #33 — siempre ≥ 1 (normalizado al leer: [{ tipoId: 'defecto', … }])
   etapas: EtapaBoleteria[];
   maxBoletasPorCompra: number;
   mediosPago: MedioPago[];    // Sin etapas, solo admite 'efectivo'/'transferencia' — nunca 'bold'
@@ -321,6 +336,10 @@ export interface Compra {
   cliente: { nombre: string; telefono: string; email: string };
   cantidad: number;
   etapaId?: string;           // v2 (roadmap #24) — ausente si el evento no tiene etapas
+  tipoId?: string;            // roadmap #33 — ausente en compras legadas (= 'defecto')
+  tipoNombre?: string;        // Instantánea del nombre al comprar
+  personas?: number;          // Instantánea: personas por boleta (por defecto 1)
+  sillas?: number;            // cantidad × personas — lo que reserva y devuelve el aforo (respaldo: cantidad)
   valorUnitario: number;      // Calculado en el backend, nunca recibido del cliente
   valorTotal: number;
   medioPago: MedioPago;
@@ -343,6 +362,9 @@ export interface Boleta {
   compraId: string;
   numeroEnCompra: number;     // 1..n dentro de la compra
   etapaId?: string;           // v2 (roadmap #24) — ausente si el evento no tiene etapas
+  tipoId?: string;            // roadmap #33 — ausente en boletas legadas (= 'defecto')
+  tipoNombre?: string;
+  personas?: number;          // Un solo QR admite a todas; sin ingresos parciales
   valorUnitario: number;
   estado: EstadoBoleta;
   ingresoEn?: string;
@@ -504,6 +526,8 @@ La condición sobre `sillasReservadas` es lo que hace la operación segura ante 
 **5 — Reducción de aforo por edición.** Al editar un evento, `sillasTotales` no puede quedar por debajo de las sillas ya vendidas más las reservadas (`PRD.md` §9). Se valida con `ConditionExpression` (`sillasDisponibles + :delta >= 0` sobre el valor real al momento de escribir, más una guarda optimista sobre `sillasTotales` para no aplicar un delta calculado sobre una lectura obsoleta), nunca en el cliente. El nuevo `sillasTotales` se escribe como valor absoluto; `sillasDisponibles` se ajusta con aritmética relativa (`= sillasDisponibles + :delta`) para no perder una reserva/venta concurrente entre la lectura y la escritura.
 
 **6 — Un evento vencido se trata como `finalizado`, aunque el campo `estado` no lo refleje todavía.** Igual que el TTL (punto 4), no hay ningún job programado que garantice el cambio de estado al segundo — hotfixes pre-producción, decisión explícita de no agregar infraestructura nueva (sin Lambda con cron/EventBridge). Un evento está vencido cuando **tanto** su `fechaHora` **como** el cierre de su última etapa (por `cierraEn`, no por `orden`) ya pasaron; sigue vigente mientras cualquiera de los dos no haya pasado (`lib/vigencia-evento.ts`, `estadoEfectivo()`/`haFinalizadoPorVigencia()`). Cada lectura pública (`eventos-publicos.ts`) y cada intento de venta (`compras.ts`, `ventas-efectivo.ts`) calculan la vigencia en tiempo real y tratan el evento como `finalizado` para efectos de visibilidad/venta sin esperar a que la base de datos lo confirme; esas mismas lecturas actualizan `estado` en DynamoDB como efecto secundario best-effort (`finalizarSiVencido()`, `ConditionExpression` sobre el estado leído, error de condición silenciado), sin bloquear la respuesta si la escritura falla. Un evento `cancelado` sigue siendo visible en la cartelera pública (con el banner correspondiente) mientras esté vigente bajo el mismo criterio — nunca habilita una venta, que sigue exigiendo `estado = 'publicado'` exacto.
+
+**7 — El aforo se cuenta en sillas, no en boletas (roadmap #33, ADR-020).** Una boleta de un tipo multi-persona («Pareja», `personas = 2`) consume `personas` sillas. Reservar, confirmar y devolver usan `compra.sillas = cantidad × personas` (respaldo a `cantidad` en compras legadas sin ese campo). La suma se calcula en JS antes de armar la petición; la guarda de devolución sigue siendo `sillasDisponibles >= :n` / tope calculado, nunca aritmética dentro de `ConditionExpression` (§7 de `CLAUDE.md`). El mismo `compra.sillas` evita que un evento duplicado del stream infle el aforo.
 
 ### 5.5 Emisión y validación de boletas
 
@@ -771,3 +795,4 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 30 | **v2** — Pruebas E2E Playwright del flujo de compra con Bold (PR A, PR #83: suite simulada; PR B, PR #85: suite real contra staging) | `playwright.config.ts` (`E2E_STAGING=1` activa la suite real), `e2e/simulado/compra-bold.e2e.ts`, `e2e/apoyos/` (`api-simulada.ts`, `bold-simulado.ts`, `pagina-compra.ts`, `datos.ts`), `e2e/staging/` (`global-setup.ts`, `global-teardown.ts`, `compra-bold-real.e2e.ts`, `apoyos/aws-staging.ts`, `apoyos/checkout-bold.ts`), `.github/workflows/e2e.yml` (job `simulado` en cada PR y job `staging` con `workflow_dispatch`) | 19, 26–29 |
 | 31 | **v2** — Guarda síncrona contra doble toque (PR #83, PR #84) | `features/evento/comprar/comprar.component.ts` (`comprar()`), `features/evento/venta-efectivo/venta-efectivo.component.ts` (`registrarVenta()`), `features/evento/comprobante/comprobante.component.ts` (`subir()`), `features/admin/gestion-eventos/editar-evento.component.ts` y `features/admin/gestion-usuarios/gestion-usuarios.component.ts` (`guardar()`): `if (this.enviando()) return;` antes de `set(true)` (`CLAUDE.md` §7), con una prueba unitaria por componente | 30 |
 | 32 | **v2** — Endurecimiento: pantalla sin salida tras pago rechazado + idempotencia del backend en compra y venta en efectivo + guarda de "eliminar con confirmación" | `server/api/handlers/compras.ts` (`GET /api/compras/:id/estado` devolvería `bold` mientras la reserva esté vigente), `features/evento/comprar/comprar.component.ts` (`recuperarEstadoTrasBold`, `iniciarCheckoutBold`), `server/api/handlers/ventas-efectivo.ts` (clave de idempotencia en `Idempotency-Key`, escritura condicional con la respuesta guardada y TTL; diseño por decidir), `features/admin/gestion-eventos/gestion-eventos.component.ts` y `features/admin/gestion-usuarios/gestion-usuarios.component.ts` (`eliminar()`) | 30, 31 |
+| 33 | **v2** — Tipos de boletería (ADR-020, plan en `docs/plan-tipos-boleteria.md`) — 🟡 planeado, 3 PR | `server/api/lib/` (`normalizarTipos`), `server/api/handlers/eventos.ts`, `compras.ts`, `ventas-efectivo.ts`, `bold-webhook.ts`, `aprobaciones.ts`, `boletas.ts`, `reportes.ts`, `server/api/services/aforo.ts`, `boleteria.ts`, `features/admin/gestion-eventos/editar-evento.component.*`, `features/evento/*`, `features/puerta/*`, `features/panel/*` |
