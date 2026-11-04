@@ -1,5 +1,5 @@
 /**
- * Duración de un evento (roadmap #26, `docs/plan-ajustes-eventos.md` Tarea 1).
+ * Duración de un evento (roadmap #26, `docs/archivo/plan-ajustes-eventos.md` Tarea 1).
  * Define la hora de fin en Google Calendar: `fechaHora + duracionMinutos`.
  * Vive en `lib/` (y no en `google-calendar.ts`) para que `eventos.ts` la
  * comparta sin depender de un módulo que sus pruebas reemplazan por completo.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Relleno único de `duracionMinutos = 180` (3 h) en los eventos que todavía no
- * lo tienen (roadmap #26, `docs/plan-ajustes-eventos.md` Tarea 1).
+ * lo tienen (roadmap #26, `docs/archivo/plan-ajustes-eventos.md` Tarea 1).
  *
  * Uso (simulacro por defecto; no escribe nada sin `--aplicar`):
  *   TABLA_EVENTOS=agora-eventos-staging AWS_REGION=us-east-1 \

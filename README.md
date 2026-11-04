@@ -22,7 +22,7 @@
 
 The goal is to replace the manual process — WhatsApp conversations, receipts checked by hand, scattered attendee lists, and entry validated by reading names off paper — with an end-to-end digital flow, with no overselling and without piling simultaneous work onto the Le Tiende team.
 
-[PRD](docs/PRD.md) | [Technical specs](docs/tech-specs.md) | [v2/v3 roadmap (non-technical)](docs/roadmap-v2-v3.md) | [TODO / active roadmap](docs/TODO.md) | [Project memory](docs/MEMORY.md)
+[PRD](docs/PRD.md) | [Technical specs](docs/tech-specs.md) | [Design system](docs/DESIGN.md) | [TODO / active roadmap](docs/TODO.md) | [Project memory](docs/MEMORY.md)
 
 ## Features
 
@@ -33,6 +33,8 @@ The goal is to replace the manual process — WhatsApp conversations, receipts c
 * Door validation by QR scan, with a clear verdict (valid / already used / nonexistent / from another event)
 * Cash sales from the door or in person
 * Ticketing stages (early bird, box office, etc.) with automatic closing by date
+* Ticket types (for example, Single and Couple) combined with the stages: a "Couple" ticket takes two seats and is validated with a single QR code
+* Duration for each show, event duplication to create several shows of the same production, and event and dashboard lists with status, sorting and month or week filters
 * Event dashboard (sold, available, checked in, seats pending confirmation) with Excel and PDF report export
 * Ágora-specific user and role management (`administrator` / `producer` / `gatekeeper`), authorization per assigned event
 * Google sign-in (Firebase Authentication), a project shared with Comandante and Babel
@@ -40,11 +42,11 @@ The goal is to replace the manual process — WhatsApp conversations, receipts c
 * Automatic sync of every event to Google Calendar
 * Automatic online payment by card or PSE via **Bold** (embedded checkout, no leaving the site), as an alternative to manual bank transfer — confirmed by a signed, reconciled webhook, never by whatever the customer's browser reports
 
-What comes after v1 — WhatsApp notifications — is described for a non-technical audience in [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
+What comes next — WhatsApp notifications and the v3 ideas — is in the roadmap in [`docs/PRD.md`](docs/PRD.md) §6.
 
 ## Project status
 
-**Ágora has been in production** since August 14, 2026, at [`agora.letiende.co`](https://agora.letiende.co). The full lifecycle of an event (create, sell, charge, issue ticket, validate at the door) works end to end. Product and architecture documentation lives in [`docs/PRD.md`](docs/PRD.md) and [`docs/tech-specs.md`](docs/tech-specs.md); detailed status and the decisions made along the way are in [`docs/MEMORY.md`](docs/MEMORY.md). Active tasks (if any) are in [`docs/TODO.md`](docs/TODO.md) — the project can sit without an active task while waiting for real usage feedback before prioritizing what comes next.
+**Ágora has been in production** since August 14, 2026, at [`agora.letiende.co`](https://agora.letiende.co). The current version is **1.2.0**: v1, plus automatic payment with Bold (1.1) and ticket types (1.2). The full lifecycle of an event (create, sell, charge, issue ticket, validate at the door) works end to end. Product and architecture documentation lives in [`docs/PRD.md`](docs/PRD.md) and [`docs/tech-specs.md`](docs/tech-specs.md); detailed status and the decisions made along the way are in [`docs/MEMORY.md`](docs/MEMORY.md). Active tasks (if any) are in [`docs/TODO.md`](docs/TODO.md) — the project can sit without an active task while waiting for real usage feedback before prioritizing what comes next.
 
 ## Contents
 

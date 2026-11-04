@@ -312,3 +312,5 @@ Frontend,29/10/2026 21:38,29/10/2026 21:46,0:08:00,AI,Sonnet 5.5,"Implementa el 
 Frontend,29/10/2026 22:05,29/10/2026 22:18,0:13:00,AI,Sonnet 5.5,"Implementa el frontend público de tipos de boletería: tabla por tipo, compra, taquilla, puerta, boleta, panel y E2E; cierra la documentación",Claude Code,cli,high
 Frontend,30/10/2026 12:35,30/10/2026 12:44,0:09:00,AI,Sonnet 5.5,"Ajusta en móvil las filas de tipos y precios por etapa: flex-wrap, mínimo de 10em, grupo campo+botón y divisores",Claude Code,cli,low
 Backend,30/10/2026 12:48,30/10/2026 12:55,0:07:00,AI,Sonnet 5.5,"Resuelve el conflicto del tracking con main y actualiza memoria, JIT, PRD y tech-specs tras fusionar los PR 116 y 117",Claude Code,cli,low
+Specs definition,04/11/2026 14:58,04/11/2026 15:07,0:09:00,AI,Opus 5.5,"Audita la documentación de docs/ y README: qué está desactualizado, qué actualizar y qué borrar",Claude Code,cli,medium
+Specs definition,04/11/2026 15:10,04/11/2026 15:24,0:16:00,AI,Opus 5.5,"Limpia la documentación y pasa a v1.2.0: archiva planes, retira roadmap, poda MEMORY y TODO",Claude Code,cli,high
