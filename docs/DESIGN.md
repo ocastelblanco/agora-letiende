@@ -1,8 +1,8 @@
 # DESIGN.md — Sistema de diseño de Ágora
 
-Este documento es la fuente de verdad visual de Ágora: colores, tipografía, componentes y patrones de página. A diferencia del `DESIGN.md` de Babel (que documenta retrospectivamente componentes ya construidos), **el de Ágora es prescriptivo por ahora**: todavía no existen páginas de feature más allá de la de verificación del andamiaje (Tarea 1 original de `TODO.md`). Este documento establece las clases exactas que las páginas futuras deben usar, copiadas/adaptadas de los patrones ya probados en producción de Babel.
+Este documento es la fuente de verdad visual de Ágora: colores, tipografía, componentes y patrones de página. **Describe la interfaz en producción (versión 1.2.0, revisado el 04/11/2026)**: cartelera y página de evento, compra con Bold o comprobante, boleta digital, puerta, taquilla, panel de control, aprobaciones y administración de eventos y usuarios. Nació prescriptivo, copiando los patrones ya probados del `DESIGN.md` de Babel, y se fue corrigiendo a medida que se construían las páginas.
 
-**Cuando se construyan páginas reales** (backlog #2 en adelante de `TODO.md`), este documento se actualiza para reflejar desvíos reales frente a lo aquí prescrito — igual que ya hace el de Babel.
+**Regla de mantenimiento:** una página nueva sigue las clases de este documento; si se desvía de ellas a propósito, el mismo PR actualiza la sección correspondiente.
 
 Fuente de los valores: `CLAUDE.md` §4, `docs/tech-specs.md` §4.4, ADR-012 en `docs/MEMORY.md`.
 
@@ -109,16 +109,19 @@ Mismo valor exacto que Babel. Los formularios reactivos (`ReactiveFormsModule`, 
 
 ## 7. Angular Material vs. HTML propio
 
+Inventario verificado el 04/11/2026: 16 componentes importan 14 módulos de `@angular/material`; `@angular/cdk` no se importa directamente (solo es dependencia par de Material). Las páginas públicas usan casi solo HTML propio: de Material solo toman botones y *snackbar* en compra, comprobante y venta en efectivo.
+
 Regla general: **Angular Material para componentes complejos con estado/interacción no trivial; HTML propio + Tailwind para todo lo demás** (la mayoría de la interfaz).
 
 | Se resuelve con Angular Material | Se resuelve con HTML propio + Tailwind |
 |---|---|
-| Tabla del panel de control (`mat-table` con sorting/paginación) | Tarjetas de evento en la cartelera |
-| Selector de fecha/hora al crear o editar un evento (`mat-datepicker`) | Formulario de compra (nombre, teléfono, correo, cantidad) |
-| Carga de archivo del comprobante (`mat-form-field` + input de archivo, o un componente de upload con progreso) | Vista de boleta digital con QR |
-| Menús desplegables de rol/estado (`mat-select`) | Pantalla de puerta (veredicto a pantalla completa) |
-| Notificaciones tipo toast de acciones administrativas (`MatSnackBar`) | Botones, tarjetas, inputs listados arriba |
-| Diálogos de confirmación destructiva (`MatDialog`: "¿Eliminar este evento?") | Layout de página, navegación, encabezados |
+| Tablas de eventos, usuarios y panel de control (`mat-table`, con `mat-sort` en el panel) | Tarjetas de evento en la cartelera |
+| Menús desplegables de rol y de tipo de boleta (`mat-select`) | Formulario de compra (nombre, teléfono, correo, tipo y cantidad) |
+| Selectores de opción, orden y periodo (`mat-button-toggle`), interruptores (`mat-slide-toggle`), pestañas de navegación de taquilla y mis eventos (`mat-tab-nav-bar`) | Fecha y hora del evento: `<input type="datetime-local">` nativo, convertido a UTC con `shared/utilidades/fecha-bogota.ts` (no se usa `mat-datepicker`) |
+| Secciones plegables del formulario de evento, como las etapas (`mat-expansion-panel`) | Carga de archivos (comprobante, imágenes de evento): `<input type="file">` nativo |
+| Notificaciones tipo toast de acciones administrativas (`MatSnackBar`) | Vista de boleta digital con QR y pantalla de puerta (veredicto a pantalla completa) |
+| Diálogos de confirmación destructiva (`MatDialog`: "¿Eliminar este evento?") | Botones, tarjetas, inputs, layout de página, navegación y encabezados |
+| Botones de ícono, íconos (`mat-icon` con Material Symbols, §9–§10), `mat-tooltip` y `mat-chips` | |
 
 Todo componente de Angular Material usado se apoya en los tokens `--mat-sys-*` ya definidos en `src/material-theme.scss` — nunca se le pasa un color hardcodeado por fuera del tema.
 
@@ -170,7 +173,7 @@ Disponibles en `public/` (copiados desde `~/Documents/LeTiende/letiende.co/babel
 
 ## 10. Indicadores de estado y botones de ícono
 
-Roadmap #27 (`docs/plan-ajustes-eventos.md` Tarea 2). Primer uso de íconos de interfaz en Ágora: `<mat-icon fontSet="material-symbols-outlined">` sobre un **subconjunto de Material Symbols Outlined** que carga `src/index.html` con el parámetro `icon_names` (solo los glifos usados, en orden alfabético; al agregar un ícono nuevo hay que sumarlo a esa lista). Se eligió Material Symbols y no la fuente Material Icons que ya cargaba el proyecto porque esta última no incluye `draft`.
+Roadmap #27 (`docs/archivo/plan-ajustes-eventos.md` Tarea 2). Primer uso de íconos de interfaz en Ágora: `<mat-icon fontSet="material-symbols-outlined">` sobre un **subconjunto de Material Symbols Outlined** que carga `src/index.html` con el parámetro `icon_names` (solo los glifos usados, en orden alfabético; al agregar un ícono nuevo hay que sumarlo a esa lista). Se eligió Material Symbols y no la fuente Material Icons que ya cargaba el proyecto porque esta última no incluye `draft`.
 
 **Chip de estado del evento:** un círculo de `h-8 w-8 rounded-full` con el ícono centrado (`text-[18px]`), a la izquierda del nombre del evento. Lleva siempre `matTooltip` y `aria-label` con el nombre del estado, porque el color por sí solo no transmite información (accesibilidad).
 

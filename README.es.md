@@ -22,7 +22,7 @@
 
 El objetivo es reemplazar el proceso manual —conversaciones de WhatsApp, comprobantes revisados a mano, listas de asistentes dispersas y validación de entrada leyendo nombres en papel— por un flujo digital de punta a punta, sin sobreventa y sin sobrecargar de trabajo simultáneo al equipo de Le Tiende.
 
-[PRD](docs/PRD.md) | [Especificaciones técnicas](docs/tech-specs.md) | [Roadmap v2/v3 (no técnico)](docs/roadmap-v2-v3.md) | [TODO / roadmap activo](docs/TODO.md) | [Memoria de proyecto](docs/MEMORY.md)
+[PRD](docs/PRD.md) | [Especificaciones técnicas](docs/tech-specs.md) | [Sistema de diseño](docs/DESIGN.md) | [TODO / roadmap activo](docs/TODO.md) | [Memoria de proyecto](docs/MEMORY.md)
 
 ## Features
 
@@ -33,6 +33,8 @@ El objetivo es reemplazar el proceso manual —conversaciones de WhatsApp, compr
 * Validación de boletas en la puerta por escaneo de QR, con veredicto claro (válida / usada / inexistente / de otro evento)
 * Venta en efectivo desde la puerta o presencial
 * Etapas de boletería (preventa, taquilla, etc.) con cierre automático por fecha
+* Tipos de boletería (por ejemplo, Individual y Pareja) combinados con las etapas: una boleta «Pareja» ocupa dos sillas y se valida con un solo QR
+* Duración de cada función, duplicado de eventos para crear varias funciones del mismo espectáculo, y listas de eventos y paneles con estado, orden y filtros por mes o semana
 * Panel de control del evento (vendidas, disponibles, ingresados, sillas pendientes de confirmar) con exportación de reportes en Excel y PDF
 * Gestión de usuarios y roles propios de Ágora (`administrador` / `productor` / `portero`), autorización por evento asignado
 * Autenticación con Google (Firebase Authentication), proyecto compartido con Comandante y Babel
@@ -40,11 +42,11 @@ El objetivo es reemplazar el proceso manual —conversaciones de WhatsApp, compr
 * Sincronización automática de cada evento con Google Calendar
 * Pago automático en línea con tarjeta o PSE vía **Bold** (checkout embebido, sin salir del sitio), como alternativa a la transferencia manual — confirmación por webhook firmado y reconciliado, nunca por lo que reporte el navegador del cliente
 
-Lo que sigue después de v1 — notificaciones por WhatsApp — está descrito para audiencia no técnica en [`docs/roadmap-v2-v3.md`](docs/roadmap-v2-v3.md).
+Lo que sigue — notificaciones por WhatsApp y las ideas de v3 — está en el roadmap de [`docs/PRD.md`](docs/PRD.md) §6.
 
 ## Estado del proyecto
 
-**Ágora está en producción** desde el 14 de agosto de 2026, en [`agora.letiende.co`](https://agora.letiende.co). El ciclo completo de un evento (crear, vender, cobrar, emitir boleta, validar en puerta) funciona de punta a punta. La documentación de producto y arquitectura está en [`docs/PRD.md`](docs/PRD.md) y [`docs/tech-specs.md`](docs/tech-specs.md); el estado detallado y las decisiones tomadas en el camino están en [`docs/MEMORY.md`](docs/MEMORY.md). Las tareas activas (si las hay) están en [`docs/TODO.md`](docs/TODO.md) — el proyecto puede quedar sin una tarea activa mientras se espera retroalimentación real de uso antes de priorizar lo que sigue.
+**Ágora está en producción** desde el 14 de agosto de 2026, en [`agora.letiende.co`](https://agora.letiende.co). La versión actual es la **1.2.0**: la v1, más el pago automático con Bold (1.1) y los tipos de boletería (1.2). El ciclo completo de un evento (crear, vender, cobrar, emitir boleta, validar en puerta) funciona de punta a punta. La documentación de producto y arquitectura está en [`docs/PRD.md`](docs/PRD.md) y [`docs/tech-specs.md`](docs/tech-specs.md); el estado detallado y las decisiones tomadas en el camino están en [`docs/MEMORY.md`](docs/MEMORY.md). Las tareas activas (si las hay) están en [`docs/TODO.md`](docs/TODO.md) — el proyecto puede quedar sin una tarea activa mientras se espera retroalimentación real de uso antes de priorizar lo que sigue.
 
 ## Contents
 

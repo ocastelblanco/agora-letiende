@@ -2,7 +2,7 @@
 
 Documento de requisitos de producto de **Ágora**, la aplicación de boletería del teatro de Le Tiende. Está escrito en lenguaje de negocio: describe **qué** hace el producto y **para quién**, no cómo se implementa. El detalle técnico vive en `tech-specs.md`.
 
-**Estado del documento:** actualizado el 26/08/2026. **La v1 completa (§6) ya está en producción** en `https://agora.letiende.co`. Para el detalle de qué sigue después de v1 dirigido a los socios de Le Tiende (v2/v3, en lenguaje no técnico), ver `docs/roadmap-v2-v3.md`.
+**Estado del documento:** actualizado el 04/11/2026, **versión 1.2.0**. La v1 completa (§6) está en producción en `https://agora.letiende.co` desde el 14/08/2026; después se agregaron dos funcionalidades mayores: el pago automático con Bold (versión 1.1) y los tipos de boletería (versión 1.2). De la v2 solo falta WhatsApp. Lo que sigue está en §6.
 
 ---
 
@@ -61,21 +61,23 @@ Funciona, pero se rompe en cuatro puntos:
 | Crear eventos, editar el resto de sus parámetros comerciales | — | — | ✅ |
 | Gestionar usuarios y sus roles | — | — | ✅ |
 
-Un `productor` ejerce sus permisos **solo sobre los eventos en los que está asignado como productor**; el resto de campos del evento los ve, pero de solo lectura. Un `portero` ejerce la venta en efectivo y la validación en puerta **solo sobre los eventos en los que está asignado como portero** — ambos perfiles suelen incluir personas ajenas al equipo permanente de Le Tiende, así que el acceso se limita explícitamente evento por evento, no por el rol a secas. El `administrador` ejerce sus permisos sobre todos los eventos. *(Ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 3-4; el código todavía no lo aplica al escribir esta actualización de `PRD.md`.)*
+Un `productor` ejerce sus permisos **solo sobre los eventos en los que está asignado como productor**; el resto de campos del evento los ve, pero de solo lectura. Un `portero` ejerce la venta en efectivo y la validación en puerta **solo sobre los eventos en los que está asignado como portero** — ambos perfiles suelen incluir personas ajenas al equipo permanente de Le Tiende, así que el acceso se limita explícitamente evento por evento, no por el rol a secas. El `administrador` ejerce sus permisos sobre todos los eventos. *(Ajuste decidido el 12/08/2026, previo a UAT — ver `docs/archivo/plan-pre-produccion.md` Fase 3-4; el código todavía no lo aplica al escribir esta actualización de `PRD.md`.)*
 
 ---
 
 ## 4. Objetivos
 
+El producto ya tiene en producción el mecanismo que persigue cada objetivo. Lo que falta es **medirlos con eventos reales**: la columna «Estado» distingue las dos cosas.
+
 | Objetivo | Métrica de éxito | Estado |
 |---|---|---|
-| Eliminar la conversación manual de venta | ≥ 80% de las boletas de un evento se venden sin intervención humana previa a la validación del comprobante | ⬜ Pendiente |
-| Acelerar la entrada al teatro | Validación de una boleta en ≤ 5 segundos desde que se abre la cámara | ⬜ Pendiente |
-| Eliminar la sobreventa | 0 eventos con más boletas válidas emitidas que sillas disponibles | ⬜ Pendiente |
-| Centralizar la información del evento | 1 sola fuente de verdad consultable por todo el equipo, sin hojas de cálculo paralelas | ⬜ Pendiente |
-| Reducir la carga del productor | El productor solo interviene para aprobar comprobantes; el resto es automático | ⬜ Pendiente |
-| Dar visibilidad en tiempo real | El productor puede ver, durante el evento, cuántos asistentes entraron y cuántos faltan | ⬜ Pendiente |
-| Operar sin costo de infraestructura | Costo mensual de infraestructura tendiente a $0 dentro de la capa gratuita | ⬜ Pendiente |
+| Eliminar la conversación manual de venta | ≥ 80% de las boletas de un evento se venden sin intervención humana previa a la validación del comprobante | 🟡 Compra en línea y pago automático con Bold en producción · sin medir |
+| Acelerar la entrada al teatro | Validación de una boleta en ≤ 5 segundos desde que se abre la cámara | 🟡 Validación en puerta en producción · sin medir |
+| Eliminar la sobreventa | 0 eventos con más boletas válidas emitidas que sillas disponibles | 🟡 Aforo con escritura condicional en producción · sin auditar con los eventos reales |
+| Centralizar la información del evento | 1 sola fuente de verdad consultable por todo el equipo, sin hojas de cálculo paralelas | 🟡 Panel y reportes XLSX/PDF en producción · falta confirmarlo con el equipo |
+| Reducir la carga del productor | El productor solo interviene para aprobar comprobantes; el resto es automático | ✅ En producción (con Bold, ni siquiera aprueba) |
+| Dar visibilidad en tiempo real | El productor puede ver, durante el evento, cuántos asistentes entraron y cuántos faltan | ✅ En producción (panel de control) |
+| Operar con un costo de infraestructura mínimo | Menos de US$1 al mes atribuible a Ágora, medido en la factura de AWS (sin el costo fijo de DNS que comparten todas las apps de Le Tiende) | 🟡 Infraestructura sin costos fijos (DynamoDB por demanda) · falta el presupuesto propio de Ágora y la medición en la factura |
 
 ---
 
@@ -95,24 +97,24 @@ El administrador define, para cada evento:
 - Imagen gráfica del evento (opcional) y logotipo para incluir en la boleta (opcional).
   - **Tamaño recomendado de la imagen del evento: 1600 × 800 px (proporción 2:1, el doble de ancho que de alto).** La cartelera y la página del evento la muestran siempre en esa proporción: una imagen con otra forma se recorta por los bordes para llenar el espacio, así que conviene dejar lo importante (títulos, rostros) hacia el centro. Una imagen más grande no mejora la calidad: el sistema la reduce a un máximo de 1600 px en su lado más largo y la convierte a WebP antes de subirla.
 - Fecha y hora.
-- Duración, en horas y minutos (por defecto, 3 horas). Define la hora de fin del evento en Google Calendar *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 1)*.
+- Duración, en horas y minutos (por defecto, 3 horas). Define la hora de fin del evento en Google Calendar *(ajuste del 30/09/2026, `docs/archivo/plan-ajustes-eventos.md` Tarea 1)*.
 - Cantidad de sillas disponibles.
 - Etapas de boletería (por defecto una sola), cada una con su precio y su fecha de cierre. El precio puede ser $0 para eventos gratuitos.
 - Máximo de boletas por compra.
 - Medios de pago habilitados.
 - Plazo máximo para enviar el comprobante después de iniciada la compra (por defecto, 10 minutos).
-- Productor o productores a cargo (uno o varios, obligatorio al menos uno; el administrador puede incluirse a sí mismo) y portero o porteros asignados (opcional, se pueden agregar luego al editar). Ambos se eligen de la lista de usuarios ya existentes en Ágora con ese rol — no se digitan por correo a mano, ya que el acceso de venta en efectivo y validación en puerta queda limitado exactamente a quienes se asignen aquí *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
+- Productor o productores a cargo (uno o varios, obligatorio al menos uno; el administrador puede incluirse a sí mismo) y portero o porteros asignados (opcional, se pueden agregar luego al editar). Ambos se eligen de la lista de usuarios ya existentes en Ágora con ese rol — no se digitan por correo a mano, ya que el acceso de venta en efectivo y validación en puerta queda limitado exactamente a quienes se asignen aquí *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/archivo/plan-pre-produccion.md` Fase 4)*.
 - Enlaces a redes sociales (opcional).
 
 **Cada evento tiene su propio enlace (slug), que nunca se repite.** El sistema lo sugiere a partir del nombre y la fecha. Si otra función del mismo espectáculo ya ocupa ese enlace el mismo día, le agrega un número romano en minúscula: `show-magico-2026-09-30`, `show-magico-2026-09-30-ii`, `show-magico-2026-09-30-iii`… Mientras el evento está en borrador, el enlace se puede ajustar. Una vez publicado queda fijo, porque ya puede haber afiches y mensajes circulando con él *(hotfix del 30/09/2026, PR #77: antes, dos funciones del mismo día compartían enlace y solo una era alcanzable)*.
 
-**Duplicar evento.** Desde la lista de eventos, el administrador puede duplicar un evento para crear otra función del mismo espectáculo. La copia conserva el mismo nombre y todos los datos (imágenes, etapas, precios, medios de pago, productores, porteros, duración), queda en **borrador** con el aforo completo disponible y abre de inmediato en modo edición para ajustar la fecha y la hora *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 3)*.
+**Duplicar evento.** Desde la lista de eventos, el administrador puede duplicar un evento para crear otra función del mismo espectáculo. La copia conserva el mismo nombre y todos los datos (imágenes, etapas, precios, medios de pago, productores, porteros, duración), queda en **borrador** con el aforo completo disponible y abre de inmediato en modo edición para ajustar la fecha y la hora *(ajuste del 30/09/2026, `docs/archivo/plan-ajustes-eventos.md` Tarea 3)*.
 
-**Lista de eventos.** Muestra el estado de cada evento con un ícono de color junto al nombre (borrador, publicado, agotado, finalizado, cancelado). Permite ordenar por nombre o fecha, filtrar por estado y recorrer los eventos mes a mes o semana a semana. Las acciones de cada fila (editar, duplicar, eliminar) son botones de ícono *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 2)*.
+**Lista de eventos.** Muestra el estado de cada evento con un ícono de color junto al nombre (borrador, publicado, agotado, finalizado, cancelado). Permite ordenar por nombre o fecha, filtrar por estado y recorrer los eventos mes a mes o semana a semana. Las acciones de cada fila (editar, duplicar, eliminar) son botones de ícono *(ajuste del 30/09/2026, `docs/archivo/plan-ajustes-eventos.md` Tarea 2)*.
 
 Al crear el evento, el sistema genera automáticamente un **código QR con el enlace del evento**, descargable en formato vectorial y de imagen, para imprimir en afiches y volantes.
 
-El administrador puede editar cualquier dato del evento en cualquier momento. Un productor asignado al evento puede editar únicamente el máximo de boletas por compra, el plazo del comprobante, la imagen y el logotipo, y descargar el código QR — el resto de los campos los ve de solo lectura *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 3)*.
+El administrador puede editar cualquier dato del evento en cualquier momento. Un productor asignado al evento puede editar únicamente el máximo de boletas por compra, el plazo del comprobante, la imagen y el logotipo, y descargar el código QR — el resto de los campos los ve de solo lectura *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/archivo/plan-pre-produccion.md` Fase 3)*.
 
 ### 5.3 Compra de boletas (v1)
 
@@ -171,7 +173,7 @@ Si el cliente no carga el comprobante dentro del plazo, la reserva se cancela y 
 
 ### 5.4 Venta en efectivo (v1)
 
-Cualquier integrante del equipo asignado al evento (portero, productor o administrador) puede registrar una venta en efectivo desde la página del evento: entra a **VENTA EN EFECTIVO**, ingresa los datos del cliente y confirma. El sistema emite las boletas de inmediato, sin pasar por comprobante ni aprobación. Sirve tanto para la venta presencial anticipada en la sede como para quien llega a la puerta el día del evento sin haber comprado. Un `portero` o `productor` solo ve, en el selector de eventos, aquellos en los que está asignado — no la lista completa de eventos publicados *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
+Cualquier integrante del equipo asignado al evento (portero, productor o administrador) puede registrar una venta en efectivo desde la página del evento: entra a **VENTA EN EFECTIVO**, ingresa los datos del cliente y confirma. El sistema emite las boletas de inmediato, sin pasar por comprobante ni aprobación. Sirve tanto para la venta presencial anticipada en la sede como para quien llega a la puerta el día del evento sin haber comprado. Un `portero` o `productor` solo ve, en el selector de eventos, aquellos en los que está asignado — no la lista completa de eventos publicados *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/archivo/plan-pre-produccion.md` Fase 4)*.
 
 ### 5.5 Validación en la puerta (v1)
 
@@ -193,7 +195,7 @@ El sistema responde de inmediato con uno de estos veredictos:
    └── ❌ OTRO EVENTO → boleta legítima, pero de otra función
 ```
 
-Una boleta válida se marca como usada en el momento del escaneo y no puede volver a usarse. Una boleta de un tipo multi-persona (por ejemplo «Pareja», `5.14`) se valida con una sola lectura y el veredicto indica a cuántas personas admite; no hay ingresos parciales. El contador de asistentes del panel de control se actualiza en el acto. Un `portero` solo ve, en el selector de eventos, aquellos en los que está asignado — mismo criterio de `5.4` *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/plan-pre-produccion.md` Fase 4)*.
+Una boleta válida se marca como usada en el momento del escaneo y no puede volver a usarse. Una boleta de un tipo multi-persona (por ejemplo «Pareja», `5.14`) se valida con una sola lectura y el veredicto indica a cuántas personas admite; no hay ingresos parciales. El contador de asistentes del panel de control se actualiza en el acto. Un `portero` solo ve, en el selector de eventos, aquellos en los que está asignado — mismo criterio de `5.4` *(ajuste decidido el 12/08/2026, previo a UAT — ver `docs/archivo/plan-pre-produccion.md` Fase 4)*.
 
 ### 5.6 Panel de control del evento (v1 básico, v2 completo)
 
@@ -204,7 +206,7 @@ El productor y el administrador ven, para cada evento a su cargo:
 - Datos de los clientes que compraron.
 - Durante el evento: cuántos asistentes han ingresado y cuántos faltan.
 
-La lista de paneles (la pantalla donde se elige el evento) se puede ordenar por fecha, que es el orden por defecto, o por nombre, y recorrer mes a mes o semana a semana, igual que la lista de eventos *(ajuste del 30/09/2026, `docs/plan-ajustes-eventos.md` Tarea 4)*.
+La lista de paneles (la pantalla donde se elige el evento) se puede ordenar por fecha, que es el orden por defecto, o por nombre, y recorrer mes a mes o semana a semana, igual que la lista de eventos *(ajuste del 30/09/2026, `docs/archivo/plan-ajustes-eventos.md` Tarea 4)*.
 
 Además pueden **descargar la lista completa de boletas** con: datos del cliente, fecha y hora de compra, medio de pago, valor unitario, etapa de boletería, fecha y hora de ingreso al evento, y valor total de la boletería.
 
@@ -254,7 +256,7 @@ Un evento puede ofrecer más de un tipo de boleta al mismo tiempo: por ejemplo *
 - **Reportes y paneles:** todas las tablas incluyen la columna «Tipo de boleta», y el contador de asistentes suma personas.
 - **Eventos existentes:** siguen funcionando sin cambios; se tratan como un único tipo «Por defecto».
 
-Plan y decisiones: `docs/plan-tipos-boleteria.md` · ADR-020.
+Plan y decisiones: `docs/archivo/plan-tipos-boleteria.md` · ADR-020.
 
 ## 6. Roadmap
 
@@ -277,18 +279,18 @@ Plan y decisiones: `docs/plan-tipos-boleteria.md` · ADR-020.
 | Código QR del evento para afiches | Media |
 | Panel de control básico (vendidas, disponibles, ingresados) | Media |
 
-**✅ v1 completa y en producción (14/08/2026)**, en `https://agora.letiende.co`. Antes del paso a producción se hizo una ronda de ajustes de endurecimiento y refinamiento previa a UAT — no funcionalidades nuevas, sino correcciones de alcance de roles, reorganización de navegación y pulido de interfaz sobre lo ya construido (ver `docs/plan-pre-produccion.md` para el desglose técnico completo), más una ronda final de hotfixes reales encontrados validando en vivo (ver `docs/MEMORY.md` §2/§7 para el detalle). Para qué sigue después de v1, dirigido a los socios de Le Tiende en lenguaje no técnico, ver **`docs/roadmap-v2-v3.md`**.
+**✅ v1 completa y en producción (14/08/2026)**, en `https://agora.letiende.co`. Antes del paso a producción se hizo una ronda de ajustes de endurecimiento y refinamiento previa a UAT — no funcionalidades nuevas, sino correcciones de alcance de roles, reorganización de navegación y pulido de interfaz sobre lo ya construido (ver `docs/archivo/plan-pre-produccion.md` para el desglose técnico completo), más una ronda final de hotfixes reales encontrados validando en vivo (ver `docs/MEMORY.md` §2/§7 para el detalle).
 
 ### v2 — Automatización y alcance comercial
 
-**Detalle no técnico de cada ítem, requisitos externos y qué necesitamos de Le Tiende para avanzar:** ver `docs/roadmap-v2-v3.md`.
+**Lo único que falta de la v2, WhatsApp, depende de Le Tiende y no del desarrollo:** una línea telefónica nueva que nunca haya estado activa en la app normal de WhatsApp (requisito de Meta) y la Verificación de Negocio de Meta, un trámite que puede tomar semanas.
 
 | Funcionalidad | Prioridad | Estado |
 |---|---|---|
 | Boletería opcional (aforo sin cobro) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #24, PR #46) |
 | Eventos con boletería externa | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #25, PR #47) |
 | Sincronización con Google Calendar | Media | ✅ Fusionado y verificado en producción (roadmap #22, PR #48) |
-| Pago automático con Bold | **Alta** | ✅ Fusionado y validado de punta a punta en staging real, con tarjetas de prueba (aprobado/rechazado/error/abandono) (roadmap #19, PR #50/#51/#52) |
+| Pago automático con Bold | **Alta** | ✅ En producción, versión 1.1 (roadmap #19, PR #50/#51/#52), validado antes con tarjetas de prueba (aprobado/rechazado/error/abandono) |
 | Notificaciones por WhatsApp | **Alta** | 🟡 No iniciado — bloqueado por prerrequisito externo (verificación de negocio de Meta, número de teléfono nuevo) |
 | Exportación de reportes en XLSX y PDF | Media | ✅ XLSX entregado en v1 (roadmap #21) · ✅ PDF entregado (15/10/2026, ADR-019) |
 | Etapas de boletería con cierre automático por fecha | Media | ✅ Entregado en v1 (roadmap #23), antes de lo previsto |
@@ -298,12 +300,14 @@ Plan y decisiones: `docs/plan-tipos-boleteria.md` · ADR-020.
 | Duplicar evento (varias funciones) | **Alta** | ✅ Fusionado y validado en vivo en staging (roadmap #28, PR #81) |
 | Lista de paneles con orden y filtro por periodo | Media | ✅ Fusionado y validado en vivo en staging (roadmap #29, PR #82) |
 | Protección contra doble toque en acciones de un solo uso (compra, venta en efectivo, comprobante, guardado de eventos y usuarios) | **Alta** | ✅ Fusionado (roadmap #31, PR #83 y #84) — encontrado por las pruebas E2E |
-| Pantalla sin salida tras un pago rechazado con Bold (el cliente queda sin ningún botón para continuar) | **Alta** | ✅ Corregido (01/10/2026): el estado de la compra devuelve la config de Bold mientras la reserva esté vigente; primera parte del endurecimiento (roadmap #32), validado por OCM, PR #88 pendiente de fusión |
-| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | ✅ Idempotencia fusionada y validada en staging (PR #89); guarda de "eliminar" implementada (01/10/2026, pendiente de fusión) — endurecimiento (roadmap #32) completo |
+| Pantalla sin salida tras un pago rechazado con Bold (el cliente queda sin ningún botón para continuar) | **Alta** | ✅ Corregido (01/10/2026): el estado de la compra devuelve la config de Bold mientras la reserva esté vigente; primera parte del endurecimiento (roadmap #32), validado por OCM y fusionado (PR #88) |
+| Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | ✅ Idempotencia fusionada y validada en staging (PR #89); guarda de "eliminar" fusionada (PR #90) — endurecimiento (roadmap #32) completo |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | ✅ Suite simulada corriendo en cada PR (roadmap #30, PR #83) y suite real contra el sandbox de Bold, a demanda (PR #85) |
-| Tipos de boletería (Individual, Pareja…) combinados con las etapas | **Alta** | ✅ Implementado (29/10/2026, roadmap #33, ADR-020, PR #114, #115, #116 y ajuste móvil #117) — plan en `docs/plan-tipos-boleteria.md` |
+| Tipos de boletería (Individual, Pareja…) combinados con las etapas | **Alta** | ✅ En producción, versión 1.2 (29/10/2026, roadmap #33, ADR-020, PR #114, #115, #116 y ajuste móvil #117) — plan en `docs/archivo/plan-tipos-boleteria.md` |
 
 ### v3 — Ideas no comprometidas
+
+Todavía no priorizadas ni con fecha. El orden lo decide OCM con la retroalimentación de los primeros eventos reales.
 
 | Funcionalidad | Prioridad |
 |---|---|
@@ -364,13 +368,13 @@ Plan y decisiones: `docs/plan-tipos-boleteria.md` · ADR-020.
 - Navegación por teclado y etiquetas semánticas en los formularios administrativos.
 
 ### Calidad
-- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código, en Chromium de escritorio, Android y iOS (WebKit); otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecuta a demanda (`docs/plan-ajustes-eventos.md` Tarea 5).
+- El flujo de compra con Bold, el que mueve dinero real, tiene pruebas automáticas de punta a punta con Playwright. Una suite simulada corre en cada cambio de código, en Chromium de escritorio, Android y iOS (WebKit); otra, contra el entorno de pruebas con el checkout real de Bold en modo sandbox, se ejecuta a demanda (`docs/archivo/plan-ajustes-eventos.md` Tarea 5).
 
 ### SEO
 - Cada evento debe tener su propia página indexable, con metadatos y vista previa enriquecida al compartirse por WhatsApp o redes sociales. El enlace compartido **es** el canal de difusión principal: si la vista previa se ve mal, la difusión se ve mal.
 
 ### Costo
-- La infraestructura debe tender a $0 mensuales dentro de la capa gratuita de AWS, igual que Babel.
+- La infraestructura atribuible a Ágora debe costar **menos de US$1 al mes**, medido en la factura real de AWS. No incluye el costo fijo de DNS que comparten todas las apps de Le Tiende. La meta nació del incidente de costos de Babel (`docs/advertencia-urgente-costos-aws.md`); las reglas para cumplirla están en `CLAUDE.md` §5-bis.
 
 ---
 
@@ -388,7 +392,7 @@ Plan y decisiones: `docs/plan-tipos-boleteria.md` · ADR-020.
 
 **Un evento se edita libremente, incluso ya publicado.** La operación real cambia de opinión: se corre una fecha, se ajusta un precio, se suma un productor, se corrige el número de sillas totales. Bloquear la edición generaría trabajo por fuera del sistema, que es justamente lo que Ágora viene a eliminar. La contrapartida es que reducir el aforo por debajo de lo ya vendido debe impedirse explícitamente.
 
-**Un evento vencido deja de venderse y de aparecer en la cartelera, sin que nadie tenga que acordarse de cerrarlo a mano.** Cuando ya pasaron tanto la fecha del evento como el cierre de su última etapa de boletería, el sistema lo trata como finalizado *(ajuste decidido antes de UAT, `docs/plan-pre-produccion.md` — hotfixes pre-producción)*.
+**Un evento vencido deja de venderse y de aparecer en la cartelera, sin que nadie tenga que acordarse de cerrarlo a mano.** Cuando ya pasaron tanto la fecha del evento como el cierre de su última etapa de boletería, el sistema lo trata como finalizado *(ajuste decidido antes de UAT, `docs/archivo/plan-pre-produccion.md` — hotfixes pre-producción)*.
 
 **Un evento cancelado se mantiene visible mientras hubiera estado vigente.** Un cliente que ya compró una boleta para un evento que luego se cancela necesita poder ver esa cancelación reflejada en la página del evento hasta la fecha en que iba a ocurrir — después de esa fecha, ya no aporta nada seguir mostrándolo. En ningún momento un evento cancelado admite una venta nueva, sea en línea o en efectivo *(mismo ajuste)*.
 

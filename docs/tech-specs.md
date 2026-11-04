@@ -2,7 +2,7 @@
 
 Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cualquier desarrollador o agente IA pueda retomar el proyecto sin contexto previo.
 
-**Estado:** especificación inicial (31/07/2026). Nada está implementado todavía; este documento describe el diseño acordado, no código existente. Las secciones que dependen de recursos aún no creados (IDs, ARNs, URLs) quedan marcadas como pendientes y se completan en `MEMORY.md` §5 a medida que se aprovisionan.
+**Estado:** describe el sistema en producción, **versión 1.2.0** (actualizado el 04/11/2026): v1 completa desde el 14/08/2026, más pago automático con Bold (1.1) y tipos de boletería (1.2). Nació como especificación inicial el 31/07/2026; las secciones que siguen al código real se fueron corrigiendo con cada PR. Nombres y valores de recursos desplegados: `MEMORY.md` §5.
 
 **Relación con los demás documentos:** el "por qué" de negocio de cada decisión está en `PRD.md` (se referencia por número de sección). Las reglas de seguridad obligatorias están en `CLAUDE.md` §5. Las decisiones registradas (ADRs) están en `MEMORY.md` §3.
 
@@ -83,7 +83,7 @@ Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cua
 |---|---|---|---|---|
 | Framework frontend | Angular | 22.x | SPA con SSR, standalone components, Signals | https://angular.dev |
 | SSR | `@angular/ssr` | 22.x | Renderizado en servidor sobre Express 5 | https://angular.dev/guide/ssr |
-| Suite UI | Angular Material | 22.x | Componentes complejos: tabla, calendario, file upload; tema Material 3 propio. MIT, sin condiciones — ver ADR-012 (reemplaza a PrimeNG, que pasó a licencia comercial) | https://material.angular.dev |
+| Suite UI | Angular Material | 22.x | Componentes de interacción no trivial: tablas con orden, diálogos, *snackbar*, `mat-select`, pestañas de navegación, paneles plegables, *chips*, *toggles* e íconos. Fechas y carga de archivos usan inputs nativos. Tema Material 3 propio. `@angular/cdk` se instala solo como dependencia par de Material; el código no lo importa directamente. MIT, sin condiciones — ver ADR-012 (reemplaza a PrimeNG, que pasó a licencia comercial) | https://material.angular.dev |
 | CSS utility | Tailwind CSS | 4.x | Layout y utilidades; misma base que Babel/Comandante | https://tailwindcss.com |
 | Runtime | Node.js | 24.x | Runtime de todas las Lambdas | https://nodejs.org |
 | Lenguaje | TypeScript | ~6.0 | Estricto; `any` prohibido | https://typescriptlang.org |
@@ -112,93 +112,85 @@ Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cua
 
 ```
 agora/
-├── CLAUDE.md                    # Directrices permanentes (stack, convenciones, OWASP, git flow)
-├── README.md
+├── CLAUDE.md                    # Directrices permanentes (stack, convenciones, OWASP, costos, git flow)
+├── README.md / README.es.md     # Presentación pública, inglés y español
 ├── angular.json
 ├── serverless.yml               # Definición de toda la infraestructura AWS
-├── package.json
-├── tsconfig.json                # Config base
-├── tsconfig.app.json            # Frontend Angular
+├── package.json                 # Versión de la app (VERSION de las Lambdas, GET /api/salud)
+├── tsconfig.json / tsconfig.app.json / tsconfig.spec.json
 ├── vitest.config.ts             # Pruebas del backend
-├── .github/
-│   └── workflows/
-│       └── deploy.yml           # Build + test (PR) → staging (PR) → producción (push a main)
+├── playwright.config.ts         # Pruebas E2E
+├── .github/workflows/
+│   ├── deploy.yml               # Build + test (PR) → staging (PR) → producción (push a main)
+│   └── e2e.yml                  # Suite simulada en cada PR; suite real contra staging a demanda
 ├── docs/
-│   ├── PRD.md                   # Requisitos de producto
+│   ├── PRD.md                   # Requisitos de producto y roadmap
 │   ├── tech-specs.md            # Este documento
 │   ├── MEMORY.md                # Estado, ADRs, configuraciones vigentes, gotchas
 │   ├── TODO.md                  # Motor JIT: exactamente 2 tareas atómicas
-│   ├── DESIGN.md                # Sistema de diseño (se crea al implementar la UI)
-│   ├── planteamiento-inicial.md # Documento fuente original del proyecto
-│   ├── instrucciones-tracking.md# Reglas del registro de tiempos
-│   └── tracking.csv             # Registro de tiempos de todas las tareas
+│   ├── DESIGN.md                # Sistema de diseño
+│   ├── advertencia-urgente-costos-aws.md
+│   ├── instrucciones-tracking.md / tracking.csv
+│   └── archivo/                 # Planteamiento inicial y planes ya cumplidos (historia)
+├── e2e/
+│   ├── simulado/                # API de Ágora y librería de Bold falsas, sin red
+│   ├── staging/                 # Flujo real contra staging y el sandbox de Bold
+│   └── apoyos/
 ├── public/                      # Activos estáticos (logotipos, favicon)
-├── server/                      # Backend — código de las Lambdas de API
-│   ├── tsconfig.json
+├── server/                      # Backend — Lambdas
+│   ├── bundle-lambdas.mjs       # Empaquetado con esbuild de las que usan firebase-admin
+│   ├── ssr/handler.mjs          # Lambda del SSR de Angular
+│   ├── scripts/                 # Scripts de datos de uso puntual (simulacro por defecto)
 │   └── api/
 │       ├── handlers/            # Un archivo por endpoint/dominio
-│       │   ├── salud.ts
-│       │   ├── usuarios-me.ts
-│       │   ├── eventos.ts
-│       │   ├── eventos-publicos.ts
-│       │   ├── compras.ts
-│       │   ├── comprobantes.ts
-│       │   ├── aprobaciones.ts
-│       │   ├── boletas.ts
-│       │   ├── reportes.ts
-│       │   └── liberar-reservas.ts     # Consumidor de DynamoDB Streams
+│       │   ├── salud.ts, usuarios-me.ts, usuarios.ts
+│       │   ├── eventos.ts, eventos-publicos.ts
+│       │   ├── compras.ts, comprobantes.ts, aprobaciones.ts, ventas-efectivo.ts
+│       │   ├── bold-webhook.ts          # Webhook firmado y conciliado de Bold
+│       │   ├── boletas.ts               # Consulta y validación en puerta
+│       │   ├── reportes.ts              # Panel, XLSX y PDF
+│       │   └── liberar-reservas.ts      # Consumidor de DynamoDB Streams
 │       ├── lib/                 # Utilidades transversales
-│       │   ├── verificar-token.ts      # verifyIdToken + resolución de rol
-│       │   ├── resolver-permisos.ts    # Jerarquía de roles (fuente única)
-│       │   ├── enlaces-magicos.ts      # Generación, hash y consumo de tokens
-│       │   ├── firma-boletas.ts        # HMAC del código de boleta
-│       │   ├── respuestas.ts           # Respuestas HTTP y errores sin fugas
-│       │   └── validaciones.ts         # Validación de entrada (nombre, correo, archivo)
-│       ├── services/            # Acceso a datos y servicios externos
-│       │   ├── dynamodb.ts
-│       │   ├── s3.ts
-│       │   ├── aforo.ts                # Escrituras condicionales de sillas
-│       │   ├── notificaciones.ts       # Interfaz de canal (correo hoy, WhatsApp v2)
-│       │   ├── correo-ses.ts
-│       │   ├── boleteria.ts            # Emisión de boletas y su QR
-│       │   └── auditoria.ts            # Rastro append-only
-│       └── modelos/             # Interfaces compartidas con el frontend
-│           ├── evento.ts
-│           ├── compra.ts
-│           ├── boleta.ts
-│           └── usuario.ts
+│       │   ├── verificar-token.ts       # verifyIdToken + resolución de rol
+│       │   ├── resolver-permisos.ts     # Jerarquía de roles (fuente única)
+│       │   ├── autorizacion.ts          # tieneAccesoAlEvento (fuente única)
+│       │   ├── enlaces-magicos.ts       # Generación, hash y consumo de tokens
+│       │   ├── firma-boletas.ts         # HMAC del código de boleta
+│       │   ├── tipos-boleteria.ts       # normalizarTipos (ADR-020)
+│       │   ├── vigencia-evento.ts, duracion-evento.ts
+│       │   ├── reporte-pdf.ts, secretos.ts, http.ts
+│       │   └── validaciones.ts          # Validación de entrada (nombre, correo, archivo)
+│       └── services/            # Acceso a datos y servicios externos
+│           ├── dynamodb.ts, s3.ts, idempotencia.ts
+│           ├── aforo.ts                 # Escrituras condicionales de sillas
+│           ├── notificaciones.ts        # Interfaz de canal (correo hoy, WhatsApp v2)
+│           ├── correo-ses.ts, qr.ts, boleteria.ts
+│           ├── bold.ts                  # Firma del botón y verificación del webhook
+│           └── google-calendar.ts
 └── src/                         # Frontend Angular
-    ├── main.ts
-    ├── main.server.ts
+    ├── main.ts, main.server.ts
     ├── server.ts                # Entrada del SSR
+    ├── cabeceras-seguridad.ts   # CSP con nonce por petición
     ├── styles.css               # Bloque @theme de Tailwind
-    ├── material-theme.scss      # Tema Material 3 propio (mat.theme + overrides de marca)
-    ├── environments/
-    │   ├── environment.ts
-    │   └── environment.production.ts
+    ├── material-theme.scss      # Tema Material 3 propio
     └── app/
-        ├── app.config.ts
-        ├── app.routes.ts
-        ├── core/                # Servicios singleton, guardias, interceptores
-        │   ├── auth/
-        │   ├── guardias/
-        │   └── interceptores/
-        ├── shared/              # Componentes, pipes y utilidades reutilizables
-        │   ├── componentes/
-        │   └── pipes/
-        │       └── precio.pipe.ts
+        ├── app.config.ts, app.routes.ts (+ .server)
+        ├── core/                # api/, auth/, embebido/, guardias/, models/
+        ├── shared/              # dialogos/, filtros/, navegacion/, pipes/, utilidades/
         └── features/            # Una carpeta por área funcional
             ├── cartelera/       # Público: lista de eventos
             ├── evento/          # Público: detalle, compra, comprobante
             ├── boleta/          # Público: vista de boleta digital
             ├── login/
             ├── admin/           # Eventos y usuarios (solo administrador)
+            ├── mis-eventos/     # Eventos del productor y lista de paneles
             ├── aprobaciones/    # Revisión de comprobantes (productor)
+            ├── taquilla/        # Venta en efectivo
             ├── puerta/          # Escaneo y validación (portero)
-            └── panel/           # Panel de control del evento (productor)
+            └── panel/           # Panel de control del evento
 ```
 
-**Path aliases** (`tsconfig.json`): `@modelos/*` → `server/api/modelos/*` (compartidos entre frontend y backend), `@core/*` → `src/app/core/*`, `@shared/*` → `src/app/shared/*`, `@features/*` → `src/app/features/*`.
+**Modelos de datos:** viven en `src/app/core/models/` (`evento.model.ts`, `usuario.model.ts`). No hay *path aliases* configurados en `tsconfig.json`; las importaciones son relativas.
 
 ---
 
@@ -375,7 +367,7 @@ export interface Boleta {
 
 ### 4.4 Estilos: Angular Material + Tailwind con tokens Le Tiende
 
-Ágora combina Angular Material (componentes complejos: tabla, calendario, file upload) con Tailwind 4 (layout y utilidades). La identidad visual es la de Le Tiende, no la de Material — nunca se usa un tema prebuilt (Azure/Blue, Rose/Red, etc.) sin adaptar.
+Ágora combina Angular Material (tablas, diálogos, *snackbar*, selects, pestañas, paneles plegables; inventario completo en `DESIGN.md` §7) con Tailwind 4 (layout y utilidades). La identidad visual es la de Le Tiende, no la de Material — nunca se usa un tema prebuilt (Azure/Blue, Rose/Red, etc.) sin adaptar.
 
 **Fuente de verdad de los tokens:** dos archivos paralelos, cada uno alimentando un sistema distinto:
 - `src/styles.css` — bloque `@theme` de Tailwind (`--color-primary`, etc.), igual que en Babel. Alimenta las clases utilitarias (`bg-primary`, `text-neutral`, …).
@@ -462,7 +454,7 @@ AgoraUsuarios:
 | `agora-eventos` | `eventoId` (PK) | GSI `slug-index` (PK `slug`); GSI `estado-fechaHora-index` | El contador de aforo vive aquí |
 | `agora-compras` | `compraId` (PK) | GSI `eventoId-creadaEn-index`; GSI `tokenAprobacionHash-index` | **TTL en `expiraEn`**, con Streams activados |
 | `agora-boletas` | `boletaId` (PK) | GSI `eventoId-estado-index`; GSI `compraId-index` | `boletaId` es el contenido del QR |
-| `agora-auditoria` | `entidadId` (PK), `ocurridoEn` (SK) | — | Append-only. Nunca se actualiza ni se borra |
+| `agora-auditoria` | `entidadId` (PK), `ocurridoEn` (SK) | — | Append-only. Nunca se actualiza ni se borra. **Vacía en los dos stages (verificado el 04/11/2026): ningún código escribe en ella todavía** — `TODO.md` Tarea 1 |
 | `agora-idempotencia` | `idempotenciaId` (PK, SHA-256 de `operación\|actor\|clave`) | — | Claves de `Idempotency-Key` de `POST /api/compras` y `POST /api/ventas-efectivo`. TTL `expiraEn` a 24 h. Guarda solo la respuesta 2xx (sin datos personales) |
 
 ### 5.3 Funciones Lambda
@@ -483,6 +475,8 @@ Cada una con su propio rol IAM de mínimo privilegio y su propio paquete (`packa
 | `reportes` | Panel y exportación | `compras`, `boletas`, `eventos` (lectura), S3 activos |
 | `liberarReservas` | **DynamoDB Streams** de `compras` (evento de borrado por TTL) | `eventos` (condicional), `compras`, `auditoria` |
 | `boldWebhook` (v2) | `POST /api/pagos/bold/webhook` | `compras`, `eventos`, `boletas`, `auditoria` |
+
+**`auditoria` en esta tabla es el diseño, no el estado actual.** Verificado el 04/11/2026: ninguna Lambda recibe el nombre de la tabla ni tiene permiso IAM sobre ella, y la tabla está vacía. Hoy el rastro de A09 es parcial: campos sobre ítems mutables (`resueltoPor`/`resueltoEn` en compras, `ingresoPor`/`ingresoEn` y `emitidaEn` en boletas, `creadoPor`/`duplicadoDe` en eventos) más CloudWatch Logs, que vencen. Se completa en `TODO.md` Tarea 1.
 
 ### 5.4 El ciclo de vida del aforo
 
@@ -562,12 +556,12 @@ Plantillas de v1: enlace para cargar comprobante (cliente), aviso de comprobante
 
 | Servicio | Estado | Uso actual (v1) | Uso futuro |
 |---|---|---|---|
-| Firebase Authentication | ⬜ Por configurar | Google Sign-In del equipo. **Proyecto compartido con Comandante y Babel** | — |
-| AWS SES | ⬜ Por verificar remitente | Todos los correos, desde `taquilla@letiende.co` | — |
-| AWS S3 | ⬜ Por crear | Comprobantes (privado) y activos de evento | — |
-| Bold | ✅ Fusionado y validado de punta a punta en staging real (PR #50 backend, #51 frontend, #52 fix de aforo) | — | v2: pago automático, webhook firmado y reconciliado, botón embebido en `comprar.component` con máquina de estados (checkout embebido, verificación/reapertura tras cierre sin confirmación) |
+| Firebase Authentication | ✅ En producción | Google Sign-In del equipo. **Proyecto compartido con Comandante y Babel** | — |
+| AWS SES | ✅ En producción, fuera del sandbox | Todos los correos, desde `taquilla@letiende.co` | — |
+| AWS S3 | ✅ En producción | Comprobantes (privado) y activos de evento | — |
+| Bold | ✅ En producción (PR #50–#52, versión 1.1) | Pago automático con tarjeta o PSE: botón embebido en `comprar.component`, webhook firmado y conciliado (ADR-018) | — |
 | AWS End User Messaging Social | ⬜ No integrado | — | v2: WhatsApp. Requiere WABA aprobada por Meta |
-| Google Calendar API | ⬜ No integrado | — | v2: sincronización con `letiende.co@gmail.com` |
+| Google Calendar API | ✅ En producción (PR #48) | Sincroniza cada evento con el calendario de `letiende.co@gmail.com` | — |
 | `api.letiende.co` | ⬜ Sin uso previsto | — | API compartida del ecosistema; Ágora no la consume hoy |
 
 **Nota sobre SES:** la cuenta AWS de Le Tiende **está fuera del sandbox** (confirmado el 31/07/2026), así que se puede enviar a cualquier destinatario sin verificarlo previamente. Lo que sí queda pendiente es verificar la identidad del remitente y asegurar la entregabilidad: sin SPF (`include:amazonses.com`), DKIM y DMARC correctamente configurados en `letiende.co`, las boletas tienen alta probabilidad de caer en spam — y una boleta en spam es un cliente que no puede entrar al teatro. Ver `docs/tareas-a-realizar.md` §5.
@@ -749,7 +743,7 @@ Definidas en **`CLAUDE.md` §4** (idioma del código en español, Signals, stand
 
 Resumen operativo: se trabaja siempre en una rama `feature/*`, `fix/*`, `docs/*`, `hotfix/*` o `refactor/*` creada desde `main`; el agente IA **nunca** hace commit ni push a `main` ni fusiona un PR.
 
-**Pruebas:** unitarias con Vitest en frontend (`npm run test`) y backend (`npm run test:api`). Desde el roadmap #30, pruebas E2E con Playwright (`npm run e2e`, `playwright.config.ts`, carpeta `e2e/`, archivos `*.e2e.ts` para que ni `ng test` ni `test:api` los recojan). **Suite `simulado` (entregada, PR #83):** la API de Ágora y la librería de Bold (`window.BoldCheckout`) se simulan con `page.route`; se aísla de internet (todo lo que no sea `localhost` se aborta); corre contra `ng serve` en tres perfiles (Chromium de escritorio, Pixel 7, iPhone 14 en WebKit) en `.github/workflows/e2e.yml`, en cada PR, y sube el reporte HTML (siempre) y trazas/videos (si falla) como artifacts. **Suite `staging` (entregada, PR #85):** flujo real contra staging con el checkout sandbox de Bold (se inspecciona forzando abierto el *shadow root* de `<bold-embedded-checkout>`), un evento temporal sembrado y borrado en DynamoDB (`global-setup`/`global-teardown`, solo `PutItem/GetItem/DeleteItem/Query` sobre las tablas `-staging`), el webhook real de Bold y verificación de compra, boletas y aforo en la base de datos; solo Chromium de escritorio, a demanda con `npm run e2e:staging` o `workflow_dispatch`, nunca bloquea un PR. Ver ADR-015 y `docs/plan-ajustes-eventos.md` Tarea 5.
+**Pruebas:** unitarias con Vitest en frontend (`npm run test`) y backend (`npm run test:api`). Desde el roadmap #30, pruebas E2E con Playwright (`npm run e2e`, `playwright.config.ts`, carpeta `e2e/`, archivos `*.e2e.ts` para que ni `ng test` ni `test:api` los recojan). **Suite `simulado` (entregada, PR #83):** la API de Ágora y la librería de Bold (`window.BoldCheckout`) se simulan con `page.route`; se aísla de internet (todo lo que no sea `localhost` se aborta); corre contra `ng serve` en tres perfiles (Chromium de escritorio, Pixel 7, iPhone 14 en WebKit) en `.github/workflows/e2e.yml`, en cada PR, y sube el reporte HTML (siempre) y trazas/videos (si falla) como artifacts. **Suite `staging` (entregada, PR #85):** flujo real contra staging con el checkout sandbox de Bold (se inspecciona forzando abierto el *shadow root* de `<bold-embedded-checkout>`), un evento temporal sembrado y borrado en DynamoDB (`global-setup`/`global-teardown`, solo `PutItem/GetItem/DeleteItem/Query` sobre las tablas `-staging`), el webhook real de Bold y verificación de compra, boletas y aforo en la base de datos; solo Chromium de escritorio, a demanda con `npm run e2e:staging` o `workflow_dispatch`, nunca bloquea un PR. Ver ADR-015 y `docs/archivo/plan-ajustes-eventos.md` Tarea 5.
 
 **Registro de tiempos:** toda tarea —de planeación o de ejecución, de humano o de IA— se registra como una fila en `docs/tracking.csv`, según `docs/instrucciones-tracking.md`. Es obligatorio y no opcional.
 
@@ -759,7 +753,9 @@ Resumen operativo: se trabaja siempre en una rama `feature/*`, `fix/*`, `docs/*`
 
 Orden de implementación derivado de `PRD.md` §6, con las dependencias técnicas explícitas.
 
-**Ajustes pre-producción (12/08/2026, previo a UAT):** ronda de endurecimiento sobre el v1 ya construido, fuera de la numeración de este roadmap (no son funcionalidades nuevas, son correcciones de alcance y presentación sobre piezas ya numeradas abajo — principalmente #6 CRUD de eventos, #9 Compra y reserva, #14 Venta en efectivo, #13 Validación en puerta y #18 Menú de navegación). Desglose técnico completo, con archivos reales y decisiones de diseño, en `docs/plan-pre-produccion.md`. Cambios de arquitectura relevantes que introduce: campo `porteros: string[]` nuevo en `agora-eventos` (análogo a `productores`), generalización de `tieneAccesoAlEvento()` (`server/api/lib/autorizacion.ts`) para resolver pertenencia también por rol `portero`, y reestructuración de `SECCIONES_NAVEGACION`/`app.routes.ts` a un modelo de navegación de dos niveles con rutas anidadas reales.
+**Estado al 04/11/2026 (versión 1.2.0):** todas las piezas de la tabla están implementadas y en producción **salvo la #20 (WhatsApp)**, bloqueada por la Verificación de Negocio de Meta. La columna de archivos describe lo que se previó al planear cada pieza; el árbol real está en §3.
+
+**Ajustes pre-producción (12/08/2026, previo a UAT):** ronda de endurecimiento sobre el v1 ya construido, fuera de la numeración de este roadmap (no son funcionalidades nuevas, son correcciones de alcance y presentación sobre piezas ya numeradas abajo — principalmente #6 CRUD de eventos, #9 Compra y reserva, #14 Venta en efectivo, #13 Validación en puerta y #18 Menú de navegación). Desglose técnico completo, con archivos reales y decisiones de diseño, en `docs/archivo/plan-pre-produccion.md`. Cambios de arquitectura relevantes que introduce: campo `porteros: string[]` nuevo en `agora-eventos` (análogo a `productores`), generalización de `tieneAccesoAlEvento()` (`server/api/lib/autorizacion.ts`) para resolver pertenencia también por rol `portero`, y reestructuración de `SECCIONES_NAVEGACION`/`app.routes.ts` a un modelo de navegación de dos niveles con rutas anidadas reales.
 
 | # | Pieza | Archivos principales a crear | Depende de |
 |---|---|---|---|
@@ -779,7 +775,7 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 14 | Venta en efectivo | `features/evento/venta-efectivo/` | 12 |
 | 15 | QR del evento para afiches | Generación SVG/PNG en `handlers/eventos.ts` | 6 |
 | 16 | Panel de control básico | `features/panel/`, `handlers/reportes.ts` | 13 |
-| 17 | Dominio personalizado | CloudFront + certificado ACM en `serverless.yml`, `NG_ALLOWED_HOSTS` | 2 |
+| 17 | Dominio personalizado | Dominio personalizado de API Gateway + certificado ACM en `serverless.yml`, sin CloudFront (ADR-013), `NG_ALLOWED_HOSTS` | 2 |
 | 18 | Menú de navegación para usuarios autenticados | `shared/navegacion/secciones-navegacion.ts`, `shared/navegacion/barra-navegacion.component.ts`, `core/guardias/guardia-invitado.ts` | 4 |
 | 19 | **v2** — Bold | `handlers/bold-webhook.ts`, `services/bold.ts` | 12 |
 | 20 | **v2** — WhatsApp | `services/canal-whatsapp.ts` | 9 |
@@ -795,4 +791,4 @@ Orden de implementación derivado de `PRD.md` §6, con las dependencias técnica
 | 30 | **v2** — Pruebas E2E Playwright del flujo de compra con Bold (PR A, PR #83: suite simulada; PR B, PR #85: suite real contra staging) | `playwright.config.ts` (`E2E_STAGING=1` activa la suite real), `e2e/simulado/compra-bold.e2e.ts`, `e2e/apoyos/` (`api-simulada.ts`, `bold-simulado.ts`, `pagina-compra.ts`, `datos.ts`), `e2e/staging/` (`global-setup.ts`, `global-teardown.ts`, `compra-bold-real.e2e.ts`, `apoyos/aws-staging.ts`, `apoyos/checkout-bold.ts`), `.github/workflows/e2e.yml` (job `simulado` en cada PR y job `staging` con `workflow_dispatch`) | 19, 26–29 |
 | 31 | **v2** — Guarda síncrona contra doble toque (PR #83, PR #84) | `features/evento/comprar/comprar.component.ts` (`comprar()`), `features/evento/venta-efectivo/venta-efectivo.component.ts` (`registrarVenta()`), `features/evento/comprobante/comprobante.component.ts` (`subir()`), `features/admin/gestion-eventos/editar-evento.component.ts` y `features/admin/gestion-usuarios/gestion-usuarios.component.ts` (`guardar()`): `if (this.enviando()) return;` antes de `set(true)` (`CLAUDE.md` §7), con una prueba unitaria por componente | 30 |
 | 32 | **v2** — Endurecimiento: pantalla sin salida tras pago rechazado + idempotencia del backend en compra y venta en efectivo + guarda de "eliminar con confirmación" | `server/api/handlers/compras.ts` (`GET /api/compras/:id/estado` devolvería `bold` mientras la reserva esté vigente), `features/evento/comprar/comprar.component.ts` (`recuperarEstadoTrasBold`, `iniciarCheckoutBold`), `server/api/handlers/ventas-efectivo.ts` (clave de idempotencia en `Idempotency-Key`, escritura condicional con la respuesta guardada y TTL; diseño por decidir), `features/admin/gestion-eventos/gestion-eventos.component.ts` y `features/admin/gestion-usuarios/gestion-usuarios.component.ts` (`eliminar()`) | 30, 31 |
-| 33 | **v2** — Tipos de boletería (ADR-020, plan en `docs/plan-tipos-boleteria.md`) — ✅ implementado (PR #114, #115, #116 y ajuste móvil #117) | `server/api/lib/` (`normalizarTipos`), `server/api/handlers/eventos.ts`, `compras.ts`, `ventas-efectivo.ts`, `bold-webhook.ts`, `aprobaciones.ts`, `boletas.ts`, `reportes.ts`, `server/api/services/aforo.ts`, `boleteria.ts`, `features/admin/gestion-eventos/editar-evento.component.*`, `features/evento/*`, `features/puerta/*`, `features/panel/*` |
+| 33 | **v2** — Tipos de boletería (ADR-020, plan en `docs/archivo/plan-tipos-boleteria.md`) — ✅ implementado (PR #114, #115, #116 y ajuste móvil #117) | `server/api/lib/` (`normalizarTipos`), `server/api/handlers/eventos.ts`, `compras.ts`, `ventas-efectivo.ts`, `bold-webhook.ts`, `aprobaciones.ts`, `boletas.ts`, `reportes.ts`, `server/api/services/aforo.ts`, `boleteria.ts`, `features/admin/gestion-eventos/editar-evento.component.*`, `features/evento/*`, `features/puerta/*`, `features/panel/*` |

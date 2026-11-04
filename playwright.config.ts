@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Pruebas E2E con Playwright (roadmap #30, ADR-015, `docs/plan-ajustes-eventos.md`
+ * Pruebas E2E con Playwright (roadmap #30, ADR-015, `docs/archivo/plan-ajustes-eventos.md`
  * Tarea 5). Dos suites que NO se mezclan:
  *
  * - `e2e/simulado/` (`npm run e2e`): API y Bold simulados; hermética, corre en CI en

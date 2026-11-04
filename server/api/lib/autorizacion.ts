@@ -87,7 +87,7 @@ export async function exigirRol(
  * ningún handler nuevo repita esta comparación ad hoc (`listarPendientes()`
  * en `aprobaciones.ts`, `handlers/reportes.ts`, `handlers/ventas-efectivo.ts`
  * y `handlers/boletas.ts`, `TODO.md` Tarea 1 T8). Un `productor` se resuelve
- * contra `productores`; un `portero`, contra `porteros` (`docs/plan-pre-produccion.md`
+ * contra `productores`; un `portero`, contra `porteros` (`docs/archivo/plan-pre-produccion.md`
  * T8) — cualquier otro rol (no debería llegar hasta acá, `exigirRol` ya lo
  * filtra antes) no tiene acceso.
  */

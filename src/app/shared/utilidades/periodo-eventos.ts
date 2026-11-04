@@ -1,7 +1,7 @@
 /**
  * Periodos (mes / semana) y orden para las listas de eventos de administración
  * (roadmap #27 `/mis-eventos/eventos` y #29 `/mis-eventos/panel`,
- * `docs/plan-ajustes-eventos.md`). Todo se calcula en hora de Bogotá
+ * `docs/archivo/plan-ajustes-eventos.md`). Todo se calcula en hora de Bogotá
  * (UTC−5 fijo, sin horario de verano — `fecha-bogota.ts`): un evento a las
  * 21:00 del 31 de octubre en Bogotá es del mes de octubre aunque en UTC ya
  * sea 1 de noviembre. Funciones puras: no leen el reloj ni el DOM.

@@ -213,7 +213,7 @@ async function validarBoletaEnPuerta(
   // exige un `GetItem` extra por clave primaria — la operación más barata
   // posible en DynamoDB, de un solo dígito de milisegundos — que se acepta
   // frente al riesgo de dejar sin verificar que un portero valide ingresos
-  // de un evento donde no está asignado (`docs/plan-pre-produccion.md` T8).
+  // de un evento donde no está asignado (`docs/archivo/plan-pre-produccion.md` T8).
   // Un `eventoId` que no existe en absoluto (payload manipulado) se trata
   // igual que "no asignado": nunca se distingue, mismo criterio que
   // `MENSAJE_BOLETA_INVALIDA` arriba (no dar pistas de qué existe y qué no).
