@@ -13,7 +13,7 @@ Se actualiza al cierre de cada sesión de trabajo relevante.
 | Atributo | Valor |
 |---|---|
 | **Versión** | **1.2.0** (`package.json`, expuesta por `GET /api/salud`). Mayor 1 = en producción; cada funcionalidad mayor posterior suma un menor: **1.1** pago automático con Bold (26/08/2026, PR #50–#52) y **1.2** tipos de boletería (29/10/2026, PR #114–#117). Numeración asignada en retrospectiva el 04/11/2026: no existen etiquetas de git `v1.0`/`v1.1` |
-| **Fase** | v1 completa y en producción desde el 14/08/2026. v2 completa salvo WhatsApp (roadmap #20), bloqueado por la Verificación de Negocio de Meta. Sin tarea iniciable: el siguiente paso es que OCM promueva un ítem de v3 (`PRD.md` §6, `TODO.md`) |
+| **Fase** | v1 completa y en producción desde el 14/08/2026. v2 completa salvo WhatsApp (roadmap #20), bloqueado por la Verificación de Negocio de Meta. Tareas activas (`TODO.md`, decididas por OCM el 04/11/2026): rastro de auditoría append-only (A09) y presupuesto de AWS propio de Ágora. De v3 no se ha priorizado nada |
 | **URL de producción** | `https://agora.letiende.co` (dominio directo de API Gateway, ADR-013). Detrás del proxy de `letiende.co` se sirve también bajo `/cartelera/` |
 | **URL de staging** | `https://ttukw9i82m.execute-api.us-east-1.amazonaws.com` (cada PR despliega aquí) |
 | **Rama principal** | `main` (protegida; cada merge despliega a `production`) |
@@ -441,7 +441,7 @@ Versiones exactas en `package.json` (y `package-lock.json`, que CI instala con `
 
 | Paquete | Versión | Uso / restricción |
 |---|---|---|
-| `@angular/*` (`core`, `common`, `compiler`, `forms`, `router`, `animations`, `platform-browser`, `platform-server`, `ssr`, `cdk`, `material`, `build`, `cli`, `compiler-cli`) | ^22.2.2 | Framework, SSR y Angular Material (ADR-012). Se suben **todos a la vez** (§7 y `CLAUDE.md` §7) |
+| `@angular/*` (`core`, `common`, `compiler`, `forms`, `router`, `animations`, `platform-browser`, `platform-server`, `ssr`, `cdk`, `material`, `build`, `cli`, `compiler-cli`) | ^22.2.2 | Framework, SSR y Angular Material (ADR-012; 14 módulos en uso, inventario en `DESIGN.md` §7). `@angular/cdk` es solo dependencia par de Material: el código no lo importa. Se suben **todos a la vez** (§7 y `CLAUDE.md` §7) |
 | `tailwindcss` + `@tailwindcss/postcss` | ^4.3.3 | Utilidades CSS, vía `.postcssrc.json` |
 | `express` + `@codegenie/serverless-express` | ^5.1.0 / ^5.0.0 | Servidor SSR y su adaptador a Lambda |
 | `@aws-sdk/client-dynamodb`, `lib-dynamodb`, `util-dynamodb` | ^3.1101.0 | Acceso a datos con expresiones parametrizadas |
@@ -471,7 +471,7 @@ El lugar donde buscar un nombre de recurso sin entrar a la consola. Verificado p
 | Credenciales de despliegue | Usuario IAM compartido con Babel y Comandante (ADR-009); sus llaves viven solo en `~/.aws/credentials` y en GitHub Secrets | ✅ |
 | Usuario IAM de la suite E2E real | `agora-e2e-ci`, política mínima sobre las tablas de staging (environment `staging` de GitHub) | ✅ 01/10/2026 |
 | Servicio Serverless | `agora-letiende`, stages `staging` y `production` | ✅ |
-| Tablas DynamoDB | `agora-{usuarios,eventos,compras,boletas,auditoria,idempotencia}-{staging,production}` | ✅ Las 12 en `PAY_PER_REQUEST`. `agora-compras` con TTL en `expiraEn` y Streams `NEW_AND_OLD_IMAGES` |
+| Tablas DynamoDB | `agora-{usuarios,eventos,compras,boletas,auditoria,idempotencia}-{staging,production}` | ✅ Las 12 en `PAY_PER_REQUEST`. `agora-compras` con TTL en `expiraEn` y Streams `NEW_AND_OLD_IMAGES`. ⚠️ `agora-auditoria` está **vacía en los dos stages**: ningún código escribe en ella (`TODO.md` Tarea 1) |
 | Buckets S3 | `agora-comprobantes-{stage}` (privado, SSE-S3, Block Public Access) y `agora-activos-{stage}` (imágenes de evento y QR, `Cache-Control` inmutable) | ✅ |
 | Dominio de producción | `agora.letiende.co`, certificado ACM, dominio personalizado de API Gateway (ADR-013) | ✅ 14/08/2026 |
 | Proyecto Firebase | `comandante-letiende` (compartido); sin app web propia, se reutiliza el `firebaseConfig` de Comandante (ADR-010) | ✅ |
@@ -483,7 +483,8 @@ El lugar donde buscar un nombre de recurso sin entrar a la consola. Verificado p
 | Secretos de GitHub Actions | Ver la lista y su alcance (repositorio o environment) en `tech-specs.md` §9 | ✅ |
 | Presupuesto AWS "Costo diario" | US$4/día, a nivel de cuenta (las tres apps) | ✅ |
 | Presupuesto AWS "Costos promedio" | US$10/mes, a nivel de cuenta | ✅ |
-| Presupuesto específico de Ágora (etiqueta `Proyecto: agora`) | Umbral sugerido ~US$1 | ⬜ **Sin crear** (verificado el 04/11/2026: la cuenta solo tiene los dos presupuestos anteriores). Lo exige `CLAUDE.md` §5-bis |
+| Presupuesto específico de Ágora (etiqueta `Proyecto: agora`) | Umbral sugerido ~US$1 | ⬜ **Sin crear** (verificado el 04/11/2026: la cuenta solo tiene los dos presupuestos anteriores). Lo exige `CLAUDE.md` §5-bis. `TODO.md` Tarea 2 |
+| Etiqueta de asignación de costos `Proyecto` | Los stacks ya la llevan (`Proyecto: agora`), pero en Billing está **`Inactive`** (verificado el 04/11/2026) | ⬜ Activarla: sin eso, Cost Explorer y los presupuestos no pueden separar el gasto de Ágora. `TODO.md` Tarea 2 |
 | CloudTrail de la cuenta | Trail `letiende-auditoria`, stack `letiende-auditoria-cuenta`, etiqueta `Proyecto: letiende-compartido` | ✅ 14/10/2026, estimado ≤ US$0,05/mes |
 | Hosted zones Route 53 | ~7 zonas, piso fijo compartido (~US$3,58/mes), no atribuible a Ágora | ✅ Verificado 01/08/2026 |
 

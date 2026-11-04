@@ -109,13 +109,15 @@ Mismo valor exacto que Babel. Los formularios reactivos (`ReactiveFormsModule`, 
 
 ## 7. Angular Material vs. HTML propio
 
+Inventario verificado el 04/11/2026: 16 componentes importan 14 módulos de `@angular/material`; `@angular/cdk` no se importa directamente (solo es dependencia par de Material). Las páginas públicas usan casi solo HTML propio: de Material solo toman botones y *snackbar* en compra, comprobante y venta en efectivo.
+
 Regla general: **Angular Material para componentes complejos con estado/interacción no trivial; HTML propio + Tailwind para todo lo demás** (la mayoría de la interfaz).
 
 | Se resuelve con Angular Material | Se resuelve con HTML propio + Tailwind |
 |---|---|
 | Tablas de eventos, usuarios y panel de control (`mat-table`, con `mat-sort` en el panel) | Tarjetas de evento en la cartelera |
 | Menús desplegables de rol y de tipo de boleta (`mat-select`) | Formulario de compra (nombre, teléfono, correo, tipo y cantidad) |
-| Selectores de opción, orden y periodo (`mat-button-toggle`), interruptores (`mat-slide-toggle`), pestañas (`mat-tabs`) | Fecha y hora del evento: `<input type="datetime-local">` nativo, convertido a UTC con `shared/utilidades/fecha-bogota.ts` (no se usa `mat-datepicker`) |
+| Selectores de opción, orden y periodo (`mat-button-toggle`), interruptores (`mat-slide-toggle`), pestañas de navegación de taquilla y mis eventos (`mat-tab-nav-bar`) | Fecha y hora del evento: `<input type="datetime-local">` nativo, convertido a UTC con `shared/utilidades/fecha-bogota.ts` (no se usa `mat-datepicker`) |
 | Secciones plegables del formulario de evento, como las etapas (`mat-expansion-panel`) | Carga de archivos (comprobante, imágenes de evento): `<input type="file">` nativo |
 | Notificaciones tipo toast de acciones administrativas (`MatSnackBar`) | Vista de boleta digital con QR y pantalla de puerta (veredicto a pantalla completa) |
 | Diálogos de confirmación destructiva (`MatDialog`: "¿Eliminar este evento?") | Botones, tarjetas, inputs, layout de página, navegación y encabezados |

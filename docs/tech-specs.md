@@ -83,7 +83,7 @@ Documento de referencia de la arquitectura de **Ágora**. Su objetivo es que cua
 |---|---|---|---|---|
 | Framework frontend | Angular | 22.x | SPA con SSR, standalone components, Signals | https://angular.dev |
 | SSR | `@angular/ssr` | 22.x | Renderizado en servidor sobre Express 5 | https://angular.dev/guide/ssr |
-| Suite UI | Angular Material | 22.x | Componentes complejos: tabla, calendario, file upload; tema Material 3 propio. MIT, sin condiciones — ver ADR-012 (reemplaza a PrimeNG, que pasó a licencia comercial) | https://material.angular.dev |
+| Suite UI | Angular Material | 22.x | Componentes de interacción no trivial: tablas con orden, diálogos, *snackbar*, `mat-select`, pestañas de navegación, paneles plegables, *chips*, *toggles* e íconos. Fechas y carga de archivos usan inputs nativos. Tema Material 3 propio. `@angular/cdk` se instala solo como dependencia par de Material; el código no lo importa directamente. MIT, sin condiciones — ver ADR-012 (reemplaza a PrimeNG, que pasó a licencia comercial) | https://material.angular.dev |
 | CSS utility | Tailwind CSS | 4.x | Layout y utilidades; misma base que Babel/Comandante | https://tailwindcss.com |
 | Runtime | Node.js | 24.x | Runtime de todas las Lambdas | https://nodejs.org |
 | Lenguaje | TypeScript | ~6.0 | Estricto; `any` prohibido | https://typescriptlang.org |
@@ -367,7 +367,7 @@ export interface Boleta {
 
 ### 4.4 Estilos: Angular Material + Tailwind con tokens Le Tiende
 
-Ágora combina Angular Material (componentes complejos: tabla, calendario, file upload) con Tailwind 4 (layout y utilidades). La identidad visual es la de Le Tiende, no la de Material — nunca se usa un tema prebuilt (Azure/Blue, Rose/Red, etc.) sin adaptar.
+Ágora combina Angular Material (tablas, diálogos, *snackbar*, selects, pestañas, paneles plegables; inventario completo en `DESIGN.md` §7) con Tailwind 4 (layout y utilidades). La identidad visual es la de Le Tiende, no la de Material — nunca se usa un tema prebuilt (Azure/Blue, Rose/Red, etc.) sin adaptar.
 
 **Fuente de verdad de los tokens:** dos archivos paralelos, cada uno alimentando un sistema distinto:
 - `src/styles.css` — bloque `@theme` de Tailwind (`--color-primary`, etc.), igual que en Babel. Alimenta las clases utilitarias (`bg-primary`, `text-neutral`, …).
@@ -454,7 +454,7 @@ AgoraUsuarios:
 | `agora-eventos` | `eventoId` (PK) | GSI `slug-index` (PK `slug`); GSI `estado-fechaHora-index` | El contador de aforo vive aquí |
 | `agora-compras` | `compraId` (PK) | GSI `eventoId-creadaEn-index`; GSI `tokenAprobacionHash-index` | **TTL en `expiraEn`**, con Streams activados |
 | `agora-boletas` | `boletaId` (PK) | GSI `eventoId-estado-index`; GSI `compraId-index` | `boletaId` es el contenido del QR |
-| `agora-auditoria` | `entidadId` (PK), `ocurridoEn` (SK) | — | Append-only. Nunca se actualiza ni se borra |
+| `agora-auditoria` | `entidadId` (PK), `ocurridoEn` (SK) | — | Append-only. Nunca se actualiza ni se borra. **Vacía en los dos stages (verificado el 04/11/2026): ningún código escribe en ella todavía** — `TODO.md` Tarea 1 |
 | `agora-idempotencia` | `idempotenciaId` (PK, SHA-256 de `operación\|actor\|clave`) | — | Claves de `Idempotency-Key` de `POST /api/compras` y `POST /api/ventas-efectivo`. TTL `expiraEn` a 24 h. Guarda solo la respuesta 2xx (sin datos personales) |
 
 ### 5.3 Funciones Lambda
@@ -475,6 +475,8 @@ Cada una con su propio rol IAM de mínimo privilegio y su propio paquete (`packa
 | `reportes` | Panel y exportación | `compras`, `boletas`, `eventos` (lectura), S3 activos |
 | `liberarReservas` | **DynamoDB Streams** de `compras` (evento de borrado por TTL) | `eventos` (condicional), `compras`, `auditoria` |
 | `boldWebhook` (v2) | `POST /api/pagos/bold/webhook` | `compras`, `eventos`, `boletas`, `auditoria` |
+
+**`auditoria` en esta tabla es el diseño, no el estado actual.** Verificado el 04/11/2026: ninguna Lambda recibe el nombre de la tabla ni tiene permiso IAM sobre ella, y la tabla está vacía. Hoy el rastro de A09 es parcial: campos sobre ítems mutables (`resueltoPor`/`resueltoEn` en compras, `ingresoPor`/`ingresoEn` y `emitidaEn` en boletas, `creadoPor`/`duplicadoDe` en eventos) más CloudWatch Logs, que vencen. Se completa en `TODO.md` Tarea 1.
 
 ### 5.4 El ciclo de vida del aforo
 
