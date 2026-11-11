@@ -322,3 +322,5 @@ Specs definition,11/11/2026 17:17,11/11/2026 17:22,0:05:00,AI,Opus 5.5,"Document
 Backend,11/11/2026 17:24,11/11/2026 17:36,0:12:00,AI,Sonnet 5.5,"Corrige el webhook de Bold: rechazo no cierra la compra, aprobación tardía se recupera",Claude Code,cli,high
 Backend,11/11/2026 18:25,11/11/2026 18:26,0:01:00,AI,Sonnet 5.5,"Diagnostica el fallo de e2e:staging: Bold responde 404 para una referencia sin venta",Claude Code,cli,medium
 Backend,11/11/2026 18:27,11/11/2026 18:30,0:03:00,AI,Opus 5.5,"Traduce el 404 de la consulta de Bold a NO_TRANSACTION_FOUND (ADR-018)",Claude Code,cli,medium
+Backend,11/11/2026 18:31,11/11/2026 18:32,0:01:00,human,OCM,"Corre e2e:staging con la corrección del 404: 4 de 4 en verde",Terminal,cli,low
+Specs definition,11/11/2026 18:34,11/11/2026 18:35,0:01:00,AI,Opus 5.5,"Registra la corrida de staging en verde en TODO, PR y tracking",Claude Code,cli,low
