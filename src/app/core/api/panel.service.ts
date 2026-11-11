@@ -47,6 +47,8 @@ export interface ClientePanel {
   tipoId?: string;
   tipoNombre?: string;
   medioPago?: string;
+  /** Código de la transacción de Bold (ADR-021); solo en compras pagadas con Bold. */
+  transaccionBoldId?: string;
   creadaEn: string;
 }
 

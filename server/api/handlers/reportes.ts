@@ -38,6 +38,8 @@ interface CompraAprobada {
   montoTotal: number;
   cliente?: ClienteCompra;
   medioPago?: string;
+  // ADR-021 — código de la transacción de Bold; solo en compras pagadas con Bold desde 11/2026.
+  transaccionBoldId?: string;
   creadaEn: string;
   estado: string;
 }
@@ -283,6 +285,8 @@ async function obtenerPanelEvento(
     tipoId: compra.tipoId ?? TIPO_DEFECTO_ID,
     tipoNombre: nombreDelTipo(compra.tipoId ?? TIPO_DEFECTO_ID, compra.tipoNombre),
     medioPago: compra.medioPago,
+    // Sirve para cruzar la compra con el panel de Bold, que solo muestra valor, hora y código.
+    transaccionBoldId: compra.transaccionBoldId,
     creadaEn: compra.creadaEn,
   }));
 

@@ -115,12 +115,23 @@ export const handler: DynamoDBStreamHandler = async (
         continue;
       }
       if (estado === 'esperando_pago_bold') {
-        // Ni aprobada ni rechazada por Bold dentro del plazo: o el cliente no
-        // pagó, o el aviso de Bold no llegó. Sin datos del cliente (A09).
-        console.error('Compra de Bold expirada sin respuesta de Bold; quedó archivada', {
-          compraId: compra['compraId'],
-          eventoId,
-        });
+        // Sin datos del cliente (A09).
+        if (typeof compra['ultimoRechazoEn'] === 'string') {
+          // Bold sí avisó (rechazó un intento) y el cliente no volvió a pagar:
+          // es lo normal tras un pago rechazado, no un webhook caído (ADR-021).
+          console.warn('Compra de Bold expirada tras un pago rechazado; quedó archivada', {
+            compraId: compra['compraId'],
+            eventoId,
+          });
+        } else {
+          // Ni aprobada ni rechazada por Bold dentro del plazo: o el cliente no
+          // pagó, o el aviso de Bold no llegó. Esta línea la cuenta la alarma
+          // `AlarmaBoldExpiradaSinRespuesta` (serverless.yml).
+          console.error('Compra de Bold expirada sin respuesta de Bold; quedó archivada', {
+            compraId: compra['compraId'],
+            eventoId,
+          });
+        }
       }
     }
 

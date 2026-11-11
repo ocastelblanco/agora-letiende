@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { CLIENTE_PRUEBA } from '../apoyos/datos';
 import { PaginaCompra } from '../apoyos/pagina-compra';
@@ -6,6 +7,7 @@ import {
   CheckoutBold,
   TARJETA_APROBADA,
   TARJETA_RECHAZADA,
+  URL_WEBHOOK_STAGING,
   permitirInspeccionarCheckoutBold,
 } from './apoyos/checkout-bold';
 
@@ -91,7 +93,8 @@ test.describe('Compra con Bold contra staging', () => {
 
     await pagarYSerRechazado(page);
 
-    // Bold no notifica a Ágora de un rechazo (verificado): la compra sigue esperando el pago.
+    // El SANDBOX de Bold no notifica a Ágora un rechazo (verificado); producción sí
+    // (ADR-021). En ambos casos la compra sigue esperando el pago.
     await expect(page.getByRole('heading', { name: 'Confirma tu pago' })).toBeVisible({ timeout: 30_000 });
     const compras = await leerCompras(evento.eventoId);
     const ultima = compras.sort((a, b) => String(a['creadaEn']).localeCompare(String(b['creadaEn']))).at(-1)!;
@@ -107,5 +110,90 @@ test.describe('Compra con Bold contra staging', () => {
     const caminos = compra.botonPagarConBold.or(compra.botonVerificar).or(compra.botonReabrir).or(compra.botonIntentarDeNuevo);
 
     await expect(caminos.first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  /**
+   * Envía a la Lambda real de staging un aviso firmado como lo hace el sandbox de Bold
+   * (HMAC-SHA256 con llave vacía sobre el cuerpo en Base64, `services/bold.ts`). Se usa
+   * para reproducir lo que Bold hace en producción y el sandbox no: avisar cada intento
+   * rechazado (ADR-021).
+   */
+  async function enviarAvisoDeBold(tipo: 'SALE_REJECTED' | 'SALE_APPROVED', compraId: string, paymentId: string) {
+    const cuerpo = JSON.stringify({
+      id: `e2e-${paymentId}`,
+      type: tipo,
+      subject: compraId,
+      source: '/e2e',
+      spec_version: '1.0',
+      time: Date.now() * 1_000_000,
+      datacontenttype: 'application/json',
+      data: {
+        payment_id: paymentId,
+        merchant_id: 'E2E',
+        metadata: { reference: compraId },
+        // El sandbox informa total 0 (ADR-018); en modo pruebas no se compara.
+        amount: { total: 0, currency: 'COP', taxes: [], tip: 0 },
+        payment_method: 'CREDIT_CARD',
+      },
+    });
+    const firma = createHmac('sha256', '').update(Buffer.from(cuerpo, 'utf8').toString('base64')).digest('hex');
+    const respuesta = await fetch(URL_WEBHOOK_STAGING, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-bold-signature': firma },
+      body: cuerpo,
+    });
+    return respuesta.status;
+  }
+
+  // Incidente del 10/11/2026 (ADR-021): un intento rechazado seguido de uno aprobado sobre la
+  // misma compra. Antes, el rechazo cerraba la compra y la aprobación se descartaba con un 200.
+  test('un intento rechazado y luego uno aprobado: la compra sigue abierta, se aprueba y se emiten las boletas', async ({ page }) => {
+    const antes = await leerEvento(evento.eventoId);
+    const boletasAntes = (await leerBoletas(evento.eventoId)).length;
+    const idsAntes = new Set((await leerCompras(evento.eventoId)).map((c) => c['compraId']));
+
+    // Solo se llega a «Confirma tu pago»: no se paga en el sandbox, los avisos los envía la prueba.
+    await permitirInspeccionarCheckoutBold(page);
+    const compra = new PaginaCompra(page);
+    await compra.abrir(evento.slug);
+    await compra.llenarDatos(1, { ...CLIENTE_PRUEBA, correo: 'success@simulator.amazonses.com' });
+    await compra.botonComprar.click();
+    await expect(page.getByRole('heading', { name: 'Confirma tu pago' })).toBeVisible({ timeout: 60_000 });
+
+    const nueva = (await leerCompras(evento.eventoId)).find((c) => !idsAntes.has(c['compraId']))!;
+    const compraId = String(nueva['compraId']);
+    expect(nueva['estado']).toBe('esperando_pago_bold');
+
+    expect(await enviarAvisoDeBold('SALE_REJECTED', compraId, 'E2ERECHAZADO1')).toBe(200);
+
+    // El rechazo de un intento NO cierra la compra ni libera las sillas: solo se anota.
+    const trasRechazo = (await leerCompras(evento.eventoId)).find((c) => c['compraId'] === compraId)!;
+    expect(trasRechazo['estado']).toBe('esperando_pago_bold');
+    expect(trasRechazo['ultimoRechazoEn']).toBeTruthy();
+    expect(trasRechazo['avisosBold']).toEqual([expect.objectContaining({ tipo: 'rechazado', paymentId: 'E2ERECHAZADO1' })]);
+    const eventoTrasRechazo = await leerEvento(evento.eventoId);
+    expect(eventoTrasRechazo!['sillasReservadas']).toBe((antes!['sillasReservadas'] as number) + 1);
+
+    expect(await enviarAvisoDeBold('SALE_APPROVED', compraId, 'E2EAPROBADO1')).toBe(200);
+
+    await expect
+      .poll(async () => (await leerCompras(evento.eventoId)).find((c) => c['compraId'] === compraId)?.['estado'], {
+        timeout: 60_000,
+        intervals: [1000, 2000, 3000],
+        message: 'la aprobación posterior al rechazo debería aprobar la compra',
+      })
+      .toBe('aprobada');
+
+    const aprobada = (await leerCompras(evento.eventoId)).find((c) => c['compraId'] === compraId)!;
+    expect(aprobada['avisosBold']).toEqual([
+      expect.objectContaining({ tipo: 'rechazado', paymentId: 'E2ERECHAZADO1' }),
+      expect.objectContaining({ tipo: 'aprobado', paymentId: 'E2EAPROBADO1' }),
+    ]);
+    const boletas = await leerBoletas(evento.eventoId);
+    expect(boletas).toHaveLength(boletasAntes + 1);
+    expect(boletas.filter((b) => b['compraId'] === compraId)).toHaveLength(1);
+    const despues = await leerEvento(evento.eventoId);
+    expect(despues!['sillasReservadas']).toBe(antes!['sillasReservadas']);
+    expect(despues!['sillasDisponibles']).toBe((antes!['sillasDisponibles'] as number) - 1);
   });
 });

@@ -49,6 +49,51 @@ interface CompraParaWebhookBold {
   montoTotal: number;
   medioPago?: string;
   estado: string;
+  /** Quién cerró la compra; para Bold es `RESUELTO_POR_BOLD`. */
+  resueltoPor?: string;
+}
+
+/**
+ * Lo que Ágora guarda de cada aviso de Bold en la compra (`avisosBold`, solo se
+ * agrega, nunca se edita — A09). Ningún dato personal: el `payment_id` es el
+ * código de la transacción, que sirve para cruzar contra el panel de Bold.
+ */
+interface AvisoBold {
+  tipo: 'aprobado' | 'rechazado';
+  paymentId?: string;
+  en: string;
+}
+
+/** Formato del `payment_id` de Bold; cualquier otra cosa se descarta en vez de guardarse. */
+const PATRON_ID_PAGO_BOLD = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Forma de un `compraId` de Ágora (UUID v4). Las ventas de otros canales de Bold traen un número. */
+const PATRON_COMPRA_AGORA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function crearAviso(tipo: AvisoBold['tipo'], paymentId: unknown): AvisoBold {
+  const aviso: AvisoBold = { tipo, en: new Date().toISOString() };
+  if (typeof paymentId === 'string' && PATRON_ID_PAGO_BOLD.test(paymentId)) {
+    aviso.paymentId = paymentId;
+  }
+  return aviso;
+}
+
+/**
+ * Compra que Bold cerró y que todavía puede recibir un pago aprobado
+ * (ADR-021). `rechazada` solo cuenta si la cerró el propio webhook de Bold:
+ * una compra que rechazó un productor, o una de transferencia, nunca se recupera.
+ */
+function estadoCerradoPorBold(compra: CompraParaWebhookBold): 'expirada' | 'rechazada' | undefined {
+  if (compra.medioPago !== 'bold') {
+    return undefined;
+  }
+  if (compra.estado === 'expirada') {
+    return 'expirada';
+  }
+  if (compra.estado === 'rechazada' && compra.resueltoPor === RESUELTO_POR_BOLD) {
+    return 'rechazada';
+  }
+  return undefined;
 }
 
 function esErrorCondicionFallida(error: unknown): boolean {
@@ -86,6 +131,12 @@ const ESTADOS_BOLD_AUN_NO_VISIBLE = new Set(['NO_TRANSACTION_FOUND', 'PROCESSING
 
 type ResultadoVerificacionPago = 'ok' | 'ok_sin_conciliar' | 'monto_no_coincide' | 'no_conciliado' | 'bold_no_disponible';
 
+interface VerificacionPago {
+  resultado: ResultadoVerificacionPago;
+  /** Código de la transacción que devuelve la consulta de Bold, si la devolvió. */
+  transaccionId?: string;
+}
+
 /**
  * Verificaciones previas a aprobar un pago (`CLAUDE.md` §5, A08, ADR-018): una
  * firma válida prueba que la notificación viene de Bold, no que el monto sea el
@@ -109,7 +160,7 @@ async function verificarPagoAprobado(
   compra: CompraParaWebhookBold,
   payload: NotificacionBold,
   modoPruebas: boolean,
-): Promise<ResultadoVerificacionPago> {
+): Promise<VerificacionPago> {
   // El sandbox de Bold informa `amount.total: 0` en sus webhooks aunque la
   // compra sea de 30.000 (observado con el webhook real en staging el
   // 10/10/2026: `{ currency: 'COP', total: 0, taxes: [], tip: 0 }`, no
@@ -117,7 +168,7 @@ async function verificarPagoAprobado(
   // producción (`BOLD_MODO_PRUEBAS=false`) la comparación es estricta.
   const comparaMonto = !modoPruebas;
   if (comparaMonto && !montoCoincide(payload.data?.amount, compra.montoTotal)) {
-    return 'monto_no_coincide';
+    return { resultado: 'monto_no_coincide' };
   }
 
   let comprobante: ComprobantePagoBold;
@@ -127,7 +178,7 @@ async function verificarPagoAprobado(
     if (error instanceof ErrorConsultaBold) {
       // El mensaje solo lleva el código HTTP o el tipo de error: sin llaves ni datos del cliente.
       console.error('Webhook de Bold: falló la consulta de conciliación', { compraId: compra.compraId, motivo: error.message });
-      return error.esDeAutorizacion ? 'ok_sin_conciliar' : 'bold_no_disponible';
+      return { resultado: error.esDeAutorizacion ? 'ok_sin_conciliar' : 'bold_no_disponible' };
     }
     throw error;
   }
@@ -138,7 +189,11 @@ async function verificarPagoAprobado(
     const referenciaCoincide = comprobante.reference_id === undefined || comprobante.reference_id === compra.compraId;
     const totalCoincide = !comparaMonto || montoCoincide({ total: comprobante.total }, compra.montoTotal);
     if (referenciaCoincide && totalCoincide) {
-      return 'ok';
+      const transaccionId =
+        typeof comprobante.transaction_id === 'string' && PATRON_ID_PAGO_BOLD.test(comprobante.transaction_id)
+          ? comprobante.transaction_id
+          : undefined;
+      return { resultado: 'ok', transaccionId };
     }
     console.error('Webhook de Bold: la consulta de Bold no coincide con la compra', {
       compraId: compra.compraId,
@@ -146,20 +201,20 @@ async function verificarPagoAprobado(
       totalConsultado: comprobante.total,
       montoEsperado: compra.montoTotal,
     });
-    return 'no_conciliado';
+    return { resultado: 'no_conciliado' };
   }
   if (ESTADOS_BOLD_AUN_NO_VISIBLE.has(estado)) {
     console.error('Webhook de Bold: la venta aún no aparece en la consulta; se aprueba sin conciliar', {
       compraId: compra.compraId,
       estadoConsultado: estado,
     });
-    return 'ok_sin_conciliar';
+    return { resultado: 'ok_sin_conciliar' };
   }
   console.error('Webhook de Bold: la consulta de Bold contradice el pago aprobado', {
     compraId: compra.compraId,
     estadoConsultado: estado,
   });
-  return 'no_conciliado';
+  return { resultado: 'no_conciliado' };
 }
 
 /**
@@ -171,20 +226,30 @@ async function verificarPagoAprobado(
  * primitivas que el resto de flujos de aprobación (`aforo.ts`/`boleteria.ts`,
  * `CLAUDE.md` §5 A08) — ninguna se reimplementa.
  */
-async function procesarPagoAprobado(compra: CompraParaWebhookBold): Promise<APIGatewayProxyResultV2> {
+async function procesarPagoAprobado(
+  compra: CompraParaWebhookBold,
+  aviso: AvisoBold,
+  transaccionId: string | undefined,
+): Promise<APIGatewayProxyResultV2> {
   try {
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
         UpdateExpression:
-          'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+          'SET estado = :aprobada, resueltoPor = :resueltoPor, resueltoEn = :ahora, ' +
+          'avisosBold = list_append(if_not_exists(avisosBold, :sinAvisos), :aviso)' +
+          (transaccionId ? ', transaccionBoldId = :transaccion' : '') +
+          ' REMOVE expiraEn',
         ConditionExpression: 'estado = :esperandoPago',
         ExpressionAttributeValues: {
           ':aprobada': 'aprobada',
           ':esperandoPago': 'esperando_pago_bold',
           ':resueltoPor': RESUELTO_POR_BOLD,
           ':ahora': new Date().toISOString(),
+          ':sinAvisos': [],
+          ':aviso': [aviso],
+          ...(transaccionId ? { ':transaccion': transaccionId } : {}),
         },
       }),
     );
@@ -252,22 +317,37 @@ async function procesarPagoAprobado(compra: CompraParaWebhookBold): Promise<APIG
 }
 
 /**
- * Transiciona una compra `esperando_pago_bold` a `rechazada` y libera el
- * aforo — mismo patrón condicional idempotente que arriba.
+ * Un `SALE_REJECTED` es el rechazo de UN INTENTO de pago, no el final de la
+ * compra (ADR-021, incidente del 10/11/2026): el checkout de Bold deja
+ * reintentar con la misma referencia, y el intento siguiente puede salir
+ * aprobado. Por eso la compra sigue en `esperando_pago_bold`, con sus sillas
+ * reservadas, y solo se anota el intento. Si el cliente abandona, vence por el
+ * camino normal (`expiraEn` → `liberar-reservas.ts`, que antes de expirar
+ * consulta a Bold).
+ *
+ * La condición sobre el estado hace que un aviso tardío o duplicado sobre una
+ * compra ya resuelta responda 200 sin escribir nada. Un aviso duplicado sobre
+ * una compra todavía abierta agrega una entrada repetida: es inofensivo, solo
+ * informativo.
  */
-async function procesarPagoRechazado(compra: CompraParaWebhookBold): Promise<APIGatewayProxyResultV2> {
+async function registrarIntentoRechazado(
+  compra: CompraParaWebhookBold,
+  paymentId: unknown,
+): Promise<APIGatewayProxyResultV2> {
+  const aviso = crearAviso('rechazado', paymentId);
   try {
     await documentoDynamoDB.send(
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :rechazada, resueltoPor = :resueltoPor, resueltoEn = :ahora REMOVE expiraEn',
+        UpdateExpression:
+          'SET ultimoRechazoEn = :ahora, avisosBold = list_append(if_not_exists(avisosBold, :sinAvisos), :aviso)',
         ConditionExpression: 'estado = :esperandoPago',
         ExpressionAttributeValues: {
-          ':rechazada': 'rechazada',
           ':esperandoPago': 'esperando_pago_bold',
-          ':resueltoPor': RESUELTO_POR_BOLD,
-          ':ahora': new Date().toISOString(),
+          ':ahora': aviso.en,
+          ':sinAvisos': [],
+          ':aviso': [aviso],
         },
       }),
     );
@@ -277,36 +357,33 @@ async function procesarPagoRechazado(compra: CompraParaWebhookBold): Promise<API
     }
     throw error;
   }
-
-  try {
-    await liberarSillas(compra.eventoId, sillasDeCompra(compra));
-  } catch (error) {
-    if (!(error instanceof ErrorAforo)) {
-      throw error;
-    }
-    console.error('liberarSillas falló tras rechazar un pago Bold', { compraId: compra.compraId });
-  }
-
   return respuestaJson(200, { recibido: true });
 }
 
 /**
- * Aviso tardío de Bold (incidente del 16/10/2026): la compra ya expiró y
- * devolvió su aforo, pero el pago está aprobado y verificado. Se vuelve a
- * tomar el aforo con la misma escritura condicional de una compra nueva y la
- * compra vuelve a `esperando_pago_bold` para aprobarse por el camino normal.
+ * Pago aprobado y verificado sobre una compra que Bold ya había cerrado
+ * (incidentes del 16/10/2026, compra `expirada`, y del 10/11/2026, compra
+ * `rechazada` por un intento anterior): la compra ya devolvió su aforo, pero el
+ * pago existe. Se vuelve a tomar el aforo con la misma escritura condicional de
+ * una compra nueva y la compra vuelve a `esperando_pago_bold` para aprobarse por
+ * el camino normal.
  * Si ya no hay sillas, el cliente pagó y no hay boletas que emitir: queda un
  * error en el log para atenderlo a mano (devolución o cupo extra), y 200 para
  * que Bold no reintente algo que no se resuelve solo.
  */
-async function recuperarCompraExpirada(compra: CompraParaWebhookBold): Promise<APIGatewayProxyResultV2> {
+async function recuperarCompraCerradaPorBold(
+  compra: CompraParaWebhookBold,
+  estadoOrigen: 'expirada' | 'rechazada',
+  aviso: AvisoBold,
+  transaccionId: string | undefined,
+): Promise<APIGatewayProxyResultV2> {
   try {
     await reservarSillas(compra.eventoId, sillasDeCompra(compra));
   } catch (error) {
     if (!(error instanceof ErrorAforo)) {
       throw error;
     }
-    console.error('Webhook de Bold: pago aprobado de una compra expirada sin aforo para recuperarla; requiere atención manual', {
+    console.error('Webhook de Bold: pago aprobado de una compra ya cerrada sin aforo para recuperarla; requiere atención manual', {
       compraId: compra.compraId,
       eventoId: compra.eventoId,
       motivo: error.message,
@@ -319,11 +396,11 @@ async function recuperarCompraExpirada(compra: CompraParaWebhookBold): Promise<A
       new UpdateCommand({
         TableName: process.env['TABLA_COMPRAS'],
         Key: { compraId: compra.compraId },
-        UpdateExpression: 'SET estado = :esperandoPago, recuperadaEn = :ahora',
-        ConditionExpression: 'estado = :expirada',
+        UpdateExpression: 'SET estado = :esperandoPago, recuperadaEn = :ahora, recuperadaDesde = :cerrada',
+        ConditionExpression: 'estado = :cerrada',
         ExpressionAttributeValues: {
           ':esperandoPago': 'esperando_pago_bold',
-          ':expirada': 'expirada',
+          ':cerrada': estadoOrigen,
           ':ahora': new Date().toISOString(),
         },
       }),
@@ -337,10 +414,11 @@ async function recuperarCompraExpirada(compra: CompraParaWebhookBold): Promise<A
     throw error;
   }
 
-  console.error('Webhook de Bold: aviso tardío sobre una compra expirada; se recupera y aprueba', {
+  console.error('Webhook de Bold: pago aprobado sobre una compra ya cerrada; se recupera y aprueba', {
     compraId: compra.compraId,
+    estadoOrigen,
   });
-  return procesarPagoAprobado({ ...compra, estado: 'esperando_pago_bold' });
+  return procesarPagoAprobado({ ...compra, estado: 'esperando_pago_bold' }, aviso, transaccionId);
 }
 
 /**
@@ -375,7 +453,7 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
     // ventas de otros canales que no son de Ágora. Un 404 hace que Bold las
     // reintente sin fin y termine desactivando el webhook (incidentes del
     // 16/10 y 23/10/2026).
-    console.error('Webhook de Bold: notificación sin referencia de compra', { tipo: payload?.type });
+    console.warn('Webhook de Bold: notificación sin referencia de compra', { tipo: payload?.type });
     return respuestaJson(200, { recibido: true });
   }
 
@@ -389,16 +467,19 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
     // la venta es de otro canal de la cuenta de Bold: se acepta con 200 para
     // que Bold no reintente ni desactive el webhook (incidentes del 16/10 y
     // 23/10/2026). Queda el console.error para no perder visibilidad.
-    console.error('Webhook de Bold: no existe la compra de la notificación', { compraId, tipo: payload.type });
+    // Un número suelto es una venta de otro canal (aviso). Una referencia con
+    // forma de compra de Ágora que no existe podría ser un pago perdido: error.
+    const registrar = PATRON_COMPRA_AGORA.test(compraId) ? console.error : console.warn;
+    registrar('Webhook de Bold: no existe la compra de la notificación', { compraId, tipo: payload.type });
     return respuestaJson(200, { recibido: true });
   }
 
   if (payload.type === 'SALE_APPROVED') {
-    const esExpiradaDeBold = compra.estado === 'expirada' && compra.medioPago === 'bold';
+    const estadoCerrado = estadoCerradoPorBold(compra);
     // Reintento de Bold sobre una compra ya resuelta: 200 sin gastar una
     // consulta a Bold (la escritura condicional de más abajo sigue siendo la
     // autoridad contra la doble emisión).
-    if (compra.estado !== 'esperando_pago_bold' && !esExpiradaDeBold) {
+    if (compra.estado !== 'esperando_pago_bold' && !estadoCerrado) {
       if (compra.estado !== 'aprobada') {
         console.error('Webhook de Bold: pago aprobado sobre una compra que no lo esperaba', {
           compraId: compra.compraId,
@@ -408,7 +489,7 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
       return respuestaJson(200, { recibido: true });
     }
 
-    const verificacion = await verificarPagoAprobado(compra, payload, modoPruebas);
+    const { resultado: verificacion, transaccionId } = await verificarPagoAprobado(compra, payload, modoPruebas);
     // Solo el compraId en los logs, nunca datos del cliente (CLAUDE.md §5, A09).
     if (verificacion === 'monto_no_coincide') {
       // `amount` (total, moneda, impuestos, propina) y el monto esperado son
@@ -428,13 +509,14 @@ async function procesarWebhook(evento: APIGatewayProxyEventV2): Promise<APIGatew
       console.error('Webhook de Bold: no se pudo consultar a Bold para conciliar', { compraId: compra.compraId });
       return respuestaJson(503, { mensaje: 'No se pudo conciliar el pago, reintenta' });
     }
-    if (esExpiradaDeBold) {
-      return await recuperarCompraExpirada(compra);
+    const aviso = crearAviso('aprobado', payload.data?.payment_id);
+    if (estadoCerrado) {
+      return await recuperarCompraCerradaPorBold(compra, estadoCerrado, aviso, transaccionId);
     }
-    return await procesarPagoAprobado(compra);
+    return await procesarPagoAprobado(compra, aviso, transaccionId);
   }
   if (payload.type === 'SALE_REJECTED') {
-    return await procesarPagoRechazado(compra);
+    return await registrarIntentoRechazado(compra, payload.data?.payment_id);
   }
 
   // VOID_APPROVED/VOID_REJECTED (anulación) u otro tipo — fuera de alcance

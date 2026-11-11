@@ -57,6 +57,7 @@ export class PanelEventoComponent {
     'cantidad',
     'montoTotal',
     'medioPago',
+    'transaccionBoldId',
     'creadaEn',
   ];
 

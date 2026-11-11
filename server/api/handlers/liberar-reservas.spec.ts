@@ -78,8 +78,32 @@ describe('borrado por TTL (incidente del 16/10/2026)', () => {
     expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
     // Alerta en el log, solo con identificadores (nunca el correo del cliente).
     expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(errorSpy.mock.calls[0])).toContain('sin respuesta');
     expect(JSON.stringify(errorSpy.mock.calls[0])).not.toContain('cliente@correo.com');
     errorSpy.mockRestore();
+  });
+
+  it('una compra de Bold que tuvo un rechazo y se abandonó se archiva con aviso, no con la alerta de webhook caído (ADR-021)', async () => {
+    sendMock.mockResolvedValueOnce({});
+    liberarSillasMock.mockResolvedValueOnce(undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const avisoSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await handler(
+      evento([registroTtl('esperando_pago_bold', { ultimoRechazoEn: { S: '2026-11-10T18:26:47.350Z' } })]),
+      {} as never,
+      () => {},
+    );
+
+    expect(sendMock.mock.calls[0]?.[0].input.Item.estado).toBe('expirada');
+    expect(sendMock.mock.calls[0]?.[0].input.Item.ultimoRechazoEn).toBe('2026-11-10T18:26:47.350Z');
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    // El patrón de la alarma ("Compra de Bold expirada sin respuesta") no debe aparecer.
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('sin respuesta');
+    expect(avisoSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(avisoSpy.mock.calls[0])).not.toContain('cliente@correo.com');
+    errorSpy.mockRestore();
+    avisoSpy.mockRestore();
   });
 
   it('un registro duplicado del Stream no vuelve a liberar el aforo', async () => {
