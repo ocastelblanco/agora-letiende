@@ -188,6 +188,19 @@ describe('consultarPagoBold (consulta de transacciones del Botón de pagos)', ()
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // Verificado en producción el 11/11/2026: para una referencia sin ninguna venta, Bold no
+  // responde `NO_TRANSACTION_FOUND` con 200, sino 404 con
+  // `{ payload: {}, errors: [{ message: 'La referencia … no fue encontrada' }] }`.
+  it('trata un 404 de Bold como NO_TRANSACTION_FOUND (la venta no existe o todavía no aparece)', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({ payload: {}, errors: [{ message: 'La referencia compra-1 no fue encontrada' }] }),
+    });
+
+    await expect(consultarPagoBold('compra-1', 1500)).resolves.toEqual({ payment_status: 'NO_TRANSACTION_FOUND' });
+  });
+
   it('distingue credenciales rechazadas (401/403) de caídas de Bold (5xx, red, tiempo)', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) });
     await expect(consultarPagoBold('compra-1', 1500)).rejects.toMatchObject({ estadoHttp: 401, esDeAutorizacion: true });
