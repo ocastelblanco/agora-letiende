@@ -319,3 +319,4 @@ Workspace settting,04/11/2026 15:45,04/11/2026 15:47,0:02:00,AI,Opus 5.5,"Limpie
 Backend,11/11/2026 11:36,11/11/2026 11:38,0:02:00,AI,Sonnet 5.5,"Investiga compra Bold sin boleta: aprobación descartada tras un rechazo en el mismo checkout",Claude Code,cli,medium
 Backend,11/11/2026 16:59,11/11/2026 17:03,0:04:00,AI,Fable 5.2,"Revisa a fondo el incidente de Bold, halla un segundo caso y propone plan de acción",Claude Code,cli,high
 Specs definition,11/11/2026 17:17,11/11/2026 17:22,0:05:00,AI,Opus 5.5,"Documenta el incidente de Bold (ADR-021), reprioriza el JIT y crea la rama de corrección",Claude Code,cli,medium
+Backend,11/11/2026 17:24,11/11/2026 17:36,0:12:00,AI,Sonnet 5.5,"Corrige el webhook de Bold: rechazo no cierra la compra, aprobación tardía se recupera",Claude Code,cli,high

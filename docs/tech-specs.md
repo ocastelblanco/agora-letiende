@@ -343,6 +343,12 @@ export interface Compra {
   expiraEn?: number;          // Epoch en segundos — atributo TTL de DynamoDB
   aprobadaPor?: string;       // Correo del productor que resolvió
   resueltaEn?: string;
+  // Bold (ADR-021). Solo en compras pagadas con Bold; ningún dato personal.
+  avisosBold?: { tipo: 'aprobado' | 'rechazado'; paymentId?: string; en: string }[]; // append-only, un elemento por aviso del webhook
+  ultimoRechazoEn?: string;   // UTC — último intento rechazado; la compra sigue en esperando_pago_bold
+  transaccionBoldId?: string; // Código de transacción de la conciliación (el que ve el cliente en su comprobante)
+  recuperadaEn?: string;      // UTC — un pago aprobado llegó con la compra ya cerrada por Bold y se recuperó
+  recuperadaDesde?: 'expirada' | 'rechazada';
   autorizacionDatos: { aceptadaEn: string; versionTexto: string };
   creadaEn: string;
 }
@@ -433,7 +439,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | POST | `/api/usuarios` | Administrador | Crea usuario | `{ email, nombre, rol }` |
 | PUT | `/api/usuarios/:email` | Administrador | Edita usuario | `{ nombre?, rol?, activo? }` |
 | DELETE | `/api/usuarios/:email` | Administrador | Elimina usuario | — |
-| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago: firma HMAC verificada; en `SALE_APPROVED`, además el monto y la moneda deben coincidir con la compra y el pago se concilia con la consulta de transacciones del Botón de pagos (`GET payments.api.bold.co/v2/payment-voucher/{compraId}`). `422` monto distinto, `409` Bold contradice el pago, `503` Bold no responde (reintenta); si la venta aún no aparece o Bold responde 401/403, se aprueba con firma y monto y queda un error en el log — ver ADR-018. **Defecto conocido (incidente del 10/11/2026, se corrige en `TODO.md` Tarea 1, ADR-021):** hoy `SALE_REJECTED` pasa la compra a `rechazada` y libera el aforo, y un `SALE_APPROVED` posterior sobre la misma referencia (reintento en el mismo checkout) se descarta con `200` | Payload de Bold |
+| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago: firma HMAC verificada; en `SALE_APPROVED`, además el monto y la moneda deben coincidir con la compra y el pago se concilia con la consulta de transacciones del Botón de pagos (`GET payments.api.bold.co/v2/payment-voucher/{compraId}`). `422` monto distinto, `409` Bold contradice el pago, `503` Bold no responde (reintenta); si la venta aún no aparece o Bold responde 401/403, se aprueba con firma y monto y queda un error en el log — ver ADR-018. **`SALE_REJECTED` no cierra la compra (ADR-021, incidente del 10/11/2026):** solo anota el intento (`avisosBold`, `ultimoRechazoEn`) y la deja en `esperando_pago_bold` con sus sillas, porque el checkout deja reintentar con la misma referencia; vence por el camino normal. Un `SALE_APPROVED` verificado sobre una compra de Bold que el sistema cerró (`expirada`, o `rechazada` con `resueltoPor = sistema (pago Bold confirmado)`) la recupera: vuelve a tomar el aforo con escritura condicional y la aprueba; sin aforo queda un error para atención manual. Una compra rechazada por un productor nunca se recupera. Al aprobar se guarda `transaccionBoldId`. Alarma `agora-bold-pago-sin-emitir-production` si un pago aprobado no se convierte en boletas | Payload de Bold |
 
 ### 5.2 Tablas de DynamoDB
 
