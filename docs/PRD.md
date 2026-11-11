@@ -303,6 +303,7 @@ Plan y decisiones: `docs/archivo/plan-tipos-boleteria.md` · ADR-020.
 | Pantalla sin salida tras un pago rechazado con Bold (el cliente queda sin ningún botón para continuar) | **Alta** | ✅ Corregido (01/10/2026): el estado de la compra devuelve la config de Bold mientras la reserva esté vigente; primera parte del endurecimiento (roadmap #32), validado por OCM y fusionado (PR #88) |
 | Idempotencia en el backend de compra y venta en efectivo, y protección de "eliminar con confirmación" contra doble clic | Media | ✅ Idempotencia fusionada y validada en staging (PR #89); guarda de "eliminar" fusionada (PR #90) — endurecimiento (roadmap #32) completo |
 | Pruebas automáticas de punta a punta (Playwright) del flujo de compra con Bold | Media | ✅ Suite simulada corriendo en cada PR (roadmap #30, PR #83) y suite real contra el sandbox de Bold, a demanda (PR #85) |
+| Un pago con Bold aprobado tras un intento rechazado no emitía boletas: el cliente pagaba y no recibía nada (incidente del 10/11/2026, 2 compras) | **Crítica** | 🔴 En corrección (`TODO.md` Tarea 1, ADR-021); los clientes afectados ya se atendieron a mano |
 | Tipos de boletería (Individual, Pareja…) combinados con las etapas | **Alta** | ✅ En producción, versión 1.2 (29/10/2026, roadmap #33, ADR-020, PR #114, #115, #116 y ajuste móvil #117) — plan en `docs/archivo/plan-tipos-boleteria.md` |
 
 ### v3 — Ideas no comprometidas

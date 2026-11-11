@@ -315,3 +315,7 @@ Backend,30/10/2026 12:48,30/10/2026 12:55,0:07:00,AI,Sonnet 5.5,"Resuelve el con
 Specs definition,04/11/2026 14:58,04/11/2026 15:07,0:09:00,AI,Opus 5.5,"Audita la documentación de docs/ y README: qué está desactualizado, qué actualizar y qué borrar",Claude Code,cli,medium
 Specs definition,04/11/2026 15:10,04/11/2026 15:24,0:14:00,AI,Opus 5.5,"Limpia la documentación y pasa a v1.2.0: archiva planes, retira roadmap, poda MEMORY y TODO",Claude Code,cli,high
 Specs definition,04/11/2026 15:32,04/11/2026 15:39,0:07:00,AI,Opus 5.5,"Verifica Material, auditoría y etiqueta de costos; crea tareas de auditoría A09 y presupuesto",Claude Code,cli,medium
+Workspace settting,04/11/2026 15:45,04/11/2026 15:47,0:02:00,AI,Opus 5.5,"Limpieza local tras fusionar el PR 118: main actualizado y rama borrada",Claude Code,cli,low
+Backend,11/11/2026 11:36,11/11/2026 11:38,0:02:00,AI,Sonnet 5.5,"Investiga compra Bold sin boleta: aprobación descartada tras un rechazo en el mismo checkout",Claude Code,cli,medium
+Backend,11/11/2026 16:59,11/11/2026 17:03,0:04:00,AI,Fable 5.2,"Revisa a fondo el incidente de Bold, halla un segundo caso y propone plan de acción",Claude Code,cli,high
+Specs definition,11/11/2026 17:17,11/11/2026 17:22,0:05:00,AI,Opus 5.5,"Documenta el incidente de Bold (ADR-021), reprioriza el JIT y crea la rama de corrección",Claude Code,cli,medium

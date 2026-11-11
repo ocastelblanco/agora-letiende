@@ -317,6 +317,7 @@ export interface Evento {
 export type EstadoCompra =
   | 'iniciada'              // Sillas reservadas, esperando acción del cliente
   | 'esperando_comprobante'
+  | 'esperando_pago_bold'   // v2 (roadmap #19) — sillas reservadas, esperando el webhook de Bold
   | 'en_revision'           // Comprobante cargado, pendiente de aprobación
   | 'aprobada'              // Boletas emitidas
   | 'rechazada'
@@ -432,7 +433,7 @@ Prefijo común `/api`. La columna "Quién llama" indica el nivel de autorizació
 | POST | `/api/usuarios` | Administrador | Crea usuario | `{ email, nombre, rol }` |
 | PUT | `/api/usuarios/:email` | Administrador | Edita usuario | `{ nombre?, rol?, activo? }` |
 | DELETE | `/api/usuarios/:email` | Administrador | Elimina usuario | — |
-| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago: firma HMAC verificada; en `SALE_APPROVED`, además el monto y la moneda deben coincidir con la compra y el pago se concilia con la consulta de transacciones del Botón de pagos (`GET payments.api.bold.co/v2/payment-voucher/{compraId}`). `422` monto distinto, `409` Bold contradice el pago, `503` Bold no responde (reintenta); si la venta aún no aparece o Bold responde 401/403, se aprueba con firma y monto y queda un error en el log — ver ADR-018 | Payload de Bold |
+| POST | `/api/pagos/bold/webhook` | Bold (v2) | Notificación de pago: firma HMAC verificada; en `SALE_APPROVED`, además el monto y la moneda deben coincidir con la compra y el pago se concilia con la consulta de transacciones del Botón de pagos (`GET payments.api.bold.co/v2/payment-voucher/{compraId}`). `422` monto distinto, `409` Bold contradice el pago, `503` Bold no responde (reintenta); si la venta aún no aparece o Bold responde 401/403, se aprueba con firma y monto y queda un error en el log — ver ADR-018. **Defecto conocido (incidente del 10/11/2026, se corrige en `TODO.md` Tarea 1, ADR-021):** hoy `SALE_REJECTED` pasa la compra a `rechazada` y libera el aforo, y un `SALE_APPROVED` posterior sobre la misma referencia (reintento en el mismo checkout) se descarta con `200` | Payload de Bold |
 
 ### 5.2 Tablas de DynamoDB
 
