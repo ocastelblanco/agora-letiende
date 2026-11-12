@@ -325,3 +325,4 @@ Backend,11/11/2026 18:27,11/11/2026 18:30,0:03:00,AI,Opus 5.5,"Traduce el 404 de
 Backend,11/11/2026 18:31,11/11/2026 18:32,0:01:00,human,OCM,"Corre e2e:staging con la corrección del 404: 4 de 4 en verde",Terminal,cli,low
 Specs definition,11/11/2026 18:34,11/11/2026 18:35,0:01:00,AI,Opus 5.5,"Registra la corrida de staging en verde en TODO, PR y tracking",Claude Code,cli,low
 Infrastructure,11/11/2026 19:36,11/11/2026 19:44,0:08:00,AI,Opus 5.5,"Verifica costo de la alarma de pago Bold sin emitir: US$0 en capa gratuita",Claude Code,cli,low
+Specs definition,11/11/2026 19:47,11/11/2026 19:50,0:03:00,AI,Opus 5.5,"Actualiza docs tras fusionar PR #119: estado, PRD y costo de alarmas",Claude Code,cli,low

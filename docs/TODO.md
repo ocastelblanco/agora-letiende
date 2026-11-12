@@ -6,7 +6,7 @@ Motor JIT: este documento mantiene **siempre exactamente 2 tareas atómicas** ac
 
 ## Tarea 1 — Un pago de Bold aprobado nunca se descarta (ADR-021)
 
-**Prioridad Crítica — pagos reales perdidos en producción.** Incidente del 10/11/2026, plan aprobado por OCM el 11/11/2026. Rama: `fix/bold-aprobacion-tras-rechazo`.
+**Prioridad Crítica — pagos reales perdidos en producción.** Incidente del 10/11/2026, plan aprobado por OCM el 11/11/2026. PR #119 (rama `fix/bold-aprobacion-tras-rechazo`, ya fusionada).
 
 **Estado (11/11/2026): fusionada (PR #119) y desplegada.** La alarma `agora-bold-pago-sin-emitir-production` y su filtro existen en producción (verificado con `DescribeAlarms` el 11/11/2026, 19:41). Queda solo verificar el siguiente pago real con rechazo previo. Los puntos 1 a 7 están hechos; pruebas unitarias en verde (673 backend, 499 frontend), build de producción, `build:api` y la suite simulada de Playwright en verde. La primera corrida de `npm run e2e:staging` (11/11/2026) validó el rechazo contra DynamoDB real y encontró que Bold responde `404`, no `NO_TRANSACTION_FOUND`, para una referencia sin venta: el webhook respondía `503`. Corregido en este mismo PR por decisión de OCM (ADR-018); la segunda corrida pasó 4 de 4, incluido el caso nuevo (rechazo y luego aprobación, con boletas y aforo verificados en DynamoDB real). Pendiente: verificar el siguiente pago real con rechazo previo. Al cerrarla, esta tarea sale de aquí y su resumen pasa a `MEMORY.md` §2.
 
