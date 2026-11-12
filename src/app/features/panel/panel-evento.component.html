@@ -136,6 +136,11 @@
               <td mat-cell *matCellDef="let cliente">{{ cliente.medioPago }}</td>
             </ng-container>
 
+            <ng-container matColumnDef="transaccionBoldId">
+              <th mat-header-cell *matHeaderCellDef>Código de pago Bold</th>
+              <td mat-cell *matCellDef="let cliente">{{ cliente.transaccionBoldId ?? '—' }}</td>
+            </ng-container>
+
             <ng-container matColumnDef="creadaEn">
               <th mat-header-cell *matHeaderCellDef>Creada (Bogotá)</th>
               <td mat-cell *matCellDef="let cliente">{{ fechaLegible(cliente.creadaEn) }}</td>

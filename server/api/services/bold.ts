@@ -155,6 +155,15 @@ export async function consultarPagoBold(identificadorVenta: string, timeoutMs: n
       headers: { Authorization: `x-api-key ${llaveIdentidad}` },
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (respuesta.status === 404) {
+      // Verificado en producción (11/11/2026): para una referencia sin ninguna venta,
+      // Bold responde 404 («La referencia … no fue encontrada»), no 200 con
+      // `NO_TRANSACTION_FOUND` como sugiere su documentación. Es el mismo caso: la
+      // venta no existe o todavía no aparece (hasta 10 min). Sin esto, el webhook
+      // respondía 503 en vez de aprobar con firma y monto (ADR-018), y
+      // `aforo.ts` nunca expiraba activamente una reserva de Bold abandonada.
+      return { payment_status: 'NO_TRANSACTION_FOUND' };
+    }
     if (!respuesta.ok) {
       throw new ErrorConsultaBold(`Bold respondió ${respuesta.status}`, respuesta.status);
     }

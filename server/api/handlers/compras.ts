@@ -684,10 +684,14 @@ async function consultarEstadoCompra(
   const estado = seEsperaConfirmacion && yaVencio ? 'expirada' : item['estado'];
 
   // Mientras la compra siga esperando el pago de Bold y la reserva no haya
-  // vencido, se devuelve la configuración del botón: tras un rechazo Bold
-  // no notifica nada, y sin ella el cliente que vuelve a la página no tiene
-  // forma de pagar de nuevo (roadmap #32). Mismos datos que `POST /api/compras`
-  // (firma de integridad + llave pública), el compraId es un UUID v4.
+  // vencido, se devuelve la configuración del botón: tras un rechazo el
+  // cliente puede reintentar con la misma referencia y, sin esta
+  // configuración, el que vuelve a la página no tiene forma de pagar de nuevo
+  // (roadmap #32). Bold SÍ avisa cada intento rechazado (`SALE_REJECTED`), pero
+  // el webhook solo lo anota: la compra sigue aquí, en `esperando_pago_bold`,
+  // hasta que un intento sale aprobado o vence la reserva (ADR-021, incidente
+  // del 10/11/2026). Mismos datos que `POST /api/compras` (firma de integridad
+  // + llave pública), el compraId es un UUID v4.
   const reofreceBold =
     item['estado'] === 'esperando_pago_bold' && !yaVencio && typeof item['montoTotal'] === 'number';
 

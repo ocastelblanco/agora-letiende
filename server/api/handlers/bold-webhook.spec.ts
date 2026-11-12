@@ -475,35 +475,61 @@ describe('POST /api/pagos/bold/webhook — verificación del monto y conciliaci�
   });
 });
 
-describe('POST /api/pagos/bold/webhook — SALE_REJECTED', () => {
-  it('rechaza la compra y libera el aforo', async () => {
+describe('POST /api/pagos/bold/webhook — SALE_REJECTED (ADR-021: un rechazo no cierra la compra)', () => {
+  const avisoRechazo = (paymentId?: string) => ({
+    type: 'SALE_REJECTED',
+    data: { ...(paymentId ? { payment_id: paymentId } : {}), metadata: { reference: 'compra-1' } },
+  });
+
+  it('registra el intento rechazado y deja la compra esperando el pago, con sus sillas reservadas', async () => {
     sendMock.mockResolvedValueOnce({ Item: compraEsperandoPago }).mockResolvedValueOnce({});
 
-    const respuesta = await invocar({
-      cuerpo: { type: 'SALE_REJECTED', data: { metadata: { reference: 'compra-1' } } },
-      firma: 'firma-valida',
-    });
+    const respuesta = await invocar({ cuerpo: avisoRechazo('bold-tx-rechazado'), firma: 'firma-valida' });
 
     expect(respuesta.statusCode).toBe(200);
     const comandoUpdate = sendMock.mock.calls[1]?.[0];
     expect(comandoUpdate.input).toMatchObject({
       Key: { compraId: 'compra-1' },
       ConditionExpression: 'estado = :esperandoPago',
-      ExpressionAttributeValues: expect.objectContaining({ ':rechazada': 'rechazada' }),
+      ExpressionAttributeValues: expect.objectContaining({
+        ':esperandoPago': 'esperando_pago_bold',
+        ':aviso': [{ tipo: 'rechazado', paymentId: 'bold-tx-rechazado', en: '2026-08-25T00:00:00.000Z' }],
+      }),
     });
-    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    // Nunca pasa la compra a 'rechazada' ni libera aforo: el cliente puede reintentar con la misma referencia.
+    expect(JSON.stringify(comandoUpdate.input)).not.toContain('rechazada');
+    expect(comandoUpdate.input.UpdateExpression).not.toMatch(/estado\s*=/);
+    expect(liberarSillasMock).not.toHaveBeenCalled();
     expect(emitirBoletasMock).not.toHaveBeenCalled();
   });
 
-  it('responde 200 sin liberar aforo dos veces si el evento ya se procesó antes (duplicado)', async () => {
+  it('registra el intento aunque el aviso no traiga payment_id', async () => {
+    sendMock.mockResolvedValueOnce({ Item: compraEsperandoPago }).mockResolvedValueOnce({});
+
+    const respuesta = await invocar({ cuerpo: avisoRechazo(), firma: 'firma-valida' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(sendMock.mock.calls[1]?.[0].input.ExpressionAttributeValues[':aviso']).toEqual([
+      { tipo: 'rechazado', en: '2026-08-25T00:00:00.000Z' },
+    ]);
+  });
+
+  it('descarta un payment_id con formato inesperado en vez de guardarlo', async () => {
+    sendMock.mockResolvedValueOnce({ Item: compraEsperandoPago }).mockResolvedValueOnce({});
+
+    await invocar({ cuerpo: avisoRechazo('<script>alert(1)</script>'), firma: 'firma-valida' });
+
+    expect(sendMock.mock.calls[1]?.[0].input.ExpressionAttributeValues[':aviso']).toEqual([
+      { tipo: 'rechazado', en: '2026-08-25T00:00:00.000Z' },
+    ]);
+  });
+
+  it('responde 200 sin escribir nada si la compra ya se resolvió (aviso tardío o duplicado)', async () => {
     sendMock
-      .mockResolvedValueOnce({ Item: { ...compraEsperandoPago, estado: 'rechazada' } })
+      .mockResolvedValueOnce({ Item: compraEsperandoPago })
       .mockRejectedValueOnce(new ConditionalCheckFailedException());
 
-    const respuesta = await invocar({
-      cuerpo: { type: 'SALE_REJECTED', data: { metadata: { reference: 'compra-1' } } },
-      firma: 'firma-valida',
-    });
+    const respuesta = await invocar({ cuerpo: avisoRechazo('bold-tx-rechazado'), firma: 'firma-valida' });
 
     expect(respuesta.statusCode).toBe(200);
     expect(liberarSillasMock).not.toHaveBeenCalled();
@@ -573,7 +599,8 @@ describe('POST /api/pagos/bold/webhook — aviso tardío sobre una compra expira
     expect(consultarPagoBoldMock).toHaveBeenCalledTimes(1);
     expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 2);
     const recuperar = sendMock.mock.calls[1]?.[0];
-    expect(recuperar.input.ConditionExpression).toBe('estado = :expirada');
+    expect(recuperar.input.ConditionExpression).toBe('estado = :cerrada');
+    expect(recuperar.input.ExpressionAttributeValues[':cerrada']).toBe('expirada');
     expect(recuperar.input.ExpressionAttributeValues[':esperandoPago']).toBe('esperando_pago_bold');
     expect(sendMock.mock.calls[2]?.[0].input.ExpressionAttributeValues[':aprobada']).toBe('aprobada');
     expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
@@ -624,16 +651,181 @@ describe('POST /api/pagos/bold/webhook — aviso tardío sobre una compra expira
     expect(JSON.stringify(errorSpy.mock.calls)).toContain('no lo esperaba');
   });
 
-  it('registra en el log un aviso sobre una compra que no existe (responde 200 pero deja rastro)', async () => {
+  it('una referencia que no tiene forma de compra de Ágora (venta de otro canal) queda como aviso, no como error', async () => {
+    const avisoSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     sendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocar({
+      cuerpo: { ...cuerpoAprobado(), data: { ...pagoAprobadoBold.data, metadata: { reference: '170016244736' } } },
+      firma: 'firma',
+    });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(avisoSpy).toHaveBeenCalledWith('Webhook de Bold: no existe la compra de la notificación', {
+      compraId: '170016244736',
+      tipo: 'SALE_APPROVED',
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+    avisoSpy.mockRestore();
+  });
+
+  it('una referencia con forma de compra de Ágora que no existe sigue siendo un error (podría ser un pago perdido)', async () => {
+    const idPerdido = '4548e01e-a597-4e6b-b7d9-ac1349e0ae60';
+    sendMock.mockResolvedValueOnce({});
+
+    const respuesta = await invocar({
+      cuerpo: { ...cuerpoAprobado(), data: { ...pagoAprobadoBold.data, metadata: { reference: idPerdido } } },
+      firma: 'firma',
+    });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(errorSpy).toHaveBeenCalledWith('Webhook de Bold: no existe la compra de la notificación', {
+      compraId: idPerdido,
+      tipo: 'SALE_APPROVED',
+    });
+  });
+});
+
+describe('POST /api/pagos/bold/webhook — aprobación tras un rechazo (incidente del 10/11/2026, ADR-021)', () => {
+  const compraRechazadaPorBold = {
+    ...compraEsperandoPago,
+    estado: 'rechazada',
+    medioPago: 'bold',
+    resueltoPor: 'sistema (pago Bold confirmado)',
+  };
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    process.env['BOLD_MODO_PRUEBAS'] = 'false';
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    delete process.env['BOLD_MODO_PRUEBAS'];
+    errorSpy.mockRestore();
+  });
+
+  it('recupera una compra que un rechazo anterior cerró: vuelve a tomar el aforo, la aprueba y emite las boletas', async () => {
+    sendMock
+      .mockResolvedValueOnce({ Item: compraRechazadaPorBold }) // GetItem
+      .mockResolvedValueOnce({}) // rechazada → esperando_pago_bold
+      .mockResolvedValueOnce({}) // → aprobada
+      .mockResolvedValueOnce({ Item: { nombre: 'Concierto' } }); // nombre del evento
 
     const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
 
     expect(respuesta.statusCode).toBe(200);
-    expect(errorSpy).toHaveBeenCalledWith('Webhook de Bold: no existe la compra de la notificación', {
-      compraId: 'compra-1',
-      tipo: 'SALE_APPROVED',
+    expect(reservarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    const recuperar = sendMock.mock.calls[1]?.[0];
+    expect(recuperar.input.ConditionExpression).toBe('estado = :cerrada');
+    expect(recuperar.input.ExpressionAttributeValues[':cerrada']).toBe('rechazada');
+    expect(sendMock.mock.calls[2]?.[0].input.ExpressionAttributeValues[':aprobada']).toBe('aprobada');
+    expect(confirmarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(emitirBoletasMock).toHaveBeenCalledTimes(1);
+    expect(enviarMock).toHaveBeenCalledWith(
+      { correo: 'ana@correo.com', nombre: 'Ana Pérez' },
+      'boletas_emitidas',
+      expect.objectContaining({ nombreEvento: 'Concierto' }),
+    );
+  });
+
+  it('exige igual la conciliación con Bold antes de recuperar: si Bold contradice el pago, no recupera nada', async () => {
+    consultarPagoBoldMock.mockResolvedValue({ payment_status: 'REJECTED', total: 90000, reference_id: 'compra-1' });
+    sendMock.mockResolvedValueOnce({ Item: compraRechazadaPorBold });
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(409);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('exige el monto exacto antes de recuperar nada', async () => {
+    sendMock.mockResolvedValueOnce({ Item: compraRechazadaPorBold });
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado({ amount: { total: 1000, currency: 'COP' } }), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(422);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+  });
+
+  it('no recupera una compra que rechazó un productor (transferencia, sin resueltoPor de Bold)', async () => {
+    sendMock.mockResolvedValueOnce({
+      Item: { ...compraRechazadaPorBold, medioPago: 'transferencia', resueltoPor: 'productor@letiende.co' },
     });
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain('no lo esperaba');
+  });
+
+  it('no recupera una compra de Bold que cerró una persona (resueltoPor distinto del sistema)', async () => {
+    sendMock.mockResolvedValueOnce({ Item: { ...compraRechazadaPorBold, resueltoPor: 'productor@letiende.co' } });
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(reservarSillasMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain('no lo esperaba');
+  });
+
+  it('sin aforo para recuperarla deja un error para atención manual, sin datos del cliente, y responde 200', async () => {
+    const { AforoInsuficienteError } = await import('../services/aforo');
+    sendMock.mockResolvedValueOnce({ Item: compraRechazadaPorBold });
+    reservarSillasMock.mockRejectedValueOnce(new AforoInsuficienteError(0));
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain('requiere atención manual');
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('ana@correo.com');
+  });
+
+  it('si otro aviso ya la recuperó, devuelve el aforo recién tomado y no emite dos veces', async () => {
+    sendMock.mockResolvedValueOnce({ Item: compraRechazadaPorBold }).mockRejectedValueOnce(new ConditionalCheckFailedException());
+
+    const respuesta = await invocar({ cuerpo: cuerpoAprobado(), firma: 'firma' });
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(liberarSillasMock).toHaveBeenCalledWith('evt-1', 2);
+    expect(emitirBoletasMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/pagos/bold/webhook — código de pago de Bold en la compra (ADR-021)', () => {
+  it('al aprobar guarda el payment_id del aviso y el código de transacción de la conciliación', async () => {
+    consultarPagoBoldMock.mockResolvedValue({ ...comprobanteAprobado, transaction_id: 'TXBOLD00001' });
+    sendMock
+      .mockResolvedValueOnce({ Item: compraEsperandoPago })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { nombre: 'Concierto' } });
+
+    await invocar({ cuerpo: pagoAprobadoBold, firma: 'firma-valida' });
+
+    const aprobar = sendMock.mock.calls[1]?.[0].input;
+    expect(aprobar.UpdateExpression).toContain('transaccionBoldId = :transaccion');
+    expect(aprobar.ExpressionAttributeValues[':transaccion']).toBe('TXBOLD00001');
+    expect(aprobar.ExpressionAttributeValues[':aviso']).toEqual([
+      { tipo: 'aprobado', paymentId: 'bold-tx-1', en: '2026-08-25T00:00:00.000Z' },
+    ]);
+  });
+
+  it('si la conciliación no devuelve código de transacción (venta aún no visible), no lo inventa', async () => {
+    consultarPagoBoldMock.mockResolvedValue({ payment_status: 'NO_TRANSACTION_FOUND' });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    sendMock
+      .mockResolvedValueOnce({ Item: compraEsperandoPago })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Item: { nombre: 'Concierto' } });
+
+    await invocar({ cuerpo: pagoAprobadoBold, firma: 'firma-valida' });
+
+    const aprobar = sendMock.mock.calls[1]?.[0].input;
+    expect(aprobar.UpdateExpression).not.toContain('transaccionBoldId');
+    expect(aprobar.ExpressionAttributeValues).not.toHaveProperty(':transaccion');
+    errorSpy.mockRestore();
   });
 });
 

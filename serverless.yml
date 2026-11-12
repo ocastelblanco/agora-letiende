@@ -664,6 +664,42 @@ resources:
         AlarmActions:
           - !Ref TopicoAlertasAgora
 
+    # Pago de Bold que Ágora no pudo convertir en boletas (incidente del
+    # 10/11/2026): un aviso de pago aprobado sobre una compra que no lo
+    # esperaba, o una recuperación sin aforo. Los dos son un cliente que pagó
+    # sin recibir boletas. Los filtros usan texto ASCII de los mensajes de
+    # bold-webhook.ts; si se cambian allí, hay que cambiarlos aquí.
+    FiltroBoldPagoSinEmitir:
+      Type: AWS::Logs::MetricFilter
+      Condition: EsProduccion
+      Properties:
+        LogGroupName: !Ref BoldWebhookLogGroup
+        FilterPattern: '?"no lo esperaba" ?"sin aforo para recuperarla"'
+        MetricTransformations:
+          - MetricNamespace: Agora
+            MetricName: BoldPagoSinEmitir
+            MetricValue: '1'
+            DefaultValue: 0
+
+    AlarmaBoldPagoSinEmitir:
+      Type: AWS::CloudWatch::Alarm
+      Condition: EsProduccion
+      Properties:
+        AlarmName: agora-bold-pago-sin-emitir-${sls:stage}
+        AlarmDescription: >-
+          Un pago aprobado de Bold no se convirtió en boletas: buscar la
+          compra en el log de boldWebhook y atender al cliente (docs/MEMORY.md, ADR-021).
+        Namespace: Agora
+        MetricName: BoldPagoSinEmitir
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref TopicoAlertasAgora
+
     # --- Roles IAM de mínimo privilegio (uno por función, CLAUDE.md §5 A05) ---
     SaludLambdaRole:
       Type: AWS::IAM::Role

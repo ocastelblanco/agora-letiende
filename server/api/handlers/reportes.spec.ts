@@ -288,6 +288,26 @@ describe('GET /api/eventos/:eventoId/panel', () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
+  it('expone el código de transacción de Bold de cada compra pagada con Bold (ADR-021)', async () => {
+    exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
+    sendMock
+      .mockResolvedValueOnce({ Item: eventoItem })
+      .mockResolvedValueOnce({ Items: boletasMixtas })
+      .mockResolvedValueOnce({
+        Items: [
+          { ...comprasAprobadas[0], medioPago: 'bold', transaccionBoldId: 'TXBOLD00001' },
+          comprasAprobadas[1],
+        ],
+      });
+
+    const respuesta = await invocar('GET', { eventoId: 'evt-1' });
+
+    const cuerpo = JSON.parse(respuesta.body ?? '{}');
+    expect(cuerpo.clientes[0]).toMatchObject({ compraId: 'c1', medioPago: 'bold', transaccionBoldId: 'TXBOLD00001' });
+    // Una compra sin código (efectivo, transferencia o Bold anterior a esta versión) no inventa uno.
+    expect(cuerpo.clientes[1]).not.toHaveProperty('transaccionBoldId');
+  });
+
   it('agrega métricas por etapa, aforo e ingresados/faltan con dos etapas y boletas mixtas', async () => {
     exigirRolMock.mockResolvedValueOnce({ autorizado: true, permisos: permisosProductor });
     sendMock

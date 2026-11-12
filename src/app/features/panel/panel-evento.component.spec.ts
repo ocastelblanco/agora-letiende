@@ -264,6 +264,28 @@ describe('PanelEventoComponent', () => {
     expect(texto).toContain('Pareja');
   });
 
+  it('muestra el código de pago de Bold de cada compra, y un guion si no tiene (ADR-021)', async () => {
+    const detalleConBold: DetallePanel = {
+      ...detalleEjemplo,
+      clientes: [
+        { ...detalleEjemplo.clientes[0], medioPago: 'bold', transaccionBoldId: 'TXBOLD00001' },
+        { ...detalleEjemplo.clientes[0], compraId: 'c2', medioPago: 'efectivo' },
+      ],
+    };
+    const { fixture } = configurarPrueba({ misEventos: [eventoPropio], detalle: detalleConBold });
+
+    await activarConSlug(fixture, 'concierto-jazz');
+
+    const encabezados = Array.from(fixture.nativeElement.querySelectorAll('th')).map((th) =>
+      (th as HTMLElement).textContent?.trim(),
+    );
+    expect(encabezados).toContain('Código de pago Bold');
+    const filas = Array.from(fixture.nativeElement.querySelectorAll('tr.mat-mdc-row')) as HTMLElement[];
+    const filaClientes = filas.filter((fila) => fila.textContent?.includes('Ana Pérez'));
+    expect(filaClientes[0].textContent).toContain('TXBOLD00001');
+    expect(filaClientes[1].textContent).toContain('—');
+  });
+
   it('un backend sin tipos (datos legados) muestra "Por defecto" en la columna', async () => {
     const { fixture } = configurarPrueba({ misEventos: [eventoPropio], detalle: detalleEjemplo });
 
