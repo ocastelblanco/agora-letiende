@@ -30,7 +30,8 @@ test.describe('Compra con Bold (simulada)', () => {
 
     test('muestra el formulario con el total estimado y el máximo de boletas', async ({ page }) => {
       await expect(page.getByRole('heading', { name: 'Comprar boletas' })).toBeVisible();
-      await expect(page.getByText('Máximo 4 por compra. Sillas disponibles: 10.')).toBeVisible();
+      await expect(page.getByText('Máximo 4 por compra.')).toBeVisible();
+      await expect(page.getByText('¡Solo quedan 10 sillas disponibles!')).toBeVisible();
       await expect(page.getByText('$45.000')).toBeVisible();
 
       await compra.cantidad.selectOption({ label: '3' });

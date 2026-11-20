@@ -192,9 +192,13 @@
               }
             </select>
             <p class="mt-1 text-xs text-primary/60">
-              Máximo {{ detalleEvento.maxBoletasPorCompra }} por compra. Sillas disponibles:
-              {{ detalleEvento.sillasDisponibles }}.
+              Máximo {{ detalleEvento.maxBoletasPorCompra }} por compra.
             </p>
+            @if (detalleEvento.sillasDisponibles > 0 && detalleEvento.sillasDisponibles <= 12) {
+              <p class="mt-1 text-xs font-semibold text-secondary">
+                ¡Solo quedan {{ detalleEvento.sillasDisponibles }} sillas disponibles!
+              </p>
+            }
           </div>
 
           <div>
