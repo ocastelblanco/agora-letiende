@@ -3,13 +3,16 @@ import { isPlatformBrowser } from '@angular/common';
 
 /**
  * `true` cuando la app se sirve embebida a través del proxy de letiende.co
- * (Host `letiende.co` o `staging.letiende.co`), `false` cuando se sirve
+ * (Host `letiende.co`, `www.letiende.co` o `staging.letiende.co`), `false`
+ * cuando se sirve
  * directo por su propio dominio (`agora.letiende.co`, staging sin dominio
  * propio, `localhost`). Función pura y testeable, mismo patrón que
  * `debeCargarAnalytics(hostname)` del contenedor.
  */
+const HOSTS_EMBEBIDO = new Set(['letiende.co', 'www.letiende.co', 'staging.letiende.co']);
+
 export function esEmbebido(hostname: string): boolean {
-  return hostname === 'letiende.co' || hostname === 'staging.letiende.co';
+  return HOSTS_EMBEBIDO.has(hostname);
 }
 
 /**
